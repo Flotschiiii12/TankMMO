@@ -1,0 +1,335 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AmmoType, SimCommand, SimEntity } from '../sim/types.ts';
+import { soundEngine } from '../audio/soundEngine.ts';
+
+interface ControlsOverlayProps {
+  player: SimEntity | null;
+  onCommand: (cmd: SimCommand) => void;
+  onLockNearest: () => void;
+  onCycleTarget: () => void;
+  onCycleAmmo: () => void;
+}
+
+export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
+  player,
+  onCommand,
+  onLockNearest,
+  onCycleTarget,
+  onCycleAmmo,
+}) => {
+  // Joystick State
+  const [stickActive, setStickActive] = useState(false);
+  const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
+  const joystickBaseRef = useRef<HTMLDivElement>(null);
+  const activeTouchId = useRef<number | null>(null);
+
+  // Desktop keyboard drive tracking
+  const keysDown = useRef<Set<string>>(new Set());
+
+  // Drive update tick
+  const driveVectorRef = useRef({ x: 0, y: 0 });
+
+  const sendDrive = useCallback(
+    (x: number, y: number) => {
+      driveVectorRef.current = { x, y };
+      onCommand({ type: 'Drive', x, y });
+    },
+    [onCommand]
+  );
+
+  // Keyboard listener for desktop WASD / Arrows
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+
+      keysDown.current.add(e.code);
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        soundEngine.playUIClick();
+        onCommand({ type: 'ToggleAutoFire' });
+      } else if (e.code === 'KeyQ') {
+        soundEngine.playUIClick();
+        onCommand({ type: 'UseAbility', abilityId: 'smoke' });
+      } else if (e.code === 'KeyE') {
+        soundEngine.playUIClick();
+        onCommand({ type: 'UseAbility', abilityId: 'repair' });
+      } else if (e.code === 'KeyF') {
+        soundEngine.playUIClick();
+        onCommand({ type: 'UseAbility', abilityId: 'overdrive' });
+      } else if (e.code === 'Digit1') {
+        onCommand({ type: 'SelectAmmo', ammo: 'standard' });
+      } else if (e.code === 'Digit2') {
+        onCommand({ type: 'SelectAmmo', ammo: 'ap' });
+      } else if (e.code === 'Digit3') {
+        onCommand({ type: 'SelectAmmo', ammo: 'he' });
+      } else if (e.code === 'Tab') {
+        e.preventDefault();
+        onCycleTarget();
+      }
+
+      evaluateKeyDrive();
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      keysDown.current.delete(e.code);
+      evaluateKeyDrive();
+    };
+
+    const evaluateKeyDrive = () => {
+      let dx = 0;
+      let dy = 0;
+      if (keysDown.current.has('KeyW') || keysDown.current.has('ArrowUp')) dy -= 1;
+      if (keysDown.current.has('KeyS') || keysDown.current.has('ArrowDown')) dy += 1;
+      if (keysDown.current.has('KeyA') || keysDown.current.has('ArrowLeft')) dx -= 1;
+      if (keysDown.current.has('KeyD') || keysDown.current.has('ArrowRight')) dx += 1;
+
+      if (dx !== 0 || dy !== 0) {
+        const len = Math.hypot(dx, dy);
+        sendDrive(dx / len, dy / len);
+      } else if (!stickActive) {
+        sendDrive(0, 0);
+      }
+    };
+
+    const handleBlur = () => {
+      keysDown.current.clear();
+      if (!stickActive) sendDrive(0, 0);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [onCommand, onCycleTarget, sendDrive, stickActive]);
+
+  // Virtual Joystick Pointer Handlers
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    soundEngine.init();
+    activeTouchId.current = e.pointerId;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setStickActive(true);
+    updateKnob(e.clientX, e.clientY);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!stickActive || activeTouchId.current !== e.pointerId) return;
+    updateKnob(e.clientX, e.clientY);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (activeTouchId.current === e.pointerId) {
+      activeTouchId.current = null;
+      setStickActive(false);
+      setKnobPos({ x: 0, y: 0 });
+      sendDrive(0, 0);
+    }
+  };
+
+  const updateKnob = (clientX: number, clientY: number) => {
+    if (!joystickBaseRef.current) return;
+    const rect = joystickBaseRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const dx = clientX - centerX;
+    const dy = clientY - centerY;
+    const dist = Math.hypot(dx, dy);
+    const maxRadius = rect.width / 2 - 12;
+
+    const clampedDist = Math.min(dist, maxRadius);
+    const angle = Math.atan2(dy, dx);
+
+    const nx = Math.cos(angle) * clampedDist;
+    const ny = Math.sin(angle) * clampedDist;
+
+    setKnobPos({ x: nx, y: ny });
+
+    const normalizedDist = clampedDist / maxRadius;
+    sendDrive(Math.cos(angle) * normalizedDist, Math.sin(angle) * normalizedDist);
+  };
+
+  // Reload progress computation for circular stroke
+  const reloadRemaining = player?.mainReloadRemaining || 0;
+  const reloadTotal = player?.mainReloadTime || 1;
+  const reloadRatio = Math.max(0, Math.min(1, 1 - reloadRemaining / reloadTotal));
+  const reloadRadius = 38;
+  const circumference = 2 * Math.PI * reloadRadius;
+  const strokeDashoffset = circumference * (1 - reloadRatio);
+
+  const autoFire = !!player?.autoFire;
+  const hasTarget = player?.targetId !== undefined;
+
+  // Ability Cooldowns
+  const smokeCd = player?.smokeCooldown || 0;
+  const repairCd = player?.repairCooldown || 0;
+  const overdriveCd = player?.overdriveCooldown || 0;
+
+  return (
+    <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
+      {/* LEFT THUMB: Virtual Joystick */}
+      <div className="absolute bottom-5 left-5 pointer-events-auto">
+        <div
+          ref={joystickBaseRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          className="relative w-32 h-32 rounded-full border border-orange-500/25 bg-slate-950/40 backdrop-blur-none flex items-center justify-center touch-none"
+        >
+          {/* Inner target crosshair */}
+          <div className="w-2 h-2 rounded-full bg-white/20 pointer-events-none" />
+
+          {/* Draggable Knob */}
+          <div
+            className={`absolute w-14 h-14 rounded-full border border-orange-400/60 bg-gradient-to-b from-slate-800 to-slate-950 shadow-md transition-transform duration-75 pointer-events-none flex items-center justify-center ${
+              stickActive ? 'scale-105 border-orange-400' : ''
+            }`}
+            style={{
+              transform: `translate(${knobPos.x}px, ${knobPos.y}px)`,
+            }}
+          >
+            <div className="w-4 h-4 rounded-full bg-orange-500/50" />
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT THUMB: Big Round Target/Fire Button + Satellite Ability Cluster */}
+      <div className="absolute bottom-6 right-6 pointer-events-auto flex items-center justify-center">
+        {/* Satellite Buttons Around Fire Button */}
+        <div className="relative w-44 h-44 flex items-center justify-center">
+          {/* Ability 1: Smoke (Top-Left) */}
+          <button
+            onClick={() => {
+              soundEngine.playUIClick();
+              onCommand({ type: 'UseAbility', abilityId: 'smoke' });
+            }}
+            disabled={smokeCd > 0}
+            className={`absolute -top-1 left-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
+              smokeCd > 0
+                ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
+                : 'border-slate-700 bg-slate-900/80 text-slate-200 active:scale-95 active:border-orange-400 hover:border-slate-600'
+            }`}
+          >
+            <span>Smoke</span>
+            {smokeCd > 0 && <span className="tabular-nums text-[9px] text-orange-400">{Math.ceil(smokeCd)}s</span>}
+          </button>
+
+          {/* Ability 2: Repair Kit (Top) */}
+          <button
+            onClick={() => {
+              soundEngine.playUIClick();
+              onCommand({ type: 'UseAbility', abilityId: 'repair' });
+            }}
+            disabled={repairCd > 0}
+            className={`absolute -top-5 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
+              repairCd > 0
+                ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
+                : 'border-emerald-700/60 bg-slate-900/80 text-emerald-300 active:scale-95 active:border-emerald-400 hover:border-emerald-600'
+            }`}
+          >
+            <span>Repair</span>
+            {repairCd > 0 && <span className="tabular-nums text-[9px] text-orange-400">{Math.ceil(repairCd)}s</span>}
+          </button>
+
+          {/* Ability 3: Overdrive (Top-Right) */}
+          <button
+            onClick={() => {
+              soundEngine.playUIClick();
+              onCommand({ type: 'UseAbility', abilityId: 'overdrive' });
+            }}
+            disabled={overdriveCd > 0}
+            className={`absolute -top-1 right-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
+              overdriveCd > 0
+                ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
+                : 'border-orange-500/50 bg-slate-900/80 text-orange-300 active:scale-95 active:border-orange-400 hover:border-orange-400'
+            }`}
+          >
+            <span>Boost</span>
+            {overdriveCd > 0 && <span className="tabular-nums text-[9px] text-orange-400">{Math.ceil(overdriveCd)}s</span>}
+          </button>
+
+          {/* Target Cycle (Left) */}
+          <button
+            onClick={() => {
+              soundEngine.playUIClick();
+              onCycleTarget();
+            }}
+            className="absolute left-0 w-10 h-10 rounded-full border border-slate-700 bg-slate-900/80 text-slate-300 text-[10px] font-medium flex items-center justify-center active:scale-95 hover:border-slate-500"
+          >
+            Next
+          </button>
+
+          {/* Ammo Cycle (Bottom-Left) */}
+          <button
+            onClick={() => {
+              soundEngine.playUIClick();
+              onCycleAmmo();
+            }}
+            className="absolute -bottom-2 left-4 w-10 h-10 rounded-full border border-slate-700 bg-slate-900/80 text-orange-400 text-[10px] font-semibold flex items-center justify-center active:scale-95 hover:border-orange-500"
+          >
+            {player?.selectedAmmo.toUpperCase() || 'STD'}
+          </button>
+
+          {/* Central Big TARGET/FIRE Button */}
+          <button
+            onClick={() => {
+              soundEngine.init();
+              if (!hasTarget) {
+                soundEngine.playLockOn();
+                onLockNearest();
+              } else {
+                soundEngine.playUIClick();
+                onCommand({ type: 'ToggleAutoFire' });
+              }
+            }}
+            className={`relative w-24 h-24 rounded-full flex flex-col items-center justify-center shadow-lg transition-transform active:scale-95 select-none ${
+              autoFire
+                ? 'bg-orange-500 text-slate-950'
+                : hasTarget
+                ? 'bg-slate-900 border-2 border-orange-500 text-orange-400'
+                : 'bg-slate-950/90 border border-white/20 text-slate-200'
+            }`}
+          >
+            {/* SVG Reload Progress Ring */}
+            <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 96 96">
+              <circle
+                cx="48"
+                cy="48"
+                r={reloadRadius}
+                fill="none"
+                stroke="rgba(255, 255, 255, 0.1)"
+                strokeWidth="4"
+              />
+              <circle
+                cx="48"
+                cy="48"
+                r={reloadRadius}
+                fill="none"
+                stroke={autoFire ? '#ffffff' : '#f97316'}
+                strokeWidth="4"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="round"
+              />
+            </svg>
+
+            <span className="text-xs font-semibold tracking-wider">
+              {autoFire ? 'AUTO FIRE' : hasTarget ? 'LOCKED' : 'TARGET'}
+            </span>
+            <span className="text-[10px] opacity-80">
+              {autoFire ? 'Tap to pause' : hasTarget ? 'Tap to fire' : 'Tap to lock'}
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

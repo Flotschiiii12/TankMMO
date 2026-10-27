@@ -1,0 +1,6 @@
+{
+  "name": "Treadfront",
+  "description": "2D top-down vehicle combat game with MMO-style progression, tactical tank combat, biomes, and upgrades.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

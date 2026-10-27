@@ -1,0 +1,193 @@
+import { EntityKind } from '../sim/types.ts';
+
+export interface EnemyArchetype {
+  kind: EntityKind;
+  displayName: string;
+  minLevel: number;
+  maxLevel: number;
+  baseHull: number;
+  baseArmor: number;
+  maxSpeed: number;
+  turnRate: number;
+  turretTurnRate: number;
+  range: number;
+  reloadTime: number;
+  damage: number;
+  radius: number;
+  scrapDrop: [number, number];
+  partsDrop: [number, number];
+  xpDrop: number;
+}
+
+export const ENEMY_ARCHETYPES: Record<string, EnemyArchetype> = {
+  scout_buggy: {
+    kind: 'scout_buggy',
+    displayName: 'Scout Buggy',
+    minLevel: 1,
+    maxLevel: 6,
+    baseHull: 1400,
+    baseArmor: 600,
+    maxSpeed: 230,
+    turnRate: 3.2,
+    turretTurnRate: 4.0,
+    range: 420,
+    reloadTime: 1.2,
+    damage: 180,
+    radius: 20,
+    scrapDrop: [18, 35],
+    partsDrop: [1, 2],
+    xpDrop: 45,
+  },
+  gunner_truck: {
+    kind: 'gunner_truck',
+    displayName: 'Gunner Truck',
+    minLevel: 3,
+    maxLevel: 12,
+    baseHull: 3100,
+    baseArmor: 1600,
+    maxSpeed: 175,
+    turnRate: 2.2,
+    turretTurnRate: 3.0,
+    range: 550,
+    reloadTime: 1.5,
+    damage: 320,
+    radius: 25,
+    scrapDrop: [40, 75],
+    partsDrop: [2, 5],
+    xpDrop: 90,
+  },
+  artillery: {
+    kind: 'artillery',
+    displayName: 'Artillery Platform',
+    minLevel: 6,
+    maxLevel: 18,
+    baseHull: 3800,
+    baseArmor: 1800,
+    maxSpeed: 110,
+    turnRate: 1.4,
+    turretTurnRate: 1.8,
+    range: 950,
+    reloadTime: 3.2,
+    damage: 750,
+    radius: 28,
+    scrapDrop: [65, 120],
+    partsDrop: [4, 9],
+    xpDrop: 160,
+  },
+  bunker_turret: {
+    kind: 'bunker_turret',
+    displayName: 'Bunker Turret',
+    minLevel: 4,
+    maxLevel: 25,
+    baseHull: 6000,
+    baseArmor: 4500,
+    maxSpeed: 0,
+    turnRate: 0,
+    turretTurnRate: 2.4,
+    range: 650,
+    reloadTime: 1.6,
+    damage: 420,
+    radius: 32,
+    scrapDrop: [80, 160],
+    partsDrop: [6, 14],
+    xpDrop: 210,
+  },
+  loot_convoy: {
+    kind: 'loot_convoy',
+    displayName: 'Armored Loot Convoy',
+    minLevel: 5,
+    maxLevel: 25,
+    baseHull: 12000,
+    baseArmor: 6000,
+    maxSpeed: 105,
+    turnRate: 1.3,
+    turretTurnRate: 1.8,
+    range: 480,
+    reloadTime: 1.8,
+    damage: 260,
+    radius: 36,
+    scrapDrop: [350, 700],
+    partsDrop: [25, 55],
+    xpDrop: 450,
+  },
+  boss_siege_crawler: {
+    kind: 'boss',
+    displayName: 'Siege Crawler',
+    minLevel: 10,
+    maxLevel: 15,
+    baseHull: 35000,
+    baseArmor: 22000,
+    maxSpeed: 120,
+    turnRate: 1.2,
+    turretTurnRate: 2.0,
+    range: 850,
+    reloadTime: 2.0,
+    damage: 900,
+    radius: 52,
+    scrapDrop: [1200, 2400],
+    partsDrop: [80, 160],
+    xpDrop: 1500,
+  },
+  boss_storm_walker: {
+    kind: 'boss',
+    displayName: 'Storm Walker',
+    minLevel: 18,
+    maxLevel: 24,
+    baseHull: 62000,
+    baseArmor: 38000,
+    maxSpeed: 130,
+    turnRate: 1.4,
+    turretTurnRate: 2.3,
+    range: 900,
+    reloadTime: 1.7,
+    damage: 1250,
+    radius: 56,
+    scrapDrop: [2500, 4800],
+    partsDrop: [180, 320],
+    xpDrop: 3200,
+  },
+  boss_fortress_train: {
+    kind: 'boss',
+    displayName: 'Fortress Dreadnought',
+    minLevel: 26,
+    maxLevel: 30,
+    baseHull: 95000,
+    baseArmor: 60000,
+    maxSpeed: 115,
+    turnRate: 1.1,
+    turretTurnRate: 2.2,
+    range: 1000,
+    reloadTime: 1.4,
+    damage: 1750,
+    radius: 64,
+    scrapDrop: [5000, 9500],
+    partsDrop: [350, 650],
+    xpDrop: 6500,
+  },
+};
+
+export const SCRIPTED_ALLY_DRIVERS = [
+  { name: 'Vanguard_Fox', clanTag: 'IRON', tier: 2 },
+  { name: 'Dust_Rider', clanTag: 'WOLF', tier: 1 },
+  { name: 'SteelEcho', clanTag: 'APEX', tier: 3 },
+  { name: 'Sable_99', clanTag: 'NOVA', tier: 2 },
+  { name: 'CanyonHawk', clanTag: 'IRON', tier: 4 },
+  { name: 'ColdFront', clanTag: 'FROST', tier: 3 },
+  { name: 'RustBolt', clanTag: 'SCAV', tier: 1 },
+  { name: 'Apex_Valk', clanTag: 'APEX', tier: 5 },
+  { name: 'GritPiston', clanTag: 'WOLF', tier: 2 },
+  { name: 'Nomad_Jack', clanTag: 'IRON', tier: 3 },
+];
+
+export const SCRIPTED_CHAT_LINES = [
+  'Patrolling Sector B, keep your shields up.',
+  'Convoy sighted heading northwest! Anyone want in?',
+  'Repairs completed at home outpost. Rolling out.',
+  'Watch out for the artillery platform on the ridge!',
+  'Need backup near the canyon pass, heavy buggies swarming.',
+  'AP shells make quick work of that bunker.',
+  'Good hunting out there everyone.',
+  'Overdrive got me out of that tight spot just in time!',
+  'Boss spotted powering up! Watch the mortar telegraphs.',
+  'Anyone got spare scrap? Stocking up on HE packs.',
+];

@@ -11,7 +11,8 @@
     "test": "vitest run",
     "lint": "tsc --noEmit",
     "server": "tsx server/index.ts",
-    "dev:server": "tsx watch server/index.ts"
+    "dev:server": "tsx watch server/index.ts",
+    "bots": "tsx scripts/bots.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

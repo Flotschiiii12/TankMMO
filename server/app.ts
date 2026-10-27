@@ -10,6 +10,7 @@ const hits = new Map<string, number[]>();
 /** Tiny per-IP rate limiter for the REST endpoints. */
 function rateLimit(max: number, windowMs: number): express.RequestHandler {
   return (req, res, next) => {
+    if (process.env.LOAD_TEST === '1') return next();
     const key = `${req.ip}:${req.path}`;
     const now = Date.now();
     const list = (hits.get(key) ?? []).filter((t) => now - t < windowMs);

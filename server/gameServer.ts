@@ -6,7 +6,7 @@ import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { getAllMaps, getMapById } from '../shared/data/maps.ts';
 import { rollLoot } from '../shared/data/loot.ts';
-import { DeltaEncoder } from '../shared/net/delta.ts';
+import { compactEntity, DeltaEncoder, viewFor } from '../shared/net/delta.ts';
 import { MIN_PROTOCOL_VERSION, PROTOCOL_VERSION, ClientActionPacket, ClientMessage, ServerMessage } from '../shared/protocol.ts';
 import { SimRNG } from '../shared/prng.ts';
 import * as C from '../shared/rules/character.ts';
@@ -22,7 +22,9 @@ import { createStarterCharacterForServer, DEFAULT_AMMO } from './starter.ts';
 export const TICK_HZ = 30;
 export const SNAPSHOT_EVERY_TICKS = 3; // 10 Hz
 export const INSTANCE_CAPACITY = 100;
-export const INTEREST_RADIUS = 2300;
+export const INTEREST_RADIUS = 1500;
+/** Entities beyond this distance are updated at half rate (5 Hz). */
+export const NEAR_RADIUS = 700;
 export const MAX_COMMANDS_PER_SECOND = 90;
 export const MAX_COMMANDS_PER_PACKET = 16;
 export const RESPAWN_SECONDS = 5;
@@ -510,16 +512,33 @@ export class GameServer {
 
   private sendSnapshots(inst: Instance): void {
     const world = inst.world;
+    // Compact "others" views are computed once per entity and shared by every client in this instance.
+    const shared = new Map<number, SimEntity>();
+    const sharedView = (e: SimEntity): SimEntity => {
+      let v = shared.get(e.id);
+      if (!v) { v = compactEntity(viewFor(e, false), true); shared.set(e.id, v); }
+      return v;
+    };
+    const r2 = INTEREST_RADIUS * INTEREST_RADIUS;
+    const all = Array.from(world.entities.values());
     for (const s of inst.sessions) {
       const me = world.entities.get(s.entityId);
       if (!me) continue;
-      const r2 = INTEREST_RADIUS * INTEREST_RADIUS;
       const visible: SimEntity[] = [];
-      for (const e of world.entities.values()) {
-        if (e.id === me.id || e.kind === 'boss' || e.kind === 'gate' || (e.pos.x - me.pos.x) ** 2 + (e.pos.y - me.pos.y) ** 2 <= r2) visible.push(e);
+      for (const e of all) {
+        if (e.id === me.id) visible.push(compactEntity(me));
+        else {
+          const d2 = (e.pos.x - me.pos.x) ** 2 + (e.pos.y - me.pos.y) ** 2;
+          if (e.kind === 'boss' || e.kind === 'gate' || d2 <= r2) {
+            const known = s.encoder.peek(e.id);
+            // far entities: refresh every other snapshot, otherwise re-send nothing (keep what the client has)
+            if (known && d2 > NEAR_RADIUS * NEAR_RADIUS && e.kind !== 'projectile' && e.kind !== 'telegraph' && ((world.tick / SNAPSHOT_EVERY_TICKS) + e.id) % 2 !== 0) visible.push(known);
+            else visible.push(sharedView(e));
+          }
+        }
       }
       const { patches, removed } = s.encoder.encode(visible);
-      const events = s.pendingEvents.filter((ev: any) => !ev.pos || (ev.pos.x - me.pos.x) ** 2 + (ev.pos.y - me.pos.y) ** 2 <= r2 * 1.2);
+      const events = s.pendingEvents.filter((ev: any) => !ev.pos || (ev.pos.x - me.pos.x) ** 2 + (ev.pos.y - me.pos.y) ** 2 <= r2 * 1.4);
       s.pendingEvents = [];
       this.send(s, { type: 's_state', tick: world.tick, lastProcessedSeq: s.lastSeq, serverTime: world.time, patches, removed, events });
     }

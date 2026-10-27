@@ -4,7 +4,7 @@ import { spriteRegistry } from './assets.ts';
 
 /**
  * Draws vehicles, enemies, props, gates, and landmarks with high aesthetic quality,
- * falling back to procedural vector rendering if no raster sprite is loaded.
+ * drop shadows cast to the bottom-right, animated rolling tracks, recoil kick, and hit flashes.
  */
 
 export function drawVehicle(
@@ -21,8 +21,14 @@ export function drawVehicle(
   ctx.save();
   ctx.translate(s.x, s.y);
 
+  // Wreck state: linger and fade out over 8 seconds
+  if (ent.isWreck) {
+    const wreckAlpha = Math.max(0.15, Math.min(1.0, (ent.wreckTimer || 8.0) / 8.0));
+    ctx.globalAlpha = wreckAlpha;
+  }
+
   // Invulnerability shield shimmer
-  if (ent.invulnerableTime > 0) {
+  if (ent.invulnerableTime > 0 && !ent.isWreck) {
     ctx.save();
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2.5 * zoom;
@@ -34,7 +40,7 @@ export function drawVehicle(
   }
 
   // Overdrive fiery speed aura
-  if (ent.overdriveRemaining > 0) {
+  if (ent.overdriveRemaining > 0 && !ent.isWreck) {
     ctx.save();
     ctx.strokeStyle = '#f97316';
     ctx.lineWidth = 2 * zoom;
@@ -45,19 +51,23 @@ export function drawVehicle(
     ctx.restore();
   }
 
-  // 1. Draw Chassis (rotates with chassisAngle)
+  // 1. Draw Chassis (rotates with chassisAngle, casts drop shadow to bottom-right)
   ctx.save();
   ctx.rotate(ent.chassisAngle);
 
-  // Pluggable sprite check
+  // Soft drop shadow cast to bottom-right
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = 6 * zoom;
+  ctx.shadowOffsetX = 3.5 * zoom;
+  ctx.shadowOffsetY = 4.5 * zoom;
+
   const bodyImg = spriteRegistry.getImage(spriteRegistry.getVehicleBodyPath(tier, ent.kind));
   if (bodyImg) {
     const w = radius * 2.4;
     const h = radius * 2.0;
     ctx.drawImage(bodyImg, -w / 2, -h / 2, w, h);
   } else {
-    // Procedural Vector Chassis based on Tier
-    drawChassisByTier(ctx, tier, radius, ent.isHostile);
+    drawChassisByTier(ctx, tier, radius, ent.isHostile, ent.distanceDriven || 0, ent.isWreck);
   }
   ctx.restore();
 
@@ -65,15 +75,39 @@ export function drawVehicle(
   ctx.save();
   ctx.rotate(ent.turretAngle);
 
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+  ctx.shadowBlur = 4 * zoom;
+  ctx.shadowOffsetX = 2.5 * zoom;
+  ctx.shadowOffsetY = 3.5 * zoom;
+
   const turretImg = spriteRegistry.getImage(spriteRegistry.getVehicleTurretPath(tier, ent.kind));
   if (turretImg) {
     const tw = radius * 2.2;
     const th = radius * 1.4;
     ctx.drawImage(turretImg, -tw / 4, -th / 2, tw, th);
   } else {
-    drawTurretByTier(ctx, tier, radius, ent.isHostile, ent.mainReloadRemaining, ent.mainReloadTime);
+    drawTurretByTier(
+      ctx,
+      tier,
+      radius,
+      ent.isHostile,
+      ent.mainReloadRemaining,
+      ent.mainReloadTime,
+      ent.isWreck
+    );
   }
   ctx.restore();
+
+  // 3. Short White Hit Flash on damage
+  if (ent.hitFlashTimer && ent.hitFlashTimer > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 1.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   ctx.restore();
 }
@@ -82,15 +116,17 @@ function drawChassisByTier(
   ctx: CanvasRenderingContext2D,
   tier: number,
   r: number,
-  isHostile: boolean
+  isHostile: boolean,
+  distanceDriven: number,
+  isWreck = false
 ) {
   const l = r * 1.45;
   const w = r * 1.15;
   const trackW = r * 0.34;
 
   // Tread colors
-  const treadBase = isHostile ? '#27272a' : '#1f2937';
-  const treadGroove = '#09090b';
+  const treadBase = isWreck ? '#1c1917' : isHostile ? '#27272a' : '#1e293b';
+  const treadGroove = isWreck ? '#0c0a09' : '#09090b';
 
   // Left & Right Treads
   ctx.fillStyle = treadBase;
@@ -105,8 +141,11 @@ function drawChassisByTier(
   ctx.fillRect(-l, w - trackW, l * 2, trackW);
   ctx.strokeRect(-l, w - trackW, l * 2, trackW);
 
-  // Track segment grooves
-  for (let x = -l + 6; x < l - 4; x += 8) {
+  // Animated Track Segments based on distance driven!
+  const grooveSpacing = 9;
+  const offset = ((distanceDriven * 0.7) % grooveSpacing + grooveSpacing) % grooveSpacing;
+
+  for (let x = -l + offset; x < l - 2; x += grooveSpacing) {
     ctx.beginPath();
     ctx.moveTo(x, -w);
     ctx.lineTo(x, -w + trackW);
@@ -115,9 +154,18 @@ function drawChassisByTier(
     ctx.stroke();
   }
 
-  // Main Hull Body
+  if (isWreck) {
+    // Charred burnt wreck hull
+    ctx.fillStyle = '#292524';
+    ctx.fillRect(-l * 0.8, -w * 0.7, l * 1.6, w * 1.4);
+    ctx.strokeStyle = '#0c0a09';
+    ctx.strokeRect(-l * 0.8, -w * 0.7, l * 1.6, w * 1.4);
+    return;
+  }
+
+  // Main Hull Body by Tier
   if (tier === 1) {
-    // Scrappy Patchwork Scout: mismatched rusty plates, visible rivets
+    // Scrappy Patchwork Scout: mismatched rusty plates, visible patches
     ctx.fillStyle = isHostile ? '#78350f' : '#64748b';
     ctx.fillRect(-l * 0.75, -w * 0.65, l * 1.5, w * 1.3);
 
@@ -225,11 +273,22 @@ function drawTurretByTier(
   r: number,
   isHostile: boolean,
   reloadRem: number,
-  reloadTotal: number
+  reloadTotal: number,
+  isWreck = false
 ) {
-  const recoil = reloadRem > 0 ? (reloadRem / reloadTotal) * (r * 0.2) : 0;
+  // Recoil kick displacement when firing
+  const recoil = !isWreck && reloadRem > 0 ? (reloadRem / reloadTotal) * (r * 0.25) : 0;
   const barrelLen = r * (1.2 + tier * 0.16) - recoil;
   const barrelW = r * (0.2 + tier * 0.035);
+
+  if (isWreck) {
+    // Burnt turret stub
+    ctx.fillStyle = '#1c1917';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
 
   // Barrel
   ctx.fillStyle = '#18181b';
@@ -285,7 +344,10 @@ export function drawEnemy(
   ctx.save();
   ctx.translate(s.x, s.y);
 
-  // Pluggable sprite check
+  if (ent.isWreck) {
+    ctx.globalAlpha = Math.max(0.15, Math.min(1.0, (ent.wreckTimer || 8.0) / 8.0));
+  }
+
   const enemyImg = spriteRegistry.getImage(spriteRegistry.getEnemyPath(ent.kind));
   if (enemyImg) {
     ctx.save();
@@ -296,19 +358,27 @@ export function drawEnemy(
     return;
   }
 
-  // Procedural enemy rendering
+  // Procedural enemy rendering with drop shadows
   ctx.save();
   ctx.rotate(ent.chassisAngle);
 
-  if (ent.kind === 'scout_buggy') {
-    // 4 big off-road wheels
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = 6 * zoom;
+  ctx.shadowOffsetX = 3.5 * zoom;
+  ctx.shadowOffsetY = 4.5 * zoom;
+
+  if (ent.isWreck) {
+    ctx.fillStyle = '#292524';
+    ctx.fillRect(-r * 0.9, -r * 0.7, r * 1.8, r * 1.4);
+  } else if (ent.kind === 'scout_buggy') {
+    // Wheels
     ctx.fillStyle = '#18181b';
     ctx.fillRect(-r * 1.1, -r * 1.0, r * 0.6, r * 0.4);
     ctx.fillRect(r * 0.5, -r * 1.0, r * 0.6, r * 0.4);
     ctx.fillRect(-r * 1.1, r * 0.6, r * 0.6, r * 0.4);
     ctx.fillRect(r * 0.5, r * 0.6, r * 0.6, r * 0.4);
 
-    // Buggy tubular roll cage chassis
+    // Roll cage chassis
     ctx.fillStyle = '#b45309';
     ctx.beginPath();
     ctx.moveTo(-r * 0.8, -r * 0.6);
@@ -329,13 +399,11 @@ export function drawEnemy(
     ctx.fillRect(-r * 0.2, r * 0.55, r * 0.5, r * 0.35);
     ctx.fillRect(r * 0.6, r * 0.55, r * 0.5, r * 0.35);
 
-    // Armored truck bed and cab
     ctx.fillStyle = '#7f1d1d';
     ctx.fillRect(-r * 1.0, -r * 0.6, r * 2.0, r * 1.2);
     ctx.fillStyle = '#991b1b';
     ctx.fillRect(r * 0.3, -r * 0.55, r * 0.7, r * 1.1);
   } else if (ent.kind === 'artillery') {
-    // Heavy tracked platform
     ctx.fillStyle = '#27272a';
     ctx.fillRect(-r * 1.2, -r * 0.9, r * 2.4, r * 0.4);
     ctx.fillRect(-r * 1.2, r * 0.5, r * 2.4, r * 0.4);
@@ -345,7 +413,6 @@ export function drawEnemy(
     ctx.strokeStyle = '#991b1b';
     ctx.strokeRect(-r * 0.9, -r * 0.6, r * 1.8, r * 1.2);
   } else if (ent.kind === 'bunker_turret') {
-    // Octagonal concrete bunker base
     ctx.fillStyle = '#52525b';
     ctx.strokeStyle = '#27272a';
     ctx.lineWidth = 2;
@@ -361,13 +428,11 @@ export function drawEnemy(
     ctx.fill();
     ctx.stroke();
   } else if (ent.kind === 'loot_convoy') {
-    // Heavy 8-wheeled transport hauler
     ctx.fillStyle = '#18181b';
     for (let i = -1.2; i <= 0.8; i += 0.6) {
       ctx.fillRect(r * i, -r * 0.95, r * 0.45, r * 0.3);
       ctx.fillRect(r * i, r * 0.65, r * 0.45, r * 0.3);
     }
-    // Golden reinforced cargo container
     ctx.fillStyle = '#854d0e';
     ctx.fillRect(-r * 1.2, -r * 0.65, r * 2.4, r * 1.3);
     ctx.fillStyle = '#eab308';
@@ -375,13 +440,10 @@ export function drawEnemy(
     ctx.strokeStyle = '#ca8a04';
     ctx.strokeRect(-r * 0.8, -r * 0.4, r * 1.6, r * 0.8);
   } else if (ent.kind === 'boss') {
-    // Massive Boss Behemoth
     ctx.fillStyle = '#18181b';
-    // Quad massive treads
     ctx.fillRect(-r * 1.2, -r * 1.1, r * 2.4, r * 0.5);
     ctx.fillRect(-r * 1.2, r * 0.6, r * 2.4, r * 0.5);
 
-    // Heavy red fortress hull
     ctx.fillStyle = ent.bossPhase === 3 ? '#991b1b' : '#450a0a';
     ctx.fillRect(-r * 0.95, -r * 0.75, r * 1.9, r * 1.5);
     ctx.strokeStyle = ent.bossPhase === 3 ? '#ef4444' : '#f97316';
@@ -389,27 +451,39 @@ export function drawEnemy(
     ctx.strokeRect(-r * 0.95, -r * 0.75, r * 1.9, r * 1.5);
   }
 
-  ctx.restore(); // restore chassisAngle
-
-  // Turret
-  ctx.save();
-  ctx.rotate(ent.turretAngle);
-  const barrelL = ent.kind === 'artillery' ? r * 1.8 : r * 1.3;
-  const barrelW = ent.kind === 'boss' ? r * 0.35 : r * 0.22;
-
-  ctx.fillStyle = '#09090b';
-  ctx.fillRect(r * 0.2, -barrelW / 2, barrelL, barrelW);
-
-  // Turret cap
-  ctx.fillStyle = '#7f1d1d';
-  ctx.strokeStyle = '#ef4444';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(0, 0, r * 0.55, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
   ctx.restore();
+
+  // Turret (if not wrecked)
+  if (!ent.isWreck) {
+    ctx.save();
+    ctx.rotate(ent.turretAngle);
+    const barrelL = ent.kind === 'artillery' ? r * 1.8 : r * 1.3;
+    const barrelW = ent.kind === 'boss' ? r * 0.35 : r * 0.22;
+
+    ctx.fillStyle = '#09090b';
+    ctx.fillRect(r * 0.2, -barrelW / 2, barrelL, barrelW);
+
+    ctx.fillStyle = '#7f1d1d';
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // White Hit Flash on damage
+  if (ent.hitFlashTimer && ent.hitFlashTimer > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 
@@ -426,9 +500,15 @@ export function drawLootCrate(
   ctx.save();
   ctx.translate(s.x, s.y);
 
+  // Drop shadow
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = 4 * zoom;
+  ctx.shadowOffsetX = 3 * zoom;
+  ctx.shadowOffsetY = 4 * zoom;
+
   // Pulsing gold aura
   const pulse = 0.5 + Math.sin(time * 6 + crate.id) * 0.3;
-  ctx.fillStyle = `rgba(234, 179, 8, ${pulse * 0.4})`;
+  ctx.fillStyle = `rgba(234, 179, 8, ${pulse * 0.45})`;
   ctx.beginPath();
   ctx.arc(0, 0, r * 1.8, 0, Math.PI * 2);
   ctx.fill();
@@ -440,7 +520,7 @@ export function drawLootCrate(
   ctx.fillRect(-r, -r, r * 2, r * 2);
   ctx.strokeRect(-r, -r, r * 2, r * 2);
 
-  // Reinforcement straps
+  // Cross straps
   ctx.fillStyle = '#422006';
   ctx.fillRect(-r * 0.3, -r, r * 0.6, r * 2);
   ctx.fillRect(-r, -r * 0.3, r * 2, r * 0.6);
@@ -488,10 +568,13 @@ export function drawGate(
     ctx.stroke();
   }
 
-  // Name plate
-  ctx.font = `600 ${Math.round(13 * zoom)}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  ctx.fillStyle = '#ffffff';
+  // Name plate with outline for legibility
+  ctx.font = `600 ${Math.max(11, Math.round(13 * zoom))}px -apple-system, BlinkMacSystemFont, sans-serif`;
   ctx.textAlign = 'center';
+  ctx.strokeStyle = '#09090b';
+  ctx.lineWidth = 3;
+  ctx.strokeText(gate.name, 0, -r - 12);
+  ctx.fillStyle = '#ffffff';
   ctx.fillText(gate.name, 0, -r - 12);
 
   ctx.restore();
@@ -509,29 +592,50 @@ export function drawLandmark(
   ctx.save();
   ctx.translate(s.x, s.y);
 
-  if (landmark.type === 'watchtower') {
-    // Highland Watchtower
-    ctx.fillStyle = '#3f3f46';
-    ctx.fillRect(-20 * zoom, -40 * zoom, 40 * zoom, 80 * zoom);
-    ctx.fillStyle = '#71717a';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = 10 * zoom;
+  ctx.shadowOffsetX = 6 * zoom;
+  ctx.shadowOffsetY = 8 * zoom;
+
+  if (landmark.type === 'watchtower' || landmark.type === 'windmill') {
+    // Highland Windmill Landmark with spinning sails
+    // Octagonal stone mill tower base
+    ctx.fillStyle = '#d6d3d1';
+    ctx.strokeStyle = '#78716c';
+    ctx.lineWidth = 2 * zoom;
     ctx.beginPath();
-    ctx.moveTo(-30 * zoom, -40 * zoom);
-    ctx.lineTo(0, -65 * zoom);
-    ctx.lineTo(30 * zoom, -40 * zoom);
+    ctx.moveTo(-35 * zoom, 50 * zoom);
+    ctx.lineTo(-20 * zoom, -40 * zoom);
+    ctx.lineTo(20 * zoom, -40 * zoom);
+    ctx.lineTo(35 * zoom, 50 * zoom);
     ctx.closePath();
     ctx.fill();
-    // Searchlight rotating beam
-    const beamAngle = time * 0.8;
-    ctx.save();
-    ctx.rotate(beamAngle);
-    const beamGrad = ctx.createRadialGradient(0, 0, 10, 140 * zoom, 0, 140 * zoom);
-    beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0.35)');
-    beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
-    ctx.fillStyle = beamGrad;
+    ctx.stroke();
+
+    // Wooden dome roof
+    ctx.fillStyle = '#854d0e';
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, 160 * zoom, -0.25, 0.25);
-    ctx.closePath();
+    ctx.arc(0, -40 * zoom, 24 * zoom, Math.PI, 0);
+    ctx.fill();
+
+    // 4 Rotating Windmill Sails
+    ctx.save();
+    ctx.translate(0, -40 * zoom);
+    ctx.rotate(time * 0.9);
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      ctx.rotate((i * Math.PI) / 2);
+      ctx.fillStyle = '#fef3c7';
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(4 * zoom, -5 * zoom, 60 * zoom, 12 * zoom);
+      ctx.strokeRect(4 * zoom, -5 * zoom, 60 * zoom, 12 * zoom);
+      ctx.restore();
+    }
+    // Hub pin
+    ctx.fillStyle = '#451a03';
+    ctx.beginPath();
+    ctx.arc(0, 0, 6 * zoom, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   } else if (landmark.type === 'canyon_arch') {
@@ -567,11 +671,14 @@ export function drawLandmark(
     ctx.stroke();
   }
 
-  // Label
-  ctx.font = `600 ${Math.round(14 * zoom)}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  ctx.fillStyle = '#e2e8f0';
+  // Label with dark outline for readability
+  ctx.font = `600 ${Math.max(12, Math.round(14 * zoom))}px -apple-system, BlinkMacSystemFont, sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText(landmark.name, 0, 65 * zoom);
+  ctx.strokeStyle = '#09090b';
+  ctx.lineWidth = 3;
+  ctx.strokeText(landmark.name, 0, 75 * zoom);
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillText(landmark.name, 0, 75 * zoom);
 
   ctx.restore();
 }

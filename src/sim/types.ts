@@ -176,6 +176,12 @@ export interface SimEntity {
   telegraphRadius?: number;
   telegraphTimer?: number;
   telegraphTotal?: number;
+
+  // Visual polish fields
+  hitFlashTimer?: number;
+  distanceDriven?: number;
+  wreckTimer?: number;
+  isWreck?: boolean;
 }
 
 export interface MapObstacle {

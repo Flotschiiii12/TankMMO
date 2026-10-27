@@ -98,13 +98,24 @@ All gameplay tuning parameters are centralized in `/src/data/`:
 
 ---
 
-## 4. Pluggable Art Pipeline (Dropping in Real Art)
+## 4. Pluggable Art Pipeline & Silent Console
 
-The game includes a pluggable asset registry (`/src/render/assets.ts`) with silent fallback:
-- When a raster sprite or texture is placed into the public `/assets/` directory, the engine loads it without throwing 404 console errors.
-- If an asset is missing, the engine falls back to the high-detail procedural vector rendering.
+The asset pipeline uses `/public/assets/manifest.json` to inventory all available raster sprites:
+- Only files explicitly declared in the manifest are fetched. If an asset is missing or the manifest is empty (`"sprites": []`), the engine never issues speculative network requests, guaranteeing **zero 404 console errors**.
+- At startup, the asset loader logs exactly one clean telemetry line:
+  `[Treadfront Assets] 0 of 0 sprites found in manifest. Using procedural vector rendering.`
+- Dropping real sprite images into `/public/assets/` and listing their paths in `manifest.json` immediately swaps procedural rendering for raster sprites:
 
-### Asset File Naming Convention:
+```json
+{
+  "sprites": [
+    "/assets/vehicles/t1_starter_body.png",
+    "/assets/vehicles/t1_starter_turret.png"
+  ]
+}
+```
+
+### Supported Asset IDs:
 - **Vehicle Chassis**: `/assets/vehicles/<tier>_<id>_body.png` (Facing right $\rightarrow$, transparent PNG).
 - **Vehicle Turret**: `/assets/vehicles/<tier>_<id>_turret.png` (Facing right $\rightarrow$, pivot point at center).
 - **Enemies**: `/assets/enemies/<id>.png` (e.g. `scout_buggy.png`, `boss_siege_crawler.png`).
@@ -115,14 +126,26 @@ The game includes a pluggable asset registry (`/src/render/assets.ts`) with sile
 
 ---
 
-## 5. Controls Guide
+## 5. Rapid QA Testing (`?debug=1`)
+
+Appending `?debug=1` to the URL triggers instant QA testing mode:
+- Grants **+5,000 Scrap** and **+2,500 Tech Parts**.
+- Elevates player pilot level to Level 15 (unlocks high-tier vehicles and parts in the Garage immediately).
+- Spawns several close-range test target vehicles (Scout Buggies, Medium Tanks, Heavy Tanks) 150-250 units from the spawn outpost for immediate combat verification.
+- Can be activated at any time or toggled via the `F3` key / Settings menu.
+
+---
+
+## 6. Controls & Camera
 
 - **Mobile (Landscape Preferred)**:
   - **Left Thumb**: Virtual joystick (push to turn and drive chassis).
-  - **Right Thumb**: Big Target/Auto-Fire button (reload ring indicator), surrounded by Smoke, Repair, Overdrive, Target Cycle, and Ammo Cycle.
+  - **Right Thumb**: Big Target/Auto-Fire button (reload ring indicator), surrounded by Smoke, Repair, Overdrive, Target Cycle, and Ammo Cycle (all touch targets $\ge 44\times 44$px).
+  - **Pinch-to-Zoom**: Two-finger pinch gesture smoothly scales camera view between 0.5x and 1.2x.
   - **Direct Tap**: Tap any enemy directly on the playfield to acquire lock.
 - **Desktop Keyboard & Mouse**:
   - `W / A / S / D` or `Arrow Keys`: Tank driving & steering.
+  - `Mouse Wheel`: Zoom camera in/out (0.5x to 1.2x).
   - `Left Click`: Lock clicked enemy target.
   - `Space`: Toggle Auto-Fire.
   - `Q`: Deploy Smoke Screen.
@@ -131,3 +154,4 @@ The game includes a pluggable asset registry (`/src/render/assets.ts`) with sile
   - `1 / 2 / 3`: Switch Ammo (Standard / AP / HE).
   - `Tab`: Cycle nearest targets.
   - `F3`: Toggle Diagnostic Telemetry Overlay (FPS, Tick Time, Entity Counts).
+

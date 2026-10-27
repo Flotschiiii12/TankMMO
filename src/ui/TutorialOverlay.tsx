@@ -1,85 +1,133 @@
 import React from 'react';
 import { soundEngine } from '../audio/soundEngine.ts';
-import { Navigation, Crosshair, Zap, ChevronRight, X } from 'lucide-react';
+import { Navigation, Crosshair, Zap, Shield, X } from 'lucide-react';
 
 interface TutorialOverlayProps {
-  step: number; // 0, 1, 2
-  onNextStep: () => void;
-  onDismiss: () => void;
+  step: number; // 0: drive, 1: lock, 2: fire, 3: abilities/loot, 4+: done
+  onAdvance: () => void;
+  onSkip: () => void;
 }
 
-export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ step, onNextStep, onDismiss }) => {
-  const steps = [
-    {
-      title: 'Step 1: Pilot & Steering',
-      desc: 'Use the Virtual Joystick on the bottom-left (or WASD / arrow keys on desktop) to steer your chassis. Your vehicle accelerates forward with authentic tank traction.',
-      icon: <Navigation className="text-orange-400" size={24} />,
-      btnText: 'Next: Targeting',
-    },
-    {
-      title: 'Step 2: Lock & Aim Turret',
-      desc: 'Tap the large TARGET button on the bottom-right (or tap an enemy vehicle directly) to lock on. Your turret rotates independently to track locked hostiles.',
-      icon: <Crosshair className="text-orange-400" size={24} />,
-      btnText: 'Next: Combat & Ammo',
-    },
-    {
-      title: 'Step 3: Fire & Tactical Ammo',
-      desc: 'Tap the central button again (or Space) to toggle auto-fire. Switch between Standard, Armor-Piercing (AP), and High-Explosive (HE) ammo to crush enemy armor!',
-      icon: <Zap className="text-orange-400" size={24} />,
-      btnText: 'Deploy Commander',
-    },
-  ];
+export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({ step, onAdvance, onSkip }) => {
+  if (step >= 4) return null;
 
-  const current = steps[Math.min(step, 2)];
-
-  return (
-    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 max-w-sm w-full mx-auto px-3 pointer-events-auto select-none animate-in fade-in slide-in-from-top-4 duration-200">
-      <div className="bg-slate-900/95 border border-orange-500/50 rounded-xl p-4 shadow-2xl backdrop-blur-md text-slate-200">
-        <div className="flex items-start justify-between gap-3">
-          <div className="p-2 rounded-lg bg-orange-500/10 border border-orange-500/20">
-            {current.icon}
-          </div>
-
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-white tracking-tight">{current.title}</h4>
-              <span className="text-[10px] text-orange-400 font-semibold">{step + 1} / 3</span>
+  if (step === 0) {
+    // Step 0: Driving hint sits next to joystick (bottom-left)
+    return (
+      <div className="absolute bottom-40 left-6 z-30 pointer-events-none select-none max-w-[250px] animate-in fade-in duration-200">
+        <div className="pointer-events-auto p-3 rounded-lg bg-slate-900/90 border border-orange-500/50 shadow-xl backdrop-blur-none text-slate-200">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+              <Navigation size={14} className="text-orange-400" />
+              <span>Drive & Steer</span>
             </div>
-            <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">{current.desc}</p>
+            <button
+              onClick={() => {
+                soundEngine.playUIClick();
+                onSkip();
+              }}
+              className="text-[10px] text-slate-400 hover:text-slate-200"
+            >
+              Skip
+            </button>
           </div>
+          <p className="text-[11px] text-slate-300 mt-1.5 leading-snug">
+            Drag the left stick or press <span className="text-white font-medium">WASD</span> to steer.
+          </p>
+          <div className="mt-2 text-[10px] text-orange-400/90 font-medium">
+            Drive 50m to proceed...
+          </div>
+        </div>
+      </div>
+    );
+  }
 
+  if (step === 1) {
+    // Step 1: Lock hint sits next to TARGET button (bottom-right)
+    return (
+      <div className="absolute bottom-52 right-8 z-30 pointer-events-none select-none max-w-[250px] animate-in fade-in duration-200">
+        <div className="pointer-events-auto p-3 rounded-lg bg-slate-900/90 border border-orange-500/50 shadow-xl backdrop-blur-none text-slate-200">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+              <Crosshair size={14} className="text-orange-400" />
+              <span>Targeting Lock</span>
+            </div>
+            <button
+              onClick={() => {
+                soundEngine.playUIClick();
+                onSkip();
+              }}
+              className="text-[10px] text-slate-400 hover:text-slate-200"
+            >
+              Skip
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-300 mt-1.5 leading-snug">
+            Tap the <span className="text-white font-medium">TARGET</span> button (or tap an enemy vehicle) to lock your turret.
+          </p>
+          <div className="mt-2 text-[10px] text-orange-400/90 font-medium">
+            Lock an enemy to proceed...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 2) {
+    // Step 2: Auto-fire hint sits next to TARGET button (bottom-right)
+    return (
+      <div className="absolute bottom-52 right-8 z-30 pointer-events-none select-none max-w-[250px] animate-in fade-in duration-200">
+        <div className="pointer-events-auto p-3 rounded-lg bg-slate-900/90 border border-orange-500/50 shadow-xl backdrop-blur-none text-slate-200">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+              <Zap size={14} className="text-orange-400" />
+              <span>Auto-Fire Engagement</span>
+            </div>
+            <button
+              onClick={() => {
+                soundEngine.playUIClick();
+                onSkip();
+              }}
+              className="text-[10px] text-slate-400 hover:text-slate-200"
+            >
+              Skip
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-300 mt-1.5 leading-snug">
+            Tap <span className="text-white font-medium">LOCKED</span> again (or Space) to toggle auto-fire.
+          </p>
+          <div className="mt-2 text-[10px] text-orange-400/90 font-medium">
+            Fire cannon to proceed...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 3: Abilities & Loot
+  return (
+    <div className="absolute bottom-52 right-8 z-30 pointer-events-none select-none max-w-[250px] animate-in fade-in duration-200">
+      <div className="pointer-events-auto p-3 rounded-lg bg-slate-900/90 border border-orange-500/50 shadow-xl backdrop-blur-none text-slate-200">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+            <Shield size={14} className="text-emerald-400" />
+            <span>Tactical Systems</span>
+          </div>
           <button
             onClick={() => {
               soundEngine.playUIClick();
-              onDismiss();
+              onSkip();
             }}
-            className="text-slate-500 hover:text-white p-0.5"
+            className="text-[10px] text-slate-400 hover:text-slate-200"
           >
-            <X size={16} />
+            Skip
           </button>
         </div>
-
-        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-800 text-xs">
-          <button
-            onClick={() => {
-              soundEngine.playUIClick();
-              onDismiss();
-            }}
-            className="text-[11px] text-slate-400 hover:text-slate-200"
-          >
-            Skip Manual
-          </button>
-
-          <button
-            onClick={() => {
-              soundEngine.playUIClick();
-              onNextStep();
-            }}
-            className="px-3 py-1 rounded-md bg-orange-500 hover:bg-orange-400 text-slate-950 font-semibold flex items-center gap-1 transition-colors text-xs"
-          >
-            <span>{current.btnText}</span>
-            <ChevronRight size={14} />
-          </button>
+        <p className="text-[11px] text-slate-300 mt-1.5 leading-snug">
+          Collect glowing supply crates from wrecks and trigger <span className="text-white">Smoke</span>, <span className="text-emerald-300">Repair</span>, or <span className="text-orange-300">Boost</span>!
+        </p>
+        <div className="mt-2 text-[10px] text-emerald-400/90 font-medium">
+          Collect loot or use an ability to complete manual.
         </div>
       </div>
     </div>

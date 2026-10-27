@@ -91,6 +91,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             />
           </div>
 
+          {/* Camera Viewport Zoom Slider */}
+          <div className="p-3 rounded-lg bg-slate-950/50 border border-slate-800 space-y-2">
+            <div className="flex justify-between text-slate-400">
+              <span>Battlefield Camera Zoom</span>
+              <span className="tabular-nums text-white">
+                {Math.round((profile.settings.zoom || 0.85) * 100)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0.5"
+              max="1.2"
+              step="0.05"
+              value={profile.settings.zoom || 0.85}
+              onChange={(e) => {
+                const z = parseFloat(e.target.value);
+                onUpdateSettings({ ...profile.settings, zoom: z });
+              }}
+              className="w-full accent-orange-500 cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] text-slate-500">
+              <span>0.5x (Wide)</span>
+              <span>0.85x (Default)</span>
+              <span>1.2x (Close)</span>
+            </div>
+          </div>
+
           {/* Debug Overlay Toggle */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
             <div>

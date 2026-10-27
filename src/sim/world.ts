@@ -139,6 +139,13 @@ function spawnInitialEnemies(world: World) {
   }
 }
 
+export function spawnDebugTargetEnemies(world: World, playerPos: Vec2) {
+  // Spawn test targets just outside safe zone for instant combat validation
+  spawnEnemy(world, 'scout_buggy', 2, { x: playerPos.x + 440, y: playerPos.y + 200 });
+  spawnEnemy(world, 'gunner_truck', 3, { x: playerPos.x - 440, y: playerPos.y + 200 });
+  spawnEnemy(world, 'loot_convoy', 4, { x: playerPos.x + 500, y: playerPos.y - 300 });
+}
+
 export function spawnBoss(world: World) {
   const bossDef = world.mapDef.bossSpawn;
   if (!bossDef) return;
@@ -707,9 +714,11 @@ function updatePhysicsAndMovement(world: World, dt: number) {
       ent.vel.y = lerp(ent.vel.y, 0, 7.0 * dt);
     }
 
-    // Update position
+    // Update position and distanceDriven for animated tracks
+    const stepLen = Math.hypot(ent.vel.x, ent.vel.y) * dt;
     ent.pos.x += ent.vel.x * dt;
     ent.pos.y += ent.vel.y * dt;
+    ent.distanceDriven = (ent.distanceDriven || 0) + stepLen;
 
     // Collide with map boundaries
     const margin = ent.radius + 15;
@@ -1143,6 +1152,9 @@ export function inflictDamage(
   victim.hull = Math.max(0, victim.hull - hullDamage);
   victim.armorRegenTimer = 0; // Reset 8s out-of-combat timer
   victim.repairRemaining = 0; // Interrupt active repair kit!
+  victim.hitFlashTimer = 0.12; // Trigger crisp white damage flash
+
+  const isCrit = angleMult > 1.2; // Rear engine critical hit
 
   world.events.push({
     type: 'damage',
@@ -1153,6 +1165,7 @@ export function inflictDamage(
       hullDamage,
       armorDamage,
       angleMult,
+      isCrit,
       pos: { ...victim.pos },
     },
   });
@@ -1164,6 +1177,10 @@ export function inflictDamage(
 }
 
 function handleEntityDeath(world: World, victim: SimEntity, killerId?: number) {
+  victim.isWreck = true;
+  victim.wreckTimer = 8.0; // Wreck lingers and fades over 8 seconds
+  victim.vel = vec2();
+
   world.events.push({
     type: 'kill',
     payload: {
@@ -1270,6 +1287,11 @@ function updateAbilitiesAndRegen(world: World, dt: number) {
     if (ent.overdriveCooldown > 0) ent.overdriveCooldown -= dt;
     if (ent.invulnerableTime > 0) ent.invulnerableTime -= dt;
 
+    // Hit flash timer
+    if (ent.hitFlashTimer && ent.hitFlashTimer > 0) {
+      ent.hitFlashTimer -= dt;
+    }
+
     // Safe zone fast repair: +25% hull and armor per sec
     if (isInSafeZone(world, ent.pos)) {
       ent.hull = Math.min(ent.maxHull, ent.hull + ent.maxHull * 0.25 * dt);
@@ -1365,6 +1387,16 @@ function updateGates(world: World, dt: number) {
 }
 
 function updateWorldState(world: World, dt: number) {
+  // Update and clean up lingering wrecks
+  for (const ent of Array.from(world.entities.values())) {
+    if (ent.isWreck && ent.wreckTimer !== undefined) {
+      ent.wreckTimer -= dt;
+      if (ent.wreckTimer <= 0) {
+        world.entities.delete(ent.id);
+      }
+    }
+  }
+
   // Update enemy respawns
   for (let i = world.enemyRespawnQueue.length - 1; i >= 0; i--) {
     const item = world.enemyRespawnQueue[i];

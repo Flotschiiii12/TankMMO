@@ -40,7 +40,6 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   // Keyboard listener for desktop WASD / Arrows
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
 
       keysDown.current.add(e.code);
@@ -109,9 +108,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
     };
   }, [onCommand, onCycleTarget, sendDrive, stickActive]);
 
-  // Virtual Joystick Pointer Handlers
+  // Virtual Joystick Pointer Handlers (multi-touch with separate pointerId)
   const handlePointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     soundEngine.init();
     activeTouchId.current = e.pointerId;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -121,6 +121,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!stickActive || activeTouchId.current !== e.pointerId) return;
+    e.preventDefault();
     updateKnob(e.clientX, e.clientY);
   };
 
@@ -173,38 +174,38 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   const overdriveCd = player?.overdriveCooldown || 0;
 
   return (
-    <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
+    <div className="absolute inset-0 pointer-events-none select-none overflow-hidden touch-none">
       {/* LEFT THUMB: Virtual Joystick */}
-      <div className="absolute bottom-5 left-5 pointer-events-auto">
+      <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1.25rem,env(safe-area-inset-left))] pointer-events-auto">
         <div
           ref={joystickBaseRef}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          className="relative w-32 h-32 rounded-full border border-orange-500/25 bg-slate-950/40 backdrop-blur-none flex items-center justify-center touch-none"
+          className="relative w-32 h-32 rounded-full border border-orange-500/30 bg-slate-950/50 backdrop-blur-none flex items-center justify-center touch-none select-none"
         >
           {/* Inner target crosshair */}
-          <div className="w-2 h-2 rounded-full bg-white/20 pointer-events-none" />
+          <div className="w-2.5 h-2.5 rounded-full bg-white/20 pointer-events-none" />
 
           {/* Draggable Knob */}
           <div
-            className={`absolute w-14 h-14 rounded-full border border-orange-400/60 bg-gradient-to-b from-slate-800 to-slate-950 shadow-md transition-transform duration-75 pointer-events-none flex items-center justify-center ${
+            className={`absolute w-14 h-14 rounded-full border border-orange-400/70 bg-gradient-to-b from-slate-800 to-slate-950 shadow-md transition-transform duration-75 pointer-events-none flex items-center justify-center ${
               stickActive ? 'scale-105 border-orange-400' : ''
             }`}
             style={{
               transform: `translate(${knobPos.x}px, ${knobPos.y}px)`,
             }}
           >
-            <div className="w-4 h-4 rounded-full bg-orange-500/50" />
+            <div className="w-4 h-4 rounded-full bg-orange-500/60" />
           </div>
         </div>
       </div>
 
-      {/* RIGHT THUMB: Big Round Target/Fire Button + Satellite Ability Cluster */}
-      <div className="absolute bottom-6 right-6 pointer-events-auto flex items-center justify-center">
+      {/* RIGHT THUMB: Big Round Target/Fire Button + Satellite Ability Cluster (All buttons >= 44x44px) */}
+      <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] pointer-events-auto flex items-center justify-center">
         {/* Satellite Buttons Around Fire Button */}
-        <div className="relative w-44 h-44 flex items-center justify-center">
+        <div className="relative w-48 h-48 flex items-center justify-center">
           {/* Ability 1: Smoke (Top-Left) */}
           <button
             onClick={() => {
@@ -212,10 +213,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onCommand({ type: 'UseAbility', abilityId: 'smoke' });
             }}
             disabled={smokeCd > 0}
-            className={`absolute -top-1 left-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
+            className={`absolute top-0 left-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
               smokeCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
-                : 'border-slate-700 bg-slate-900/80 text-slate-200 active:scale-95 active:border-orange-400 hover:border-slate-600'
+                : 'border-slate-700 bg-slate-900/90 text-slate-200 active:scale-95 active:border-orange-400 hover:border-slate-600'
             }`}
           >
             <span>Smoke</span>
@@ -229,10 +230,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onCommand({ type: 'UseAbility', abilityId: 'repair' });
             }}
             disabled={repairCd > 0}
-            className={`absolute -top-5 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
+            className={`absolute -top-4 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
               repairCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
-                : 'border-emerald-700/60 bg-slate-900/80 text-emerald-300 active:scale-95 active:border-emerald-400 hover:border-emerald-600'
+                : 'border-emerald-700/70 bg-slate-900/90 text-emerald-300 active:scale-95 active:border-emerald-400 hover:border-emerald-600'
             }`}
           >
             <span>Repair</span>
@@ -246,34 +247,34 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onCommand({ type: 'UseAbility', abilityId: 'overdrive' });
             }}
             disabled={overdriveCd > 0}
-            className={`absolute -top-1 right-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
+            className={`absolute top-0 right-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
               overdriveCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
-                : 'border-orange-500/50 bg-slate-900/80 text-orange-300 active:scale-95 active:border-orange-400 hover:border-orange-400'
+                : 'border-orange-500/60 bg-slate-900/90 text-orange-300 active:scale-95 active:border-orange-400 hover:border-orange-400'
             }`}
           >
             <span>Boost</span>
             {overdriveCd > 0 && <span className="tabular-nums text-[9px] text-orange-400">{Math.ceil(overdriveCd)}s</span>}
           </button>
 
-          {/* Target Cycle (Left) */}
+          {/* Target Cycle (Left - 44x44px) */}
           <button
             onClick={() => {
               soundEngine.playUIClick();
               onCycleTarget();
             }}
-            className="absolute left-0 w-10 h-10 rounded-full border border-slate-700 bg-slate-900/80 text-slate-300 text-[10px] font-medium flex items-center justify-center active:scale-95 hover:border-slate-500"
+            className="absolute left-0 w-11 h-11 rounded-full border border-slate-700 bg-slate-900/90 text-slate-300 text-[10px] font-semibold flex items-center justify-center active:scale-95 hover:border-slate-500"
           >
-            Next
+            NEXT
           </button>
 
-          {/* Ammo Cycle (Bottom-Left) */}
+          {/* Ammo Cycle (Bottom-Left - 44x44px) */}
           <button
             onClick={() => {
               soundEngine.playUIClick();
               onCycleAmmo();
             }}
-            className="absolute -bottom-2 left-4 w-10 h-10 rounded-full border border-slate-700 bg-slate-900/80 text-orange-400 text-[10px] font-semibold flex items-center justify-center active:scale-95 hover:border-orange-500"
+            className="absolute -bottom-1 left-3 w-11 h-11 rounded-full border border-slate-700 bg-slate-900/90 text-orange-400 text-[10px] font-bold flex items-center justify-center active:scale-95 hover:border-orange-500"
           >
             {player?.selectedAmmo.toUpperCase() || 'STD'}
           </button>
@@ -290,12 +291,12 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
                 onCommand({ type: 'ToggleAutoFire' });
               }
             }}
-            className={`relative w-24 h-24 rounded-full flex flex-col items-center justify-center shadow-lg transition-transform active:scale-95 select-none ${
+            className={`relative w-24 h-24 rounded-full flex flex-col items-center justify-center shadow-xl transition-transform active:scale-95 select-none ${
               autoFire
                 ? 'bg-orange-500 text-slate-950'
                 : hasTarget
                 ? 'bg-slate-900 border-2 border-orange-500 text-orange-400'
-                : 'bg-slate-950/90 border border-white/20 text-slate-200'
+                : 'bg-slate-950/95 border border-white/20 text-slate-200'
             }`}
           >
             {/* SVG Reload Progress Ring */}
@@ -321,10 +322,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               />
             </svg>
 
-            <span className="text-xs font-semibold tracking-wider">
+            <span className="text-xs font-bold tracking-wider">
               {autoFire ? 'AUTO FIRE' : hasTarget ? 'LOCKED' : 'TARGET'}
             </span>
-            <span className="text-[10px] opacity-80">
+            <span className="text-[10px] opacity-80 font-medium">
               {autoFire ? 'Tap to pause' : hasTarget ? 'Tap to fire' : 'Tap to lock'}
             </span>
           </button>

@@ -5,7 +5,10 @@ export class Camera {
   public targetPos: Vec2 = { x: 2000, y: 2000 };
   public viewportWidth = 1200;
   public viewportHeight = 700;
-  public zoom = 0.95;
+  
+  public zoom = 0.85;
+  public targetZoom = 0.85;
+  public userZoomOverride: number | null = null;
 
   private shakeIntensity = 0;
   private shakeDecay = 8.0;
@@ -16,14 +19,28 @@ export class Camera {
     this.viewportWidth = width;
     this.viewportHeight = height;
 
-    // Responsive zoom: maintain comfortable view across phone landscape and large desktop
-    if (width < 960) {
-      this.zoom = 0.88;
-    } else if (width > 1600) {
-      this.zoom = 1.05;
+    const baseDefault = width < 960 || height < 500 ? 0.75 : 0.9;
+    if (this.userZoomOverride !== null) {
+      this.targetZoom = clamp(this.userZoomOverride, 0.5, 1.2);
     } else {
-      this.zoom = 0.95;
+      this.targetZoom = baseDefault;
     }
+  }
+
+  public setUserZoom(z: number | null) {
+    this.userZoomOverride = z !== null ? clamp(z, 0.5, 1.2) : null;
+    if (this.userZoomOverride !== null) {
+      this.targetZoom = this.userZoomOverride;
+    } else {
+      const baseDefault = this.viewportWidth < 960 || this.viewportHeight < 500 ? 0.75 : 0.9;
+      this.targetZoom = baseDefault;
+    }
+  }
+
+  public adjustZoom(factor: number) {
+    const newTarget = clamp(this.targetZoom * factor, 0.5, 1.2);
+    this.targetZoom = newTarget;
+    this.userZoomOverride = newTarget;
   }
 
   public setTarget(target: Vec2) {
@@ -31,7 +48,7 @@ export class Camera {
   }
 
   public addShake(amount: number) {
-    this.shakeIntensity = Math.min(22, this.shakeIntensity + amount);
+    this.shakeIntensity = Math.min(26, this.shakeIntensity + amount);
   }
 
   public update(dt: number, mapWidth = 4000, mapHeight = 4000) {
@@ -39,6 +56,9 @@ export class Camera {
     const followSpeed = 6.0;
     this.pos.x = lerp(this.pos.x, this.targetPos.x, followSpeed * dt);
     this.pos.y = lerp(this.pos.y, this.targetPos.y, followSpeed * dt);
+
+    // Smooth lerp zoom
+    this.zoom = lerp(this.zoom, this.targetZoom, 8.0 * dt);
 
     // Screen shake update
     if (this.shakeIntensity > 0.05) {
@@ -51,9 +71,9 @@ export class Camera {
       this.shakeOffsetY = 0;
     }
 
-    // Clamp camera within map bounds so edges don't show infinite void
-    const halfW = (this.viewportWidth / (2 * this.zoom));
-    const halfH = (this.viewportHeight / (2 * this.zoom));
+    // Clamp camera within map bounds so edges don't show empty void
+    const halfW = this.viewportWidth / (2 * this.zoom);
+    const halfH = this.viewportHeight / (2 * this.zoom);
 
     if (mapWidth > halfW * 2) {
       this.pos.x = clamp(this.pos.x, halfW, mapWidth - halfW);

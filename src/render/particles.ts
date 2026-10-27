@@ -198,22 +198,22 @@ export class ParticleSystem {
     }
   }
 
-  public emitDamageText(pos: Vec2, text: string, color = '#ef4444') {
+  public emitDamageText(pos: Vec2, text: string, color = '#ef4444', isCrit = false) {
     const p = this.alloc();
     if (!p) return;
     p.type = 'damage_text';
     p.x = pos.x + (Math.random() - 0.5) * 20;
     p.y = pos.y - 15;
-    p.vx = (Math.random() - 0.5) * 30;
-    p.vy = -55; // Floats upwards
-    p.size = 14;
-    p.maxSize = 14;
-    p.life = 0.75;
-    p.maxLife = 0.75;
-    p.color = color;
+    p.vx = (Math.random() - 0.5) * 35;
+    p.vy = isCrit ? -75 : -55; // Floats upwards faster on crits
+    p.size = isCrit ? 19 : 13;
+    p.maxSize = p.size;
+    p.life = isCrit ? 0.95 : 0.75;
+    p.maxLife = p.life;
+    p.color = isCrit ? '#fef08a' : color;
     p.alpha = 1.0;
     p.angle = 0;
-    p.text = text;
+    p.text = isCrit ? `CRIT! ${text}` : text;
   }
 
   public update(dt: number) {
@@ -308,10 +308,15 @@ export class ParticleSystem {
 
       if (p.type === 'damage_text') {
         ctx.save();
-        ctx.font = `600 ${Math.round(14 * camera.zoom)}px -apple-system, BlinkMacSystemFont, sans-serif`;
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.alpha;
+        const fontSize = Math.max(12, Math.round(p.size * camera.zoom));
+        ctx.font = `700 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.textAlign = 'center';
+        ctx.globalAlpha = p.alpha;
+        // Dark outline for guaranteed readability
+        ctx.strokeStyle = '#09090b';
+        ctx.lineWidth = 3;
+        ctx.strokeText(p.text || '', s.x, s.y);
+        ctx.fillStyle = p.color;
         ctx.fillText(p.text || '', s.x, s.y);
         ctx.restore();
       } else if (p.type === 'spark') {

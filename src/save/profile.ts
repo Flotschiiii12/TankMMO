@@ -21,6 +21,7 @@ export interface UserProfile {
     soundEnabled: boolean;
     masterVolume: number;
     showDebug: boolean;
+    zoom?: number; // 0.5 to 1.2
   };
 }
 

@@ -14,7 +14,8 @@ import { SettingsModal } from './SettingsModal.tsx';
 import { TutorialOverlay } from './TutorialOverlay.tsx';
 import { DebugPanel } from './DebugPanel.tsx';
 import { TitleScreen } from './TitleScreen.tsx';
-import { isInSafeZone } from '../sim/world.ts';
+import { PortraitWarning } from './PortraitWarning.tsx';
+import { isInSafeZone, spawnDebugTargetEnemies } from '../sim/world.ts';
 import { VEHICLE_TIERS } from '../data/vehicles.ts';
 
 export const GameShell: React.FC = () => {
@@ -29,9 +30,16 @@ export const GameShell: React.FC = () => {
   const [garageOpen, setGarageOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(profile.tutorialStep < 4);
   const [showDebug, setShowDebug] = useState(profile.settings.showDebug);
   const [soundMuted, setSoundMuted] = useState(!profile.settings.soundEnabled);
+
+  // Tutorial tracking
+  const drivenDistanceRef = useRef(0);
+
+  // Pinch-to-zoom tracking
+  const activeTouchesRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const lastPinchDistRef = useRef<number | null>(null);
 
   // Profiler stats
   const [debugStats, setDebugStats] = useState({
@@ -57,15 +65,43 @@ export const GameShell: React.FC = () => {
     soundEngine.setSoundEnabled(profile.settings.soundEnabled);
     soundEngine.setVolume(profile.settings.masterVolume);
 
+    // Apply saved user zoom
+    if (profile.settings.zoom !== undefined) {
+      cameraRef.current.setUserZoom(profile.settings.zoom);
+    }
+
+    // Check ?debug=1 URL parameter for rapid testing
+    if (typeof window !== 'undefined' && window.location.search.includes('debug=1')) {
+      setShowDebug(true);
+      setProfile((prev) => {
+        const bonusScrap = Math.max(prev.scrap, 50000);
+        const bonusParts = Math.max(prev.parts, 5000);
+        const updated = {
+          ...prev,
+          scrap: bonusScrap,
+          parts: bonusParts,
+          settings: { ...prev.settings, showDebug: true },
+        };
+        profileStoreRef.current.save(updated);
+        return updated;
+      });
+
+      // Spawn test target enemies right outside safe zone
+      try {
+        const inst = client['realm'].getInstance(client['currentMapId']);
+        const p = inst.getPlayer(client.playerId);
+        if (p) {
+          spawnDebugTargetEnemies(inst.world, p.pos);
+        }
+      } catch (err) {
+        console.warn('Debug spawn error:', err);
+      }
+    }
+
     // Event listener for simulation events
     const unsub = client.onEvent((event: SimEvent) => {
       handleSimEvent(event);
     });
-
-    // Check if new player needs tutorial
-    if (profile.tutorialStep < 3) {
-      setTutorialOpen(true);
-    }
 
     return () => {
       unsub();
@@ -94,6 +130,12 @@ export const GameShell: React.FC = () => {
           if (p.type === 'muzzle_flash') {
             particles.emitMuzzleFlash(p.pos, p.angle);
             soundEngine.playCannonShot(p.isPlayer);
+
+            // Tutorial auto-advance: Player fired cannon!
+            if (p.isPlayer && profile.tutorialStep === 2) {
+              const updated = { ...profile, tutorialStep: 3 };
+              saveProfile(updated);
+            }
           } else if (p.type === 'explosion') {
             particles.emitExplosion(p.pos, true);
             soundEngine.playExplosion(true);
@@ -108,14 +150,15 @@ export const GameShell: React.FC = () => {
                 particles.emitDamageText(
                   p.pos,
                   `-${p.damage}`,
-                  p.armorDamage > 0 ? '#38bdf8' : '#ef4444'
+                  p.armorDamage > 0 ? '#38bdf8' : '#ef4444',
+                  !!p.isCrit
                 );
               }
             }
 
-            // Screen shake on player hit
+            // Screen shake scaled by damage
             if (clientRef.current && p.victimId === clientRef.current.playerId) {
-              camera.addShake(p.damage > 400 ? 12 : 5);
+              camera.addShake(p.damage > 400 ? 14 : 6);
             }
           }
           break;
@@ -129,11 +172,28 @@ export const GameShell: React.FC = () => {
           break;
         }
 
+        case 'ability_used': {
+          // Tutorial auto-advance: Player used an ability!
+          if (profile.tutorialStep === 3) {
+            const updated = { ...profile, tutorialStep: 4 };
+            saveProfile(updated);
+            setTutorialOpen(false);
+          }
+          break;
+        }
+
         case 'loot_collected': {
           const p = event.payload;
           if (p.isPlayer) {
             soundEngine.playPickup();
             particles.emitDamageText(p.pos, `+${p.scrap} Scrap`, '#eab308');
+
+            // Tutorial auto-advance: Collected loot!
+            if (profile.tutorialStep === 3) {
+              const updated = { ...profile, tutorialStep: 4 };
+              saveProfile(updated);
+              setTutorialOpen(false);
+            }
 
             // Update user profile currencies
             setProfile((prev) => {
@@ -187,7 +247,7 @@ export const GameShell: React.FC = () => {
         }
 
         case 'player_respawn': {
-          // Drop 10% scrap on death
+          // Drop 10% scrap on death (keep 90%)
           setProfile((prev) => {
             const retainedScrap = Math.floor(prev.scrap * 0.9);
             const updated = { ...prev, scrap: retainedScrap };
@@ -198,10 +258,10 @@ export const GameShell: React.FC = () => {
         }
       }
     },
-    []
+    [profile, saveProfile]
   );
 
-  // Main Render & Animation Loop (Fixed canvas decoupling)
+  // Main Render & Animation Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -252,7 +312,6 @@ export const GameShell: React.FC = () => {
           const entities = snapshot.entities;
           const player = predictedPlayer || entities.find((e) => e.id === client.playerId) || null;
 
-          // Camera follow
           if (player) {
             camera.setTarget(player.pos);
 
@@ -261,20 +320,28 @@ export const GameShell: React.FC = () => {
             const speedRatio = player.maxSpeed > 0 ? speed / player.maxSpeed : 0;
             soundEngine.updateEngine(speedRatio);
 
-            // Emit dust trails when driving
+            // Emit dust trails and tread marks when driving
             if (speed > 15) {
               particles.emitDust(player.pos, player.chassisAngle, speedRatio);
               particles.addTreadMark(player.pos, player.chassisAngle, player.radius * 1.1);
+
+              // Tutorial auto-advance: Driving tracking
+              drivenDistanceRef.current += speed * dt;
+              if (profile.tutorialStep === 0 && drivenDistanceRef.current >= 50) {
+                saveProfile({ ...profile, tutorialStep: 1 });
+              }
+            }
+
+            // Tutorial auto-advance: Target locked
+            if (profile.tutorialStep === 1 && player.targetId !== undefined) {
+              saveProfile({ ...profile, tutorialStep: 2 });
             }
           }
 
           camera.update(dt, 5000, 5000);
           particles.update(dt);
 
-          // Get map definition
-          const mapDef = snapshot.mapId ? snapshot : null;
           const currentMap = client['clientWorld']?.mapDef;
-
           if (currentMap) {
             renderer.render(ctx, entities, player, currentMap, snapshot.time);
           }
@@ -302,7 +369,7 @@ export const GameShell: React.FC = () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
     };
-  }, [showDebug]);
+  }, [profile, saveProfile, showDebug]);
 
   // F3 Key listener for debug panel toggle
   useEffect(() => {
@@ -315,6 +382,59 @@ export const GameShell: React.FC = () => {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
+
+  // Multi-Touch Pinch-to-Zoom & Canvas Interaction Handlers
+  const handlePointerDown = (e: React.PointerEvent) => {
+    soundEngine.init();
+    activeTouchesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activeTouchesRef.current.size === 2) {
+      const points = Array.from(activeTouchesRef.current.values());
+      lastPinchDistRef.current = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (activeTouchesRef.current.has(e.pointerId)) {
+      activeTouchesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (activeTouchesRef.current.size === 2 && lastPinchDistRef.current !== null) {
+      const points = Array.from(activeTouchesRef.current.values());
+      const currentDist = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+      if (lastPinchDistRef.current > 0) {
+        const factor = currentDist / lastPinchDistRef.current;
+        cameraRef.current.adjustZoom(factor);
+      }
+      lastPinchDistRef.current = currentDist;
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    activeTouchesRef.current.delete(e.pointerId);
+    if (activeTouchesRef.current.size < 2) {
+      lastPinchDistRef.current = null;
+      // Persist chosen zoom to settings
+      if (cameraRef.current.userZoomOverride !== null) {
+        saveProfile({
+          ...profile,
+          settings: { ...profile.settings, zoom: cameraRef.current.userZoomOverride },
+        });
+      }
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.05 : 0.95;
+    cameraRef.current.adjustZoom(factor);
+    if (cameraRef.current.userZoomOverride !== null) {
+      saveProfile({
+        ...profile,
+        settings: { ...profile.settings, zoom: cameraRef.current.userZoomOverride },
+      });
+    }
+  };
 
   // Direct canvas click targeting
   const handleCanvasClick = (e: React.MouseEvent) => {
@@ -409,7 +529,6 @@ export const GameShell: React.FC = () => {
     const currentIdx = sequence.indexOf(player.selectedAmmo);
     const nextAmmo = sequence[(currentIdx + 1) % sequence.length];
 
-    // If out of special ammo, allow falling back to standard
     clientRef.current.sendCommand({ type: 'SelectAmmo', ammo: nextAmmo });
   }, []);
 
@@ -477,12 +596,20 @@ export const GameShell: React.FC = () => {
       : false;
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-slate-950 font-sans select-none">
-      {/* 2D World Canvas */}
+    <div className="relative w-full h-full overflow-hidden bg-slate-950 font-sans select-none touch-none">
+      {/* Portrait Mode Warning Overlay */}
+      <PortraitWarning />
+
+      {/* 2D World Canvas with Pinch-to-Zoom & Mouse Wheel */}
       <canvas
         ref={canvasRef}
         onClick={handleCanvasClick}
-        className="absolute inset-0 w-full h-full cursor-crosshair touch-none"
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className="absolute inset-0 w-full h-full cursor-crosshair touch-none select-none"
       />
 
       {/* Title Screen Overlay */}
@@ -518,7 +645,10 @@ export const GameShell: React.FC = () => {
             onOpenGarage={() => setGarageOpen(true)}
             onOpenInventory={() => setInventoryOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
-            onOpenTutorial={() => setTutorialOpen(true)}
+            onOpenTutorial={() => {
+              setTutorialOpen(true);
+              saveProfile({ ...profile, tutorialStep: 0 });
+            }}
           />
 
           <ControlsOverlay
@@ -528,25 +658,23 @@ export const GameShell: React.FC = () => {
             onCycleTarget={handleCycleTarget}
             onCycleAmmo={handleCycleAmmo}
           />
-        </>
-      )}
 
-      {/* Tutorial Overlay */}
-      {tutorialOpen && (
-        <TutorialOverlay
-          step={profile.tutorialStep}
-          onNextStep={() => {
-            const nextStep = profile.tutorialStep + 1;
-            if (nextStep >= 3) {
-              setTutorialOpen(false);
-            }
-            saveProfile({ ...profile, tutorialStep: nextStep });
-          }}
-          onDismiss={() => {
-            setTutorialOpen(false);
-            saveProfile({ ...profile, tutorialStep: 3 });
-          }}
-        />
+          {/* Non-Blocking Edge Hint Cards for Tutorial */}
+          {tutorialOpen && profile.tutorialStep < 4 && (
+            <TutorialOverlay
+              step={profile.tutorialStep}
+              onAdvance={() => {
+                const nextStep = profile.tutorialStep + 1;
+                saveProfile({ ...profile, tutorialStep: nextStep });
+                if (nextStep >= 4) setTutorialOpen(false);
+              }}
+              onSkip={() => {
+                saveProfile({ ...profile, tutorialStep: 4 });
+                setTutorialOpen(false);
+              }}
+            />
+          )}
+        </>
       )}
 
       {/* Modals */}
@@ -573,6 +701,9 @@ export const GameShell: React.FC = () => {
         onUpdateSettings={(newSettings) => {
           saveProfile({ ...profile, settings: newSettings });
           setShowDebug(newSettings.showDebug);
+          if (newSettings.zoom !== undefined) {
+            cameraRef.current.setUserZoom(newSettings.zoom);
+          }
         }}
         onResetProgress={handleResetProgress}
       />

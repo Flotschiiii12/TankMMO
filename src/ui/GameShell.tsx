@@ -19,6 +19,11 @@ import { WorldMapModal } from './WorldMapModal.tsx';
 import { isInSafeZone, spawnDebugTargetEnemies } from '../sim/world.ts';
 import { VEHICLE_TIERS } from '../data/vehicles.ts';
 
+function isInClientSafeZone(def: { safeZones?: Array<{ x: number; y: number; radius: number }>; safeZone?: { x: number; y: number; radius: number } }, pos: { x: number; y: number }): boolean {
+  const zones = def.safeZones && def.safeZones.length > 0 ? def.safeZones : def.safeZone ? [def.safeZone] : [];
+  return zones.some((z) => (pos.x - z.x) ** 2 + (pos.y - z.y) ** 2 <= z.radius * z.radius);
+}
+
 export const GameShell: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -128,48 +133,45 @@ export const GameShell: React.FC = () => {
       const camera = cameraRef.current;
 
       switch (event.type) {
-        case 'damage': {
-          const p = event.payload;
-          if (p.type === 'muzzle_flash') {
-            particles.emitMuzzleFlash(p.pos, p.angle);
-            soundEngine.playCannonShot(p.isPlayer);
-
-            // Tutorial auto-advance: Player fired cannon!
-            if (p.isPlayer && profile.tutorialStep === 2) {
-              const updated = { ...profile, tutorialStep: 3 };
-              saveProfile(updated);
-            }
-          } else if (p.type === 'explosion') {
-            particles.emitExplosion(p.pos, true);
-            soundEngine.playExplosion(true);
-            camera.addShake(8);
-          } else {
-            // Hit damage
-            if (p.pos) {
-              particles.emitHitSparks(p.pos, 7, p.armorDamage > 0 ? '#38bdf8' : '#f97316');
-              soundEngine.playImpact(p.armorDamage > 0);
-
-              if (p.damage > 0) {
-                particles.emitDamageText(
-                  p.pos,
-                  `-${p.damage}`,
-                  p.armorDamage > 0 ? '#38bdf8' : '#ef4444',
-                  !!p.isCrit
-                );
-              }
-            }
-
-            // Screen shake scaled by damage
-            if (clientRef.current && p.victimId === clientRef.current.playerId) {
-              camera.addShake(p.damage > 400 ? 14 : 6);
-            }
+        case 'projectile_fired': {
+          const isPlayer = !!clientRef.current && event.shooterId === clientRef.current.playerId;
+          if (!event.isSecondary) {
+            particles.emitMuzzleFlash(event.pos, event.angle);
+            soundEngine.playCannonShot(isPlayer);
+          }
+          // Tutorial auto-advance: Player fired cannon!
+          if (isPlayer && !event.isSecondary && profile.tutorialStep === 2) {
+            saveProfile({ ...profile, tutorialStep: 3 });
           }
           break;
         }
 
-        case 'kill': {
-          const p = event.payload;
-          particles.emitExplosion(p.pos, true);
+        case 'explosion': {
+          particles.emitExplosion(event.pos, true);
+          soundEngine.playExplosion(true);
+          camera.addShake(8);
+          break;
+        }
+
+        case 'damage_dealt': {
+          particles.emitHitSparks(event.pos, 7, event.armorDamage > 0 ? '#38bdf8' : '#f97316');
+          soundEngine.playImpact(event.armorDamage > 0);
+          if (event.finalDamage > 0) {
+            particles.emitDamageText(
+              event.pos,
+              `-${Math.round(event.finalDamage)}`,
+              event.armorDamage > 0 ? '#38bdf8' : '#ef4444',
+              event.isCrit || event.isRearHit
+            );
+          }
+          if (clientRef.current && event.targetId === clientRef.current.playerId) {
+            camera.addShake(event.finalDamage > 400 ? 14 : 6);
+          }
+          break;
+        }
+
+        case 'entity_killed': {
+          particles.emitExplosion(event.pos, true);
           soundEngine.playExplosion(true);
           camera.addShake(10);
           break;
@@ -186,75 +188,69 @@ export const GameShell: React.FC = () => {
         }
 
         case 'loot_collected': {
-          const p = event.payload;
-          if (p.isPlayer) {
-            soundEngine.playPickup();
-            if (p.oreAmount && p.oreType) {
-              particles.emitDamageText(p.pos, `+${p.oreAmount} ${String(p.oreType).toUpperCase()}`, '#38bdf8');
-            } else {
-              particles.emitDamageText(p.pos, `+${p.scrap} Scrap`, '#eab308');
-            }
+          if (!clientRef.current || event.collectorId !== clientRef.current.playerId) break;
+          soundEngine.playPickup();
+          const [kind, sub] = event.crateType.split(':');
+          if (kind === 'ore') {
+            particles.emitDamageText(event.pos, `+${event.amount} ${String(sub || 'ore').toUpperCase()}`, '#38bdf8');
+          } else if (kind === 'scrap') {
+            particles.emitDamageText(event.pos, `+${event.amount} Scrap`, '#eab308');
+          }
 
-            // Tutorial auto-advance: Collected loot!
-            if (profile.tutorialStep === 3) {
-              const updated = { ...profile, tutorialStep: 4 };
-              saveProfile(updated);
-              setTutorialOpen(false);
-            }
+          // Tutorial auto-advance: Collected loot!
+          if (profile.tutorialStep === 3) {
+            saveProfile({ ...profile, tutorialStep: 4 });
+            setTutorialOpen(false);
+          }
 
+          // Update user profile currencies
+          setProfile((prev) => {
+            let nextScrap = prev.scrap;
+            let nextParts = prev.parts;
+            let nextXp = prev.xp;
+            let nextLevel = prev.level;
+            const nextAmmo = { ...prev.ammoInventory };
 
-            // Update user profile currencies
-            setProfile((prev) => {
-              const nextScrap = prev.scrap + p.scrap;
-              const nextParts = prev.parts + p.parts;
-              let nextXp = prev.xp + Math.round(p.scrap * 0.8);
-              let nextLevel = prev.level;
-
-              // Check level up
+            if (kind === 'scrap') {
+              nextScrap += event.amount;
+              nextXp += Math.round(event.amount * 0.8);
               while (nextLevel < 30 && nextXp >= XP_FOR_LEVEL(nextLevel)) {
                 nextXp -= XP_FOR_LEVEL(nextLevel);
                 nextLevel++;
-                particles.emitDamageText(p.pos, `LEVEL UP! [Lv.${nextLevel}]`, '#10b981');
+                particles.emitDamageText(event.pos, `LEVEL UP! [Lv.${nextLevel}]`, '#10b981');
               }
+            } else if (kind === 'parts') {
+              nextParts += event.amount;
+            } else if (kind === 'ammo' && sub) {
+              const key = sub as AmmoType;
+              nextAmmo[key] = (nextAmmo[key] || 0) + event.amount;
+            } else {
+              return prev;
+            }
 
-              const nextAmmo = { ...prev.ammoInventory };
-              if (p.ammo) {
-                const ammoKey = p.ammo.type as AmmoType;
-                nextAmmo[ammoKey] = (nextAmmo[ammoKey] || 0) + p.ammo.count;
-              }
-
-              const updated: UserProfile = {
-                ...prev,
-                scrap: nextScrap,
-                parts: nextParts,
-                xp: nextXp,
-                level: nextLevel,
-                ammoInventory: nextAmmo,
-              };
-              profileStoreRef.current.save(updated);
-              if (clientRef.current) clientRef.current.updateProfile(updated);
-              return updated;
-            });
-          }
+            const updated: UserProfile = { ...prev, scrap: nextScrap, parts: nextParts, xp: nextXp, level: nextLevel, ammoInventory: nextAmmo };
+            profileStoreRef.current.save(updated);
+            if (clientRef.current) clientRef.current.updateProfile(updated);
+            return updated;
+          });
           break;
         }
 
-        case 'gate_travel': {
-          const p = event.payload;
+        case 'gate_used': {
+          if (!clientRef.current || event.entityId !== clientRef.current.playerId) break;
           soundEngine.playGateHum();
           camera.addShake(7);
-          if (clientRef.current) {
-            clientRef.current.switchMap(p.targetMapId, p.gateId);
-            setProfile((prev) => {
-              const updated = { ...prev, currentMapId: p.targetMapId };
-              profileStoreRef.current.save(updated);
-              return updated;
-            });
-          }
+          clientRef.current.switchMap(event.targetMapId, event.gateId);
+          setProfile((prev) => {
+            const updated = { ...prev, currentMapId: event.targetMapId };
+            profileStoreRef.current.save(updated);
+            return updated;
+          });
           break;
         }
 
-        case 'player_respawn': {
+        case 'player_died': {
+          if (!clientRef.current || event.entityId !== clientRef.current.playerId) break;
           // Drop 10% scrap on death (keep 90%)
           setProfile((prev) => {
             const retainedScrap = Math.floor(prev.scrap * 0.9);
@@ -548,7 +544,7 @@ export const GameShell: React.FC = () => {
     const player = clientRef.current.getPredictedPlayer();
     if (!player) return;
 
-    const sequence: AmmoType[] = ['standard', 'ap', 'he'];
+    const sequence: AmmoType[] = ['STANDARD', 'ARMOR_PIERCING', 'EXPLOSIVE'];
     const currentIdx = sequence.indexOf(player.selectedAmmo);
     const nextAmmo = sequence[(currentIdx + 1) % sequence.length];
 
@@ -632,7 +628,7 @@ export const GameShell: React.FC = () => {
   const currentMapDef = clientRef.current?.['clientWorld']?.mapDef;
   const inSafeZone =
     currentMapDef && playerEntity && clientRef.current
-      ? isInSafeZone(clientRef.current['clientWorld'], playerEntity.pos)
+      ? isInClientSafeZone(currentMapDef, playerEntity.pos)
       : false;
 
   return (

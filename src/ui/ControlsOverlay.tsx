@@ -53,16 +53,16 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
         onCommand({ type: 'UseAbility', abilityId: 'smoke' });
       } else if (e.code === 'KeyE') {
         soundEngine.playUIClick();
-        onCommand({ type: 'UseAbility', abilityId: 'repair' });
+        onCommand({ type: 'UseAbility', abilityId: 'repair_kit' });
       } else if (e.code === 'KeyF') {
         soundEngine.playUIClick();
-        onCommand({ type: 'UseAbility', abilityId: 'overdrive' });
+        onCommand({ type: 'UseAbility', abilityId: 'boost' });
       } else if (e.code === 'Digit1') {
-        onCommand({ type: 'SelectAmmo', ammo: 'standard' });
+        onCommand({ type: 'SelectAmmo', ammo: 'STANDARD' });
       } else if (e.code === 'Digit2') {
-        onCommand({ type: 'SelectAmmo', ammo: 'ap' });
+        onCommand({ type: 'SelectAmmo', ammo: 'ARMOR_PIERCING' });
       } else if (e.code === 'Digit3') {
-        onCommand({ type: 'SelectAmmo', ammo: 'he' });
+        onCommand({ type: 'SelectAmmo', ammo: 'EXPLOSIVE' });
       } else if (e.code === 'Tab') {
         e.preventDefault();
         onCycleTarget();
@@ -169,9 +169,9 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   const hasTarget = player?.targetId !== undefined;
 
   // Ability Cooldowns
-  const smokeCd = player?.smokeCooldown || 0;
-  const repairCd = player?.repairCooldown || 0;
-  const overdriveCd = player?.overdriveCooldown || 0;
+  const smokeCd = player?.abilityCooldowns.smoke || 0;
+  const repairCd = player?.abilityCooldowns.repair_kit || 0;
+  const overdriveCd = player?.abilityCooldowns.boost || 0;
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none overflow-hidden touch-none">
@@ -227,7 +227,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
           <button
             onClick={() => {
               soundEngine.playUIClick();
-              onCommand({ type: 'UseAbility', abilityId: 'repair' });
+              onCommand({ type: 'UseAbility', abilityId: 'repair_kit' });
             }}
             disabled={repairCd > 0}
             className={`absolute -top-4 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
@@ -244,7 +244,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
           <button
             onClick={() => {
               soundEngine.playUIClick();
-              onCommand({ type: 'UseAbility', abilityId: 'overdrive' });
+              onCommand({ type: 'UseAbility', abilityId: 'boost' });
             }}
             disabled={overdriveCd > 0}
             className={`absolute top-0 right-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
@@ -276,7 +276,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
             }}
             className="absolute -bottom-1 left-3 w-11 h-11 rounded-full border border-slate-700 bg-slate-900/90 text-orange-400 text-[10px] font-bold flex items-center justify-center active:scale-95 hover:border-orange-500"
           >
-            {player?.selectedAmmo.toUpperCase() || 'STD'}
+            {(player?.selectedAmmo || 'STD').replace('ARMOR_PIERCING', 'AP').replace('EXPLOSIVE', 'HE').replace('REINFORCED', 'RNF').replace('SHAPED_CHARGE', 'HEAT').replace('STANDARD', 'STD')}
           </button>
 
           {/* Central Big TARGET/FIRE Button */}

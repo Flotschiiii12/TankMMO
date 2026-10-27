@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { VEHICLE_TIERS } from '../data/vehicles.ts';
-import { AMMO_TYPES, ARMORS, CANNONS, ENGINES } from '../data/parts.ts';
+import { createWorld as createSharedWorld, spawnVehicle } from '../../shared/sim/world.ts';
+import { AMMO_TYPES, AMMO_SIM_ID, ARMORS, CANNONS, ENGINES } from '../data/parts.ts';
 import { UserProfile } from '../save/profile.ts';
 import { AmmoType, VehicleStats } from '../sim/types.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
@@ -17,6 +18,8 @@ interface GarageModalProps {
   onBuyAndEquipPart: (partId: string, type: 'cannon' | 'armor' | 'engine') => void;
   onBuyAmmo: (type: AmmoType, count: number, cost: number) => void;
 }
+
+const PREVIEW_WORLD = createSharedWorld({ populate: false });
 
 export const GarageModal: React.FC<GarageModalProps> = ({
   profile,
@@ -71,38 +74,18 @@ export const GarageModal: React.FC<GarageModalProps> = ({
       }
 
       // Draw Vehicle with gentle idle turret scan
-      const mockEntity = {
-        id: 999,
-        kind: 'player' as const,
-        name: selectedVehicle.name,
-        level: profile.level,
-        pos: { x: 0, y: 0 },
-        vel: { x: 0, y: 0 },
-        chassisAngle: 0,
-        turretAngle: Math.sin(previewTime * 0.8) * 0.45,
-        radius: 26 + selectedVehicle.tier * 2,
-        hull: selectedVehicle.baseHull,
+      const mockEntity = spawnVehicle(PREVIEW_WORLD, 'player', selectedVehicle.name, profile.level, { x: 0, y: 0 }, {
+        tier: selectedVehicle.tier,
         maxHull: selectedVehicle.baseHull,
-        armor: selectedVehicle.baseArmor,
         maxArmor: selectedVehicle.baseArmor,
-        armorRegenTimer: 0,
         maxSpeed: selectedVehicle.maxSpeed,
         turnRate: selectedVehicle.turnRate,
         turretTurnRate: selectedVehicle.turretTurnRate,
-        targetSpeed: 0,
-        mainReloadRemaining: 0,
         mainReloadTime: selectedVehicle.reloadTime,
-        mgReloadRemaining: 0,
-        selectedAmmo: 'standard' as const,
-        smokeRemaining: 0,
-        smokeCooldown: 0,
-        repairRemaining: 0,
-        repairCooldown: 0,
-        overdriveRemaining: 0,
-        overdriveCooldown: 0,
-        invulnerableTime: 0,
-        isHostile: false,
-      };
+        radius: 26 + selectedVehicle.tier * 2,
+      });
+      mockEntity.turretAngle = Math.sin(previewTime * 0.8) * 0.45;
+      PREVIEW_WORLD.entities.clear();
 
       drawVehicle(ctx, mockEntity, camera, selectedVehicle.tier, previewTime);
 
@@ -568,7 +551,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
         {activeTab === 'ammo' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto pt-4">
             {Object.values(AMMO_TYPES).map((ammo) => {
-              const currentStock = profile.ammoInventory[ammo.id] ?? 0;
+              const currentStock = profile.ammoInventory[AMMO_SIM_ID[ammo.id]] ?? 0;
               const canAfford = profile.scrap >= ammo.costScrapPerPack;
 
               return (
@@ -620,7 +603,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                     <button
                       onClick={() => {
                         soundEngine.playUIClick();
-                        onBuyAmmo(ammo.id, ammo.packSize, ammo.costScrapPerPack);
+                        onBuyAmmo(AMMO_SIM_ID[ammo.id], ammo.packSize, ammo.costScrapPerPack);
                       }}
                       disabled={!canAfford}
                       className={`w-full py-2 rounded-lg text-xs font-semibold transition-colors ${

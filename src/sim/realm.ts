@@ -1,6 +1,7 @@
 import { MAP_CATALOG } from '../data/maps.ts';
 import { getVehicleById } from '../data/vehicles.ts';
-import { createWorld, isInSafeZone, stepWorld, World } from './world.ts';
+import { createWorld, stepWorld, World } from './world.ts';
+import { createWorld as createScratchWorld, spawnVehicle } from '../../shared/sim/world.ts';
 import { SimCommand, SimEntity, vec2 } from './types.ts';
 
 export class MapInstance {
@@ -14,6 +15,11 @@ export class MapInstance {
     this.mapId = mapId;
     this.maxCapacity = maxCapacity;
     this.world = createWorld(mapId, 1000 + mapId.length * 37);
+  }
+
+  /** Client view model of the map (obstacle/gate lists for rendering and routing). */
+  get mapDef() {
+    return MAP_CATALOG[this.mapId] || MAP_CATALOG['green_valley'];
   }
 
   step(commandsByEntity: Map<number, SimCommand[]>, dt: number) {
@@ -65,44 +71,21 @@ export class Realm {
   ): SimEntity {
     const stats = getVehicleById(vehicleTierId);
     const levelMult = 1 + (level - 1) * 0.05;
-
-    const maxHull = Math.round((stats.baseHull + equippedBonus.hullBonus) * levelMult);
-    const maxArmor = Math.round((stats.baseArmor + equippedBonus.armorBonus) * levelMult);
-    const maxSpeed = stats.maxSpeed + equippedBonus.speedBonus;
-
-    return {
-      id,
-      kind: 'player',
-      name,
+    const scratch = createScratchWorld({ populate: false });
+    const ent = spawnVehicle(scratch, 'player', name, level, { x: 2000, y: 2000 }, {
+      tier: stats.tier,
       clanTag: 'CMD',
-      level,
-      pos: { x: 2000, y: 2000 },
-      vel: vec2(),
-      chassisAngle: 0,
-      turretAngle: 0,
-      radius: 26 + stats.tier * 2,
-      hull: maxHull,
-      maxHull,
-      armor: maxArmor,
-      maxArmor,
-      armorRegenTimer: 0,
-      maxSpeed,
+      maxHull: Math.round((stats.baseHull + equippedBonus.hullBonus) * levelMult),
+      maxArmor: Math.round((stats.baseArmor + equippedBonus.armorBonus) * levelMult),
+      maxSpeed: stats.maxSpeed + equippedBonus.speedBonus,
       turnRate: stats.turnRate,
       turretTurnRate: stats.turretTurnRate,
-      targetSpeed: 0,
-      mainReloadRemaining: 0,
       mainReloadTime: stats.reloadTime,
-      mgReloadRemaining: 0,
-      selectedAmmo: 'standard',
-      smokeRemaining: 0,
-      smokeCooldown: 0,
-      repairRemaining: 0,
-      repairCooldown: 0,
-      overdriveRemaining: 0,
-      overdriveCooldown: 0,
-      invulnerableTime: 5.0,
-      isHostile: false,
-    };
+      radius: 26 + stats.tier * 2,
+    });
+    ent.id = id;
+    ent.invulnerableTime = 5.0;
+    return ent;
   }
 
   routeGate(
@@ -115,7 +98,7 @@ export class Realm {
     fromInst.removeEntity(player.id);
 
     const targetInst = this.getInstance(targetMapId);
-    const targetMapDef = targetInst.world.mapDef;
+    const targetMapDef = targetInst.mapDef;
 
     // Find destination gate position
     const matchingGate =
@@ -147,7 +130,7 @@ export class Realm {
     fromInst.removeEntity(player.id);
 
     const targetInst = this.getInstance(targetMapId);
-    const targetMapDef = targetInst.world.mapDef;
+    const targetMapDef = targetInst.mapDef;
 
     const spawnPos = targetMapDef.safeZone
       ? { x: targetMapDef.safeZone.x, y: targetMapDef.safeZone.y }

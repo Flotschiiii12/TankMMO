@@ -92,13 +92,13 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
             <div className="p-2.5 rounded bg-slate-950/40 border border-slate-800 text-center">
               <div className="text-slate-400 text-[10px]">AP Shells</div>
               <div className="font-bold text-orange-400 mt-0.5 tabular-nums">
-                {profile.ammoInventory.ap}
+                {profile.ammoInventory.ARMOR_PIERCING}
               </div>
             </div>
             <div className="p-2.5 rounded bg-slate-950/40 border border-slate-800 text-center">
               <div className="text-slate-400 text-[10px]">HE Shells</div>
               <div className="font-bold text-orange-400 mt-0.5 tabular-nums">
-                {profile.ammoInventory.he}
+                {profile.ammoInventory.EXPLOSIVE}
               </div>
             </div>
           </div>

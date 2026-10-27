@@ -40,7 +40,7 @@ export function drawVehicle(
   }
 
   // Overdrive fiery speed aura
-  if (ent.overdriveRemaining > 0 && !ent.isWreck) {
+  if (ent.statusEffects.some((s) => s.type === 'boosted') && !ent.isWreck) {
     ctx.save();
     ctx.strokeStyle = '#f97316';
     ctx.lineWidth = 2 * zoom;
@@ -765,8 +765,8 @@ export function drawTelegraph(
   const zoom = camera.zoom;
   const r = (telegraph.telegraphRadius || 100) * zoom;
   const progress =
-    telegraph.telegraphTotal && telegraph.telegraphTimer !== undefined
-      ? 1 - telegraph.telegraphTimer / telegraph.telegraphTotal
+    telegraph.telegraphMaxDuration && telegraph.telegraphDuration !== undefined
+      ? 1 - telegraph.telegraphDuration / telegraph.telegraphMaxDuration
       : 0.5;
 
   ctx.save();

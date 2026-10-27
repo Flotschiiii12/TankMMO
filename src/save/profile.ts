@@ -1,5 +1,13 @@
 import { AmmoType } from '../sim/types.ts';
 
+/** Saves from before the simulation merge used lowercase ammo ids. */
+const LEGACY_AMMO: Record<string, AmmoType> = { standard: 'STANDARD', ap: 'ARMOR_PIERCING', he: 'EXPLOSIVE' };
+export function migrateAmmo(raw: Record<string, number>): Partial<Record<AmmoType, number>> {
+  const out: Partial<Record<AmmoType, number>> = {};
+  for (const [k, v] of Object.entries(raw)) out[(LEGACY_AMMO[k] || k) as AmmoType] = v;
+  return out;
+}
+
 export interface UserProfile {
   version: number;
   playerName: string;
@@ -45,9 +53,11 @@ export const DEFAULT_PROFILE: UserProfile = {
     engine: 'engine_t1',
   },
   ammoInventory: {
-    standard: 99999,
-    ap: 20,
-    he: 10,
+    STANDARD: 99999,
+    REINFORCED: 0,
+    ARMOR_PIERCING: 20,
+    SHAPED_CHARGE: 0,
+    EXPLOSIVE: 10,
   },
   currentMapId: 'green_valley',
   tutorialStep: 0,
@@ -76,7 +86,7 @@ export class LocalStorageProfileStore implements ProfileStore {
         return {
           ...DEFAULT_PROFILE,
           ...parsed,
-          ammoInventory: { ...DEFAULT_PROFILE.ammoInventory, ...(parsed.ammoInventory || {}) },
+          ammoInventory: { ...DEFAULT_PROFILE.ammoInventory, ...migrateAmmo(parsed.ammoInventory || {}) },
           equippedParts: { ...DEFAULT_PROFILE.equippedParts, ...(parsed.equippedParts || {}) },
           settings: { ...DEFAULT_PROFILE.settings, ...(parsed.settings || {}) },
         };

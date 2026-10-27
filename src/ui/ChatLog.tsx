@@ -35,7 +35,7 @@ export const ChatLog: React.FC<ChatLogProps> = ({ messages }) => {
           {msg.clanTag && <span className="text-slate-400 shrink-0">[{msg.clanTag}]</span>}
           <span
             className={`font-medium shrink-0 ${
-              msg.isHostile ? 'text-red-400' : 'text-blue-300'
+              msg.channel === 'S' ? 'text-red-400' : 'text-blue-300'
             }`}
           >
             {msg.sender}:

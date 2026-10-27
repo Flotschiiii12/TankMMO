@@ -181,3 +181,10 @@ export function getPartById(id: string): PartDefinition | undefined {
     ENGINES.find((p) => p.id === id)
   );
 }
+
+/** Shop/UI entries are keyed by the legacy ids; the simulation uses the shared ammo ids. */
+export const AMMO_SIM_ID: Record<string, 'STANDARD' | 'ARMOR_PIERCING' | 'EXPLOSIVE'> = {
+  standard: 'STANDARD',
+  ap: 'ARMOR_PIERCING',
+  he: 'EXPLOSIVE',
+};

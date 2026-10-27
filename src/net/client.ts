@@ -1,7 +1,7 @@
-import { applySnapshot, serializeSnapshot, WorldSnapshot } from '../sim/snapshot.ts';
+import { applySnapshot, ClientWorld, serializeSnapshot, WorldSnapshot } from '../sim/snapshot.ts';
 import { Realm } from '../sim/realm.ts';
-import { angleDiff, clamp, dist, lerp, SimCommand, SimEntity, SimEvent, vec2 } from '../sim/types.ts';
-import { SIM_TIMESTEP, World } from '../sim/world.ts';
+import { angleDiff, ChatMessage, clamp, dist, lerp, SimCommand, SimEntity, SimEvent, vec2 } from '../sim/types.ts';
+import { SIM_TIMESTEP } from '../sim/world.ts';
 import { UserProfile } from '../save/profile.ts';
 import { getPartById } from '../data/parts.ts';
 import { WebSocketTransport } from './transport.ts';
@@ -35,7 +35,8 @@ export class LocalGameClient implements GameClient {
   readonly playerId = 9999;
   private realm: Realm;
   private currentMapId: string;
-  private clientWorld: World;
+  private clientWorld: ClientWorld;
+  private localChat: ChatMessage[] = [];
   private playerEntity: SimEntity;
 
   private commandQueue: SimCommand[] = [];
@@ -80,15 +81,10 @@ export class LocalGameClient implements GameClient {
       mapId: this.currentMapId,
       tick: 0,
       time: 0,
-      nextEntityId: 10000,
       entities: new Map(),
-      rng: initialInstance.world.rng,
       events: [],
       chatHistory: [],
-      mapDef: initialInstance.world.mapDef,
-      bossRespawnTimer: 0,
-      allyChatTimer: 0,
-      enemyRespawnQueue: [],
+      mapDef: initialInstance.mapDef,
     };
 
     this.predictedPlayer = { ...this.playerEntity };
@@ -145,7 +141,7 @@ export class LocalGameClient implements GameClient {
       for (const handler of this.eventHandlers) {
         handler(evt);
       }
-      if (evt.type === 'player_respawn') {
+      if (evt.type === 'player_died' && evt.entityId === this.playerId) {
         this.handlePlayerRespawn();
       }
     }
@@ -168,6 +164,9 @@ export class LocalGameClient implements GameClient {
     const inst = this.realm.getInstance(this.currentMapId);
     this.previousSnapshot = this.latestAuthoritativeSnapshot;
     this.latestAuthoritativeSnapshot = serializeSnapshot(inst.world, this.playerId, 2200);
+    if (this.localChat.length > 0) {
+      this.latestAuthoritativeSnapshot.chatHistory = [...this.latestAuthoritativeSnapshot.chatHistory, ...this.localChat].slice(-40);
+    }
 
     // Apply snapshot to client world
     applySnapshot(this.clientWorld, this.latestAuthoritativeSnapshot);
@@ -181,9 +180,9 @@ export class LocalGameClient implements GameClient {
       this.predictedPlayer.maxHull = authPlayer.maxHull;
       this.predictedPlayer.maxArmor = authPlayer.maxArmor;
       this.predictedPlayer.mainReloadRemaining = authPlayer.mainReloadRemaining;
-      this.predictedPlayer.smokeRemaining = authPlayer.smokeRemaining;
-      this.predictedPlayer.repairRemaining = authPlayer.repairRemaining;
-      this.predictedPlayer.overdriveRemaining = authPlayer.overdriveRemaining;
+      this.predictedPlayer.statusEffects = authPlayer.statusEffects;
+      this.predictedPlayer.abilityCooldowns = authPlayer.abilityCooldowns;
+      this.predictedPlayer.isWreck = authPlayer.isWreck;
       this.predictedPlayer.targetId = authPlayer.targetId;
       this.predictedPlayer.autoFire = authPlayer.autoFire;
       this.predictedPlayer.selectedAmmo = authPlayer.selectedAmmo;
@@ -205,9 +204,10 @@ export class LocalGameClient implements GameClient {
 
   private handlePlayerRespawn() {
     const inst = this.realm.getInstance(this.currentMapId);
-    const spawnPos = inst.world.mapDef.safeZone
-      ? { x: inst.world.mapDef.safeZone.x, y: inst.world.mapDef.safeZone.y }
-      : { x: inst.world.mapDef.width / 2, y: inst.world.mapDef.height / 2 };
+    const def = inst.mapDef;
+    const spawnPos = def.safeZone
+      ? { x: def.safeZone.x, y: def.safeZone.y }
+      : { x: def.width / 2, y: def.height / 2 };
 
     const p = inst.getPlayer(this.playerId);
     if (p) {
@@ -216,6 +216,10 @@ export class LocalGameClient implements GameClient {
       p.pos = { ...spawnPos };
       p.vel = vec2();
       p.invulnerableTime = 4.0;
+      p.isWreck = false;
+      p.wreckTimer = undefined;
+      p.targetId = undefined;
+      p.statusEffects = [];
     }
     this.predictedPlayer.pos = { ...spawnPos };
     this.predictedPlayer.vel = vec2();
@@ -252,7 +256,7 @@ export class LocalGameClient implements GameClient {
         this.predictedPlayer.vel.y *= 0.7;
       }
     } else if (command.type === 'SetTarget') {
-      this.predictedPlayer.targetId = command.targetId;
+      this.predictedPlayer.targetId = command.targetId ?? undefined;
     } else if (command.type === 'ToggleAutoFire') {
       this.predictedPlayer.autoFire = !this.predictedPlayer.autoFire;
     } else if (command.type === 'SelectAmmo') {
@@ -287,25 +291,21 @@ export class LocalGameClient implements GameClient {
 
     this.currentMapId = targetMapId;
     this.clientWorld.mapId = targetMapId;
-    this.clientWorld.mapDef = targetInstance.world.mapDef;
+    this.clientWorld.mapDef = targetInstance.mapDef;
     this.predictedPlayer.pos = { ...newPos };
     this.predictedPlayer.vel = vec2();
 
     this.syncAuthoritativeSnapshot();
 
-    for (const h of this.eventHandlers) {
-      h({
-        type: 'chat',
-        payload: {
-          id: `msg_map_enter_${Date.now()}`,
-          sender: 'HQ DISPATCH',
-          clanTag: 'CMD',
-          channel: 'S',
-          text: `Entered zone: ${targetInstance.world.mapDef.name}.`,
-          timestamp: targetInstance.world.time,
-        },
-      });
-    }
+    this.localChat.push({
+      id: `msg_map_enter_${Date.now()}`,
+        sender: 'HQ DISPATCH',
+        clanTag: 'CMD',
+        channel: 'S',
+        text: `Entered zone: ${targetInstance.mapDef.name}.`,
+        timestamp: targetInstance.world.time,
+    });
+    this.syncAuthoritativeSnapshot();
   }
 
   fastTravelToMap(targetMapId: string) {
@@ -321,25 +321,21 @@ export class LocalGameClient implements GameClient {
 
     this.currentMapId = targetMapId;
     this.clientWorld.mapId = targetMapId;
-    this.clientWorld.mapDef = targetInstance.world.mapDef;
+    this.clientWorld.mapDef = targetInstance.mapDef;
     this.predictedPlayer.pos = { ...newPos };
     this.predictedPlayer.vel = vec2();
 
     this.syncAuthoritativeSnapshot();
 
-    for (const h of this.eventHandlers) {
-      h({
-        type: 'chat',
-        payload: {
-          id: `msg_map_travel_${Date.now()}`,
-          sender: 'HQ DISPATCH',
-          clanTag: 'CMD',
-          channel: 'S',
-          text: `Fast traveled to zone: ${targetInstance.world.mapDef.name}.`,
-          timestamp: targetInstance.world.time,
-        },
-      });
-    }
+    this.localChat.push({
+      id: `msg_map_travel_${Date.now()}`,
+        sender: 'HQ DISPATCH',
+        clanTag: 'CMD',
+        channel: 'S',
+        text: `Fast traveled to zone: ${targetInstance.mapDef.name}.`,
+        timestamp: targetInstance.world.time,
+    });
+    this.syncAuthoritativeSnapshot();
   }
 
   updateProfile(profile: UserProfile) {

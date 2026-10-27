@@ -320,6 +320,7 @@ export type SimEvent =
   | { type: 'gate_used'; entityId: number; gateId: string; targetMapId: string }
   | { type: 'status_applied'; entityId: number; status: StatusEffectType; duration: number }
   | { type: 'player_died'; entityId: number }
+  | { type: 'explosion'; pos: Vec2; radius: number }
   | { type: 'level_up'; entityId: number; newLevel: number };
 
 // ==========================================

@@ -1,5 +1,6 @@
 import { ChatMessage, distSq, SimEntity, SimEvent } from './types.ts';
-import type { World } from './world.ts';
+import type { MapDef } from './types.ts';
+import type { World } from '../../shared/sim/world.ts';
 
 export interface WorldSnapshot {
   tick: number;
@@ -10,83 +11,50 @@ export interface WorldSnapshot {
   chatHistory: ChatMessage[];
 }
 
-export interface EntityDelta {
-  id: number;
-  pos?: { x: number; y: number };
-  vel?: { x: number; y: number };
-  chassisAngle?: number;
-  turretAngle?: number;
-  hull?: number;
-  armor?: number;
+/** What the renderer/UI see: the entities of a snapshot plus the map view model. */
+export interface ClientWorld {
+  id: string;
+  mapId: string;
+  tick: number;
+  time: number;
+  entities: Map<number, SimEntity>;
+  events: SimEvent[];
+  chatHistory: ChatMessage[];
+  mapDef: MapDef;
 }
 
-/**
- * Serializes entities within interest radius of viewer.
- * Ready for server-authoritative client streaming.
- */
-export function serializeSnapshot(
-  world: World,
-  viewerId?: number,
-  interestRadius = 2400
-): WorldSnapshot {
+/** Serializes entities within interest radius of the viewer (server-ready). */
+export function serializeSnapshot(world: World, viewerId?: number, interestRadius = 2400): WorldSnapshot {
   const viewer = viewerId !== undefined ? world.entities.get(viewerId) : undefined;
   const radiusSq = interestRadius * interestRadius;
-
-  const relevantEntities: SimEntity[] = [];
-
-  for (const entity of world.entities.values()) {
-    if (viewer) {
-      // Always include player, boss, and entities in proximity
-      if (
-        entity.id === viewer.id ||
-        entity.kind === 'boss' ||
-        entity.kind === 'gate' ||
-        distSq(entity.pos, viewer.pos) <= radiusSq
-      ) {
-        // Return pure plain copy
-        relevantEntities.push({ ...entity });
-      }
-    } else {
-      relevantEntities.push({ ...entity });
+  const relevant: SimEntity[] = [];
+  for (const e of world.entities.values()) {
+    if (!viewer || e.id === viewer.id || e.kind === 'boss' || e.kind === 'gate' || distSq(e.pos, viewer.pos) <= radiusSq) {
+      relevant.push({ ...e });
     }
   }
-
   return {
     tick: world.tick,
     time: world.time,
     mapId: world.mapId,
-    entities: relevantEntities,
+    entities: relevant,
     events: [...world.events],
-    chatHistory: [...world.chatHistory],
+    chatHistory: [...world.chat],
   };
 }
 
-/**
- * Applies a remote/local snapshot onto a client world representation.
- */
-export function applySnapshot(targetWorld: World, snapshot: WorldSnapshot) {
-  targetWorld.tick = snapshot.tick;
-  targetWorld.time = snapshot.time;
-  targetWorld.mapId = snapshot.mapId;
-
-  const receivedIds = new Set<number>();
+export function applySnapshot(target: ClientWorld, snapshot: WorldSnapshot) {
+  target.tick = snapshot.tick;
+  target.time = snapshot.time;
+  target.mapId = snapshot.mapId;
+  const received = new Set<number>();
   for (const ent of snapshot.entities) {
-    receivedIds.add(ent.id);
-    const existing = targetWorld.entities.get(ent.id);
-    if (existing) {
-      Object.assign(existing, ent);
-    } else {
-      targetWorld.entities.set(ent.id, { ...ent });
-    }
+    received.add(ent.id);
+    const existing = target.entities.get(ent.id);
+    if (existing) Object.assign(existing, ent);
+    else target.entities.set(ent.id, { ...ent });
   }
-
-  // Remove entities not in snapshot (if viewer was nearby or entity died)
-  for (const id of Array.from(targetWorld.entities.keys())) {
-    if (!receivedIds.has(id)) {
-      targetWorld.entities.delete(id);
-    }
-  }
-
-  targetWorld.events = [...snapshot.events];
-  targetWorld.chatHistory = [...snapshot.chatHistory];
+  for (const id of Array.from(target.entities.keys())) if (!received.has(id)) target.entities.delete(id);
+  target.events = [...snapshot.events];
+  target.chatHistory = [...snapshot.chatHistory];
 }

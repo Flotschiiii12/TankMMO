@@ -372,6 +372,7 @@ function updateTelegraphs(world: World, dt: number): void {
     if ((t.telegraphDuration ?? 0) > 0) continue;
     const radius = t.telegraphRadius ?? 100;
     const damage = t.telegraphDamage ?? 500;
+    world.events.push({ type: 'explosion', pos: { ...t.pos }, radius });
     for (const v of world.entities.values()) {
       if (v.hull <= 0 || v.isHostile === t.isHostile || isInertKind(v.kind) || isPosInSafeZone(world, v.pos)) continue;
       const d = dist(t.pos, v.pos);

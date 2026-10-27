@@ -1,59 +1,12 @@
-export interface Vec2 {
-  x: number;
-  y: number;
-}
-
-export function vec2(x = 0, y = 0): Vec2 {
-  return { x, y };
-}
-
-export function distSq(a: Vec2, b: Vec2): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
-}
-
-export function dist(a: Vec2, b: Vec2): number {
-  return Math.sqrt(distSq(a, b));
-}
-
-export function normalize(v: Vec2): Vec2 {
-  const len = Math.hypot(v.x, v.y);
-  if (len === 0) return { x: 0, y: 0 };
-  return { x: v.x / len, y: v.y / len };
-}
-
-export function angleDiff(target: number, current: number): number {
-  let diff = target - current;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  while (diff > Math.PI) diff -= Math.PI * 2;
-  return diff;
-}
-
-export function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-
-export function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-export type AmmoType = 'standard' | 'ap' | 'he';
-
-export type EntityKind =
-  | 'player'
-  | 'npc_driver'
-  | 'scout_buggy'
-  | 'gunner_truck'
-  | 'artillery'
-  | 'bunker_turret'
-  | 'loot_convoy'
-  | 'boss'
-  | 'projectile'
-  | 'loot_crate'
-  | 'gate'
-  | 'telegraph'
-  | 'resource_node';
+// Client view of the simulation types. Entities, commands, events and chat now come from /shared
+// (the single deterministic simulation); only the map *view model* below is client specific.
+export {
+  vec2, distSq, dist, normalize, angleDiff, clamp, lerp,
+} from '../../shared/types.ts';
+export type {
+  Vec2, AmmoType, EntityKind, SimEntity, SimCommand, SimEvent, ChatMessage, MapObstacle, AbilityId, StatusEffectType,
+} from '../../shared/types.ts';
+import type { Vec2, EntityKind, MapObstacle, AmmoType } from '../../shared/types.ts';
 
 export interface VehicleStats {
   id: string;
@@ -87,7 +40,7 @@ export interface PartDefinition {
 }
 
 export interface AmmoDefinition {
-  id: AmmoType;
+  id: string;
   name: string;
   damage: number;
   armorPiercingRatio: number; // 0 = standard, 0.35 = ignores 35% armor
@@ -99,104 +52,6 @@ export interface AmmoDefinition {
   description: string;
 }
 
-export interface SimEntity {
-  id: number;
-  kind: EntityKind;
-  name: string;
-  clanTag?: string;
-  level: number;
-  pos: Vec2;
-  vel: Vec2;
-  chassisAngle: number;
-  turretAngle: number;
-  radius: number;
-  
-  hull: number;
-  maxHull: number;
-  armor: number;
-  maxArmor: number;
-  armorRegenTimer: number; // seconds since last damage
-  
-  // Driving
-  maxSpeed: number;
-  turnRate: number;
-  turretTurnRate: number;
-  targetSpeed: number;
-  desiredDriveAngle?: number;
-  
-  // Combat
-  targetId?: number;
-  autoFire?: boolean;
-  mainReloadRemaining: number;
-  mainReloadTime: number;
-  mgReloadRemaining: number;
-  selectedAmmo: AmmoType;
-  
-  // Abilities
-  smokeRemaining: number;
-  smokeCooldown: number;
-  repairRemaining: number;
-  repairCooldown: number;
-  overdriveRemaining: number;
-  overdriveCooldown: number;
-  
-  // Invulnerability on spawn/respawn
-  invulnerableTime: number;
-  
-  // AI State
-  aiState?: 'idle' | 'patrol' | 'aggro' | 'attack' | 'retreat';
-  homePos?: Vec2;
-  patrolAngle?: number;
-  aiTimer?: number;
-  isHostile: boolean;
-  
-  // Boss Phase
-  bossPhase?: number;
-  bossSkillCooldown?: number;
-  
-  // Gate specific
-  gateId?: string;
-  targetMapId?: string;
-  gateHoldTimer?: number;
-
-  // Projectile specific
-  sourceEntityId?: number;
-  damage?: number;
-  ammoType?: AmmoType;
-  distanceTraveled?: number;
-  maxDistance?: number;
-  splashRadius?: number;
-
-  // Loot Crate specific
-  lootScrap?: number;
-  lootParts?: number;
-  lootAmmo?: { type: AmmoType; count: number };
-  pullTargetId?: number;
-
-  // Telegraph specific
-  telegraphRadius?: number;
-  telegraphTimer?: number;
-  telegraphTotal?: number;
-
-  // Visual polish & loot fields
-  hitFlashTimer?: number;
-  distanceDriven?: number;
-  wreckTimer?: number;
-  isWreck?: boolean;
-  lootKind?: 'scrap' | 'ore' | 'ammo' | 'repair';
-}
-
-export interface MapObstacle {
-  x: number;
-  y: number;
-  radius: number;
-  type: 'rock' | 'tree' | 'ruin' | 'wall' | 'building' | 'plant' | 'harbor' | 'prop';
-  propId?: string;
-  blocks?: boolean;
-  width?: number;
-  height?: number;
-  rotation?: number;
-}
 
 export interface MapSlowZone {
   x: number;
@@ -266,36 +121,3 @@ export interface MapDef {
 }
 
 
-// Commands
-export type SimCommand =
-  | { type: 'Drive'; x: number; y: number; seq?: number }
-  | { type: 'SetTarget'; targetId: number | undefined }
-  | { type: 'ToggleAutoFire' }
-  | { type: 'FireMain' }
-  | { type: 'UseAbility'; abilityId: 'smoke' | 'repair' | 'overdrive' }
-  | { type: 'SelectAmmo'; ammo: AmmoType }
-  | { type: 'EnterGate'; gateId: string };
-
-export interface ChatMessage {
-  id: string;
-  sender: string;
-  clanTag?: string;
-  channel: 'G' | 'S'; // G = Global, S = System
-  text: string;
-  timestamp: number;
-  isHostile?: boolean;
-}
-
-export interface SimEvent {
-  type:
-    | 'damage'
-    | 'kill'
-    | 'loot_collected'
-    | 'gate_travel'
-    | 'level_up'
-    | 'player_respawn'
-    | 'ability_used'
-    | 'boss_phase'
-    | 'chat';
-  payload: any;
-}

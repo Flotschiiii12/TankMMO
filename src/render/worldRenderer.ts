@@ -766,9 +766,9 @@ export class WorldRenderer {
       ctx.rotate(proj.chassisAngle);
 
       // Trailing glow
-      if (proj.ammoType === 'ap') {
+      if (proj.selectedAmmo === 'ARMOR_PIERCING') {
         ctx.fillStyle = '#38bdf8';
-      } else if (proj.ammoType === 'he') {
+      } else if ((proj.selectedAmmo === 'EXPLOSIVE' || proj.selectedAmmo === 'SHAPED_CHARGE')) {
         ctx.fillStyle = '#f97316';
       } else {
         ctx.fillStyle = '#fde047';

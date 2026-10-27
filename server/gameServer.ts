@@ -10,6 +10,7 @@ import { compactEntity, DeltaEncoder, viewFor } from '../shared/net/delta.ts';
 import { MIN_PROTOCOL_VERSION, PROTOCOL_VERSION, ClientActionPacket, ClientMessage, ServerMessage } from '../shared/protocol.ts';
 import { SimRNG } from '../shared/prng.ts';
 import * as C from '../shared/rules/character.ts';
+import { AMMO_PRICES, executeAction } from '../shared/rules/actions.ts';
 import { calculateKillXP } from '../shared/rules/progression.ts';
 import * as Q from '../shared/rules/quests.ts';
 import { refreshPlayerStats, spawnPlayerFromCharacter } from '../shared/sim/playerEntity.ts';
@@ -348,48 +349,22 @@ export class GameServer {
   // ---------------------------------------------------------------- actions (workshop, garage, quests...)
 
   private handleAction(s: Session, p: ClientActionPacket): void {
-    const a = p.action;
-    const ch = s.character;
-    const rng = s.rng;
-    const inSafe = this.inSafeZone(s);
-    let r: C.Result<any> = { ok: false, error: 'unknown_action' };
-    switch (a.kind) {
-      case 'equip': r = inSafe ? (C.unequipItem(ch, a.vehicleId, a.slot), C.equipItem(ch, a.vehicleId, a.slot, a.uid)) : { ok: false, error: 'safe_zone_only' }; break;
-      case 'unequip': r = inSafe ? C.unequipItem(ch, a.vehicleId, a.slot) : { ok: false, error: 'safe_zone_only' }; break;
-      case 'upgrade': r = inSafe ? C.upgradeItem(ch, a.uid, rng, !!a.safe) : { ok: false, error: 'safe_zone_only' }; if (r.ok) Q.onQuestEvent(ch, { type: 'upgrade' }); break;
-      case 'dismantle': r = inSafe ? C.dismantleItem(ch, a.uid) : { ok: false, error: 'safe_zone_only' }; break;
-      case 'craft': r = inSafe ? C.craftItem(ch, a.recipeId, rng) : { ok: false, error: 'safe_zone_only' }; if (r.ok) Q.onQuestEvent(ch, { type: 'craft' }); break;
-      case 'reroll': r = inSafe ? C.rerollAffix(ch, a.uid, a.index, rng) : { ok: false, error: 'safe_zone_only' }; break;
-      case 'fuse': r = inSafe ? C.fuseItems(ch, a.uids, rng) : { ok: false, error: 'safe_zone_only' }; break;
-      case 'expand_inventory': r = C.expandInventory(ch); break;
-      case 'buy_vehicle': r = inSafe ? C.buyVehicle(ch, a.vehicleId) : { ok: false, error: 'safe_zone_only' }; break;
-      case 'set_vehicle':
-        r = !inSafe ? { ok: false, error: 'safe_zone_only' } : ch.garage.some((g) => g.vehicleId === a.vehicleId) ? ((ch.activeVehicle = a.vehicleId), { ok: true }) : { ok: false, error: 'vehicle_not_owned' };
-        break;
-      case 'rank_talent': r = C.rankUpTalent(ch, a.talentId); break;
-      case 'respec': r = C.respecTalents(ch); break;
-      case 'accept_quest': r = Q.acceptQuest(ch, a.questId); break;
-      case 'claim_quest': r = Q.claimQuest(ch, a.questId, rng, Math.floor(this.clock.nowMs() / 1000)); break;
-      case 'abandon_quest': r = Q.abandonQuest(ch, a.questId); break;
-      case 'claim_season_tier': r = Q.claimSeasonTier(ch, a.tier, Math.floor(this.clock.nowMs() / 1000)); break;
-      case 'buy_ammo': r = this.buyAmmo(s, a.ammo, a.packs); break;
-      case 'tutorial': Q.onQuestEvent(ch, { type: 'tutorial', step: a.step }); r = { ok: true }; break;
-    }
+    const r = executeAction(s.character, p.action, s.rng, {
+      inSafeZone: this.inSafeZone(s),
+      nowSeconds: Math.floor(this.clock.nowMs() / 1000),
+      buyAmmo: (ammo, packs) => this.buyAmmo(s, ammo, packs),
+    });
     this.send(s, { type: 's_action_result', id: p.id, ok: r.ok, error: r.ok ? undefined : (r as any).error });
     if (r.ok) {
       const ent = s.instance.world.entities.get(s.entityId);
-      if (ent) refreshPlayerStats(ent, ch);
+      if (ent) refreshPlayerStats(ent, s.character);
       s.dirty = true;
       this.sendCharacter(s);
     }
   }
 
-  private static AMMO_PRICES: Record<string, { pack: number; cost: number }> = {
-    REINFORCED: { pack: 20, cost: 45 }, ARMOR_PIERCING: { pack: 20, cost: 65 }, SHAPED_CHARGE: { pack: 10, cost: 120 }, EXPLOSIVE: { pack: 20, cost: 75 },
-  };
-
   private buyAmmo(s: Session, ammo: AmmoType, packs: number): C.Result {
-    const price = GameServer.AMMO_PRICES[ammo];
+    const price = AMMO_PRICES[ammo];
     const n = Math.floor(packs);
     if (!price || n < 1 || n > 50) return { ok: false, error: 'bad_request' };
     const cost = price.cost * n;

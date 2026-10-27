@@ -2,12 +2,15 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Camera } from '../render/camera.ts';
 import { ParticleSystem } from '../render/particles.ts';
 import { WorldRenderer } from '../render/worldRenderer.ts';
-import { LocalGameClient } from '../net/client.ts';
+import { GameClient, LocalGameClient } from '../net/client.ts';
+import { OnlineGameClient } from '../net/onlineClient.ts';
 import { LocalStorageProfileStore, UserProfile } from '../save/profile.ts';
 import { SimRNG } from '../../shared/prng.ts';
 import { calculateKillXP } from '../../shared/rules/progression.ts';
 import { rollLoot } from '../../shared/data/loot.ts';
 import * as C from '../../shared/rules/character.ts';
+import type { CharacterState } from '../../shared/rules/character.ts';
+import { AMMO_PRICES, executeAction, ClientAction } from '../../shared/rules/actions.ts';
 import { describeItem } from '../game/actions.ts';
 import { applyQuestEvent, rotateQuests, questName } from '../game/questBridge.ts';
 import type { QuestEvent } from '../../shared/rules/quests.ts';
@@ -31,7 +34,7 @@ function isInClientSafeZone(def: { safeZones?: Array<{ x: number; y: number; rad
   return zones.some((z) => (pos.x - z.x) ** 2 + (pos.y - z.y) ** 2 <= z.radius * z.radius);
 }
 
-export const GameShell: React.FC = () => {
+export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ online }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Persistence
@@ -67,15 +70,21 @@ export const GameShell: React.FC = () => {
   });
 
   // Client & Engine References
-  const clientRef = useRef<LocalGameClient | null>(null);
+  const clientRef = useRef<(GameClient & Record<string, any>) | null>(null);
   const cameraRef = useRef<Camera>(new Camera());
   const particlesRef = useRef<ParticleSystem>(new ParticleSystem());
   const rendererRef = useRef<WorldRenderer | null>(null);
 
   // Initialize LocalGameClient once
   useEffect(() => {
-    const client = new LocalGameClient(profile);
+    const client: GameClient & Record<string, any> = online ?? new LocalGameClient(profile);
     clientRef.current = client;
+    if (online) {
+      const adopt = (ch: CharacterState, ammo: Record<string, number>) =>
+        setProfile((prev) => ({ ...prev, playerName: ch.name, character: ch, ammoInventory: { ...prev.ammoInventory, ...(ammo as any) } }));
+      if (online.character) adopt(online.character, online.ammo);
+      online.onCharacter(adopt);
+    }
     rendererRef.current = new WorldRenderer(cameraRef.current, particlesRef.current);
 
     soundEngine.setSoundEnabled(profile.settings.soundEnabled);
@@ -138,6 +147,11 @@ export const GameShell: React.FC = () => {
 
   // Feed a game event to the quest log (auto-completion detection happens in the shared rules)
   const questEvent = useCallback((ev: QuestEvent) => {
+    if (clientRef.current?.sendAction) {
+      // Online: the server tracks quests; only the tutorial steps are reported by the client.
+      if (ev.type === 'tutorial') void clientRef.current.sendAction({ kind: 'tutorial', step: ev.step });
+      return;
+    }
     setProfile((prev) => {
       const { profile: next, ready } = applyQuestEvent(prev, ev);
       for (const id of ready) {
@@ -211,7 +225,7 @@ export const GameShell: React.FC = () => {
           particles.emitExplosion(event.pos, true);
           soundEngine.playExplosion(true);
           camera.addShake(10);
-          if (!clientRef.current || event.killerId !== clientRef.current.playerId) break;
+          if (!clientRef.current || event.killerId !== clientRef.current.playerId || clientRef.current.sendAction) break;
           const victim = clientRef.current.getEntity(event.victimId);
           if (!victim || !victim.isHostile) break;
           const isBoss = victim.kind === 'boss';
@@ -257,6 +271,7 @@ export const GameShell: React.FC = () => {
         case 'loot_collected': {
           if (!clientRef.current || event.collectorId !== clientRef.current.playerId) break;
           soundEngine.playPickup();
+          if (clientRef.current.sendAction) break; // server applies the reward
           questEvent({ type: 'tutorial', step: 'loot' });
           const [kind, sub] = event.crateType.split(':');
           if (kind === 'ore') {
@@ -290,6 +305,7 @@ export const GameShell: React.FC = () => {
         case 'gate_used': {
           if (!clientRef.current || event.entityId !== clientRef.current.playerId) break;
           soundEngine.playGateHum();
+          if (clientRef.current.sendAction) break; // server moves the player and sends s_map
           camera.addShake(7);
           clientRef.current.switchMap(event.targetMapId, event.gateId);
           questEvent({ type: 'use_portal', mapId: Number(event.targetMapId) });
@@ -304,7 +320,7 @@ export const GameShell: React.FC = () => {
         }
 
         case 'player_died': {
-          if (!clientRef.current || event.entityId !== clientRef.current.playerId) break;
+          if (!clientRef.current || event.entityId !== clientRef.current.playerId || clientRef.current.sendAction) break;
           // Drop 10% scrap on death (keep 90%)
           setProfile((prev) => {
             const updated = structuredClone(prev);
@@ -540,6 +556,36 @@ export const GameShell: React.FC = () => {
   };
 
   // Commands helper
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+
+  /** Workshop/garage/quest actions: sent to the server when online, executed with the same shared rules when offline. */
+  const performAction = useCallback(async (action: ClientAction): Promise<{ ok: boolean; error?: string }> => {
+    const client = clientRef.current;
+    if (client?.sendAction) return client.sendAction(action);
+    const next: UserProfile = structuredClone(profileRef.current);
+    const me = client?.getPredictedPlayer();
+    const def = client?.['clientWorld']?.mapDef;
+    const r = executeAction(next.character, action, new SimRNG((Date.now() ^ (next.character.nextUid * 2654435761)) >>> 0), {
+      inSafeZone: !!me && !!def && isInClientSafeZone(def, me.pos),
+      nowSeconds: Math.floor(Date.now() / 1000),
+      buyAmmo: (ammo, packs) => {
+        const price = AMMO_PRICES[ammo];
+        const n = Math.floor(packs);
+        if (!price || n < 1) return { ok: false, error: 'bad_request' };
+        if (next.character.wallet.scrap < price.cost * n) return { ok: false, error: 'not_enough_scrap' };
+        next.character.wallet.scrap -= price.cost * n;
+        next.ammoInventory[ammo] = (next.ammoInventory[ammo] || 0) + price.pack * n;
+        return { ok: true };
+      },
+    });
+    if (r.ok) {
+      profileRef.current = next;
+      saveProfile(next);
+    }
+    return r.ok ? { ok: true } : { ok: false, error: (r as any).error };
+  }, [saveProfile]);
+
   const handleCommand = useCallback((cmd: SimCommand) => {
     if (cmd.type === 'Drive' && (Math.abs(cmd.x) > 0.2 || Math.abs(cmd.y) > 0.2)) questEvent({ type: 'tutorial', step: 'drive' });
     if (cmd.type === 'SetTarget' && cmd.targetId !== null && cmd.targetId !== undefined) questEvent({ type: 'tutorial', step: 'lock' });
@@ -731,22 +777,21 @@ export const GameShell: React.FC = () => {
         profile={profile}
         isOpen={garageOpen}
         onClose={() => setGarageOpen(false)}
-        onChange={saveProfile}
+        onAction={performAction}
       />
 
       <QuestModal
         profile={profile}
         isOpen={questOpen}
         onClose={() => setQuestOpen(false)}
-        onChange={saveProfile}
+        onAction={performAction}
       />
 
       <InventoryModal
         profile={profile}
-        onQuestEvent={questEvent}
         isOpen={inventoryOpen}
         onClose={() => setInventoryOpen(false)}
-        onChange={saveProfile}
+        onAction={performAction}
       />
 
       <SettingsModal

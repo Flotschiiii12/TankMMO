@@ -2,22 +2,21 @@ import React, { useMemo, useState } from 'react';
 import { X, Package } from 'lucide-react';
 import { UserProfile } from '../save/profile.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
-import { describeItem, errorText, itemName, mutateCharacter } from '../game/actions.ts';
+import { describeItem, errorText, itemName } from '../game/actions.ts';
 import { ITEM_BY_ID, CRAFTING_RECIPES, UPGRADE_LEVEL_STATS } from '../../shared/data/items.ts';
 import * as C from '../../shared/rules/character.ts';
-import type { QuestEvent } from '../../shared/rules/quests.ts';
+import type { ClientAction } from '../../shared/rules/actions.ts';
 
 interface InventoryModalProps {
   profile: UserProfile;
   isOpen: boolean;
   onClose: () => void;
-  onChange: (profile: UserProfile) => void;
-  onQuestEvent?: (ev: QuestEvent) => void;
+  onAction: (action: ClientAction) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const SLOT_FILTERS = ['all', 'main', 'secondary', 'armor', 'engine', 'module', 'drone'] as const;
 
-export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen, onClose, onChange, onQuestEvent }) => {
+export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen, onClose, onAction }) => {
   const [tab, setTab] = useState<'gear' | 'craft'>('gear');
   const [filter, setFilter] = useState<(typeof SLOT_FILTERS)[number]>('all');
   const [selected, setSelected] = useState<string | null>(null);
@@ -28,17 +27,11 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
   const stats = C.computeLoadoutStats(ch);
   if (!isOpen) return null;
 
-  const run = (fn: (c: C.CharacterState, rng: any) => C.Result<any>, ok?: string) => {
+  const run = async (action: ClientAction, ok?: string) => {
     soundEngine.playUIClick();
-    const { profile: next, result } = mutateCharacter(profile, fn);
-    if (result.ok) {
-      onChange(next);
-      setMsg(ok || '');
-      if (ok === 'Crafted') onQuestEvent?.({ type: 'craft' });
-      if (ok === 'Upgrade attempted' || ok === 'Safe upgrade attempted') onQuestEvent?.({ type: 'upgrade' });
-      if (ok === 'Equipped') onQuestEvent?.({ type: 'tutorial', step: 'equip' });
-    } else setMsg(errorText(result.error));
-    return result;
+    const r = await onAction(action);
+    setMsg(r.ok ? ok || '' : errorText(r.error || 'failed'));
+    return r;
   };
 
   const items = [...ch.inventory]
@@ -54,10 +47,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
     const g = ch.garage.find((x) => x.vehicleId === vehicleId)!;
     const target = candidates.find((s) => !g.loadout[s.key]) || candidates[0];
     if (!target) return setMsg('This vehicle has no matching slot');
-    run((c) => {
-      C.unequipItem(c, vehicleId, target.key);
-      return C.equipItem(c, vehicleId, target.key, sel.uid);
-    }, 'Equipped');
+    void run({ kind: 'equip', vehicleId, slot: target.key, uid: sel.uid }, 'Equipped');
   };
 
   const fusionCandidates = sel ? ch.inventory.filter((i) => i.defId === sel.defId && i.rarity === sel.rarity && !C.isEquipped(ch, i.uid)) : [];
@@ -114,7 +104,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                       <div className="text-[10px] uppercase text-slate-500">{s.key}</div>
                       <button disabled={!it} onClick={() => it && setSelected(it.uid)} className="truncate text-left" style={{ color: info?.color || '#64748b' }}>{info ? info.name : 'empty'}</button>
                     </div>
-                    {it && <button onClick={() => run((c) => C.unequipItem(c, vehicleId, s.key))} className="text-[10px] text-slate-400 hover:text-white">Unequip</button>}
+                    {it && <button onClick={() => run({ kind: 'unequip', vehicleId, slot: s.key })} className="text-[10px] text-slate-400 hover:text-white">Unequip</button>}
                   </div>
                 );
               })}
@@ -128,7 +118,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                 ))}
               </div>
               <div className="text-[10px] text-slate-500 mb-1">{ch.inventory.length} / {C.inventoryCapacity(ch)} slots
-                <button onClick={() => run((c) => C.expandInventory(c), 'Inventory expanded')} className="ml-2 text-orange-400 hover:text-orange-300">Expand (+10) {C.expansionCost(ch).toLocaleString()} scrap</button>
+                <button onClick={() => run({ kind: 'expand_inventory' }, 'Inventory expanded')} className="ml-2 text-orange-400 hover:text-orange-300">Expand (+10) {C.expansionCost(ch).toLocaleString()} scrap</button>
               </div>
               <div className="overflow-y-auto space-y-1 pr-1">
                 {items.length === 0 && <div className="text-xs text-slate-500 p-3">Nothing here yet. Enemies drop gear.</div>}
@@ -164,7 +154,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                     {sel.affixes.map((a, i) => (
                       <div key={i} className="flex items-center justify-between text-sky-300">
                         <span>{a.stat.replace('_', ' ')} +{a.value}{a.stat === 'flat_reduction' ? '' : '%'}</span>
-                        <button onClick={() => run((c, r) => C.rerollAffix(c, sel.uid, i, r), 'Affix rerolled')} className="text-[10px] text-slate-400 hover:text-white">reroll ({C.rerollCost(sel).scrap})</button>
+                        <button onClick={() => run({ kind: 'reroll', uid: sel.uid, index: i }, 'Affix rerolled')} className="text-[10px] text-slate-400 hover:text-white">reroll ({C.rerollCost(sel).scrap})</button>
                       </div>
                     ))}
                     <div className="text-[10px] text-slate-500">Rerolls used {sel.rerolls}/{C.MAX_REROLLS}</div>
@@ -176,16 +166,16 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                       const chance = Math.round(UPGRADE_LEVEL_STATS[sel.upgrade + 1].successChance * 100);
                       return (
                         <>
-                          <button onClick={() => run((c, r) => C.upgradeItem(c, sel.uid, r, false), 'Upgrade attempted')} className="px-2 py-1 rounded bg-orange-600/80 text-white">Upgrade +{sel.upgrade + 1} ({chance}%)</button>
-                          {sel.upgrade >= 9 && <button onClick={() => run((c, r) => C.upgradeItem(c, sel.uid, r, true), 'Safe upgrade attempted')} className="px-2 py-1 rounded bg-sky-700/80 text-white">Safe mode</button>}
+                          <button onClick={() => run({ kind: 'upgrade', uid: sel.uid }, 'Upgrade attempted')} className="px-2 py-1 rounded bg-orange-600/80 text-white">Upgrade +{sel.upgrade + 1} ({chance}%)</button>
+                          {sel.upgrade >= 9 && <button onClick={() => run({ kind: 'upgrade', uid: sel.uid, safe: true }, 'Safe upgrade attempted')} className="px-2 py-1 rounded bg-sky-700/80 text-white">Safe mode</button>}
                           <span className="w-full text-[10px] text-slate-500">Cost {c1.scrap.toLocaleString()} scrap, {c1.ore} ore, {c1.fragments} fragments</span>
                         </>
                       );
                     })()}
-                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { run((c) => C.dismantleItem(c, sel.uid), 'Dismantled'); setSelected(null); }} className="px-2 py-1 rounded bg-rose-700/70 text-white">Dismantle</button>}
+                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { run({ kind: 'dismantle', uid: sel.uid }, 'Dismantled'); setSelected(null); }} className="px-2 py-1 rounded bg-rose-700/70 text-white">Dismantle</button>}
                   </div>
                   {fusionCandidates.length >= 3 && (
-                    <button onClick={() => { const uids = fusionCandidates.slice(0, 3).map((i) => i.uid); run((c, r) => C.fuseItems(c, uids, r), 'Fusion done'); setSelected(null); }} className="px-2 py-1 rounded bg-violet-700/80 text-white">Fuse 3 identical ({fusionCandidates.length} available)</button>
+                    <button onClick={() => { const uids = fusionCandidates.slice(0, 3).map((i) => i.uid); run({ kind: 'fuse', uids }, 'Fusion done'); setSelected(null); }} className="px-2 py-1 rounded bg-violet-700/80 text-white">Fuse 3 identical ({fusionCandidates.length} available)</button>
                   )}
                 </div>
               )}
@@ -204,7 +194,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                     <div className="text-white">{itemName(def)}</div>
                     <div className="text-[10px] text-slate-500">Lv {r.minLevel} · {r.costScrap} scrap · {Object.entries(r.costOre).map(([k, v]) => `${v} ${k}`).join(', ')} · {r.costFragments} frag</div>
                   </div>
-                  <button disabled={locked} onClick={() => run((c, rng) => C.craftItem(c, r.id, rng), 'Crafted')} className={`px-2 py-1 rounded ${locked ? 'bg-slate-800 text-slate-600' : 'bg-orange-600/80 text-white'}`}>Craft</button>
+                  <button disabled={locked} onClick={() => run({ kind: 'craft', recipeId: r.id }, 'Crafted')} className={`px-2 py-1 rounded ${locked ? 'bg-slate-800 text-slate-600' : 'bg-orange-600/80 text-white'}`}>Craft</button>
                 </div>
               );
             })}

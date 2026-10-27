@@ -2,18 +2,17 @@ import React, { useState } from 'react';
 import { X, ScrollText } from 'lucide-react';
 import { UserProfile } from '../save/profile.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
-import { errorText, mutateCharacter } from '../game/actions.ts';
-import { nowSeconds } from '../game/questBridge.ts';
+import { errorText } from '../game/actions.ts';
+import type { ClientAction } from '../../shared/rules/actions.ts';
 import { QUEST_BY_ID, QuestObjective } from '../../shared/data/quests.ts';
 import { SEASON_POINTS_PER_TIER, SEASON_REWARDS } from '../../shared/data/season.ts';
 import * as Q from '../../shared/rules/quests.ts';
-import type { CharacterState } from '../../shared/rules/character.ts';
 
 interface Props {
   profile: UserProfile;
   isOpen: boolean;
   onClose: () => void;
-  onChange: (profile: UserProfile) => void;
+  onAction: (action: ClientAction) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const objectiveText = (o: QuestObjective, target: number): string => {
@@ -36,16 +35,16 @@ const objectiveText = (o: QuestObjective, target: number): string => {
   }
 };
 
-export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onChange }) => {
+export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction }) => {
   const [tab, setTab] = useState<'active' | 'available' | 'season'>('active');
   const [msg, setMsg] = useState('');
   if (!isOpen) return null;
   const ch = profile.character;
 
-  const run = (fn: (c: CharacterState, rng: any) => any) => {
+  const run = async (action: ClientAction) => {
     soundEngine.playUIClick();
-    const { profile: next, result } = mutateCharacter(profile, fn);
-    if (result.ok) { onChange(next); setMsg(''); } else setMsg(errorText(result.error));
+    const r = await onAction(action);
+    setMsg(r.ok ? '' : errorText(r.error || 'failed'));
   };
 
   const active = Object.values(ch.quests.active);
@@ -78,8 +77,8 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onChange
                 <div className="flex items-center justify-between">
                   <div><span className="text-white font-medium">{def.name}</span> <span className="text-[10px] uppercase text-slate-500">{def.kind}</span></div>
                   <div className="flex gap-2">
-                    {aq.ready && <button onClick={() => run((c, r) => Q.claimQuest(c, aq.id, r, nowSeconds()))} className="px-2 py-1 rounded bg-emerald-600/80 text-white">Claim</button>}
-                    {def.kind !== 'daily' && def.kind !== 'weekly' && <button onClick={() => run((c) => Q.abandonQuest(c, aq.id))} className="text-[10px] text-slate-500 hover:text-slate-300">abandon</button>}
+                    {aq.ready && <button onClick={() => run({ kind: 'claim_quest', questId: aq.id })} className="px-2 py-1 rounded bg-emerald-600/80 text-white">Claim</button>}
+                    {def.kind !== 'daily' && def.kind !== 'weekly' && <button onClick={() => run({ kind: 'abandon_quest', questId: aq.id })} className="text-[10px] text-slate-500 hover:text-slate-300">abandon</button>}
                   </div>
                 </div>
                 {def.objectives.map((o, i) => (
@@ -100,7 +99,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onChange
                 <div className="text-white">{def.name} <span className="text-[10px] uppercase text-slate-500">{def.kind}{def.chapter ? ` · ch.${def.chapter}` : ''}</span></div>
                 <div className="text-[11px] text-slate-400">{def.objectives.map((o) => objectiveText(o, o.count)).join(' · ')}</div>
               </div>
-              <button onClick={() => run((c) => Q.acceptQuest(c, def.id))} className="px-2 py-1 rounded bg-orange-600/80 text-white shrink-0 ml-2">Accept</button>
+              <button onClick={() => run({ kind: 'accept_quest', questId: def.id })} className="px-2 py-1 rounded bg-orange-600/80 text-white shrink-0 ml-2">Accept</button>
             </div>
           ))}
 
@@ -114,7 +113,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onChange
                   return (
                     <div key={r.tier} className={`flex items-center justify-between p-2 rounded border text-xs ${reached ? 'border-slate-700' : 'border-slate-800 opacity-60'}`}>
                       <div><b>Tier {r.tier}</b> <span className="text-slate-400">{[r.scrap && `${r.scrap} scrap`, r.fragments && `${r.fragments} frag`, r.ore && `${r.ore} ore`, r.gateKeys && `${r.gateKeys} key`, r.seasonMarks && `${r.seasonMarks} marks`, r.skin && `skin`, r.title && `title: ${r.title}`].filter(Boolean).join(', ')}</span></div>
-                      <button disabled={!reached || claimed} onClick={() => run((c) => Q.claimSeasonTier(c, r.tier, nowSeconds()))} className={`px-2 py-0.5 rounded ${claimed ? 'text-emerald-400' : reached ? 'bg-emerald-600/80 text-white' : 'text-slate-600'}`}>{claimed ? 'Claimed' : 'Claim'}</button>
+                      <button disabled={!reached || claimed} onClick={() => run({ kind: 'claim_season_tier', tier: r.tier })} className={`px-2 py-0.5 rounded ${claimed ? 'text-emerald-400' : reached ? 'bg-emerald-600/80 text-white' : 'text-slate-600'}`}>{claimed ? 'Claimed' : 'Claim'}</button>
                     </div>
                   );
                 })}

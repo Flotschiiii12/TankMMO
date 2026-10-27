@@ -2,6 +2,7 @@ import { applySnapshot, ClientWorld, serializeSnapshot, WorldSnapshot } from '..
 import { Realm } from '../sim/realm.ts';
 import { angleDiff, ChatMessage, clamp, dist, lerp, SimCommand, SimEntity, SimEvent, vec2 } from '../sim/types.ts';
 import { SIM_TIMESTEP } from '../sim/world.ts';
+import type { ClientAction } from '../../shared/rules/actions.ts';
 import { UserProfile } from '../save/profile.ts';
 import { WebSocketTransport } from './transport.ts';
 
@@ -15,6 +16,8 @@ export interface GameClient {
   switchMap(targetMapId: string, gateId: string): void;
   fastTravelToMap(targetMapId: string): void;
   updateProfile(profile: UserProfile): void;
+  /** Present only on the online client: sends the action to the server and resolves with its verdict. */
+  sendAction?(action: ClientAction): Promise<{ ok: boolean; error?: string }>;
 
   disconnect(): void;
   getTickStats(): { fps: number; tickTime: number; entityCount: number; tickRate: number };

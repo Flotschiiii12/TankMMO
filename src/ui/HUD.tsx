@@ -83,7 +83,7 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
 
           {/* Quest tracker */}
-          {Object.values(profile.character.quests.active).slice(0, 3).map((aq) => {
+          {Object.values(profile.character.quests.active).sort((a, b) => Number(b.id.startsWith('tut_')) - Number(a.id.startsWith('tut_')) || Number(b.ready) - Number(a.ready)).slice(0, 3).map((aq) => {
             const def = QUEST_BY_ID.get(aq.id);
             if (!def) return null;
             const done = aq.progress.reduce((a, b) => a + b, 0);

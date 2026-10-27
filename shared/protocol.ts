@@ -6,6 +6,7 @@
 import { AbilityId, AmmoType, ChatMessage, SimCommand, SimEntity, SimEvent, Vec2 } from './types.ts';
 import type { EntityPatch } from './net/delta.ts';
 import type { CharacterState } from './rules/character.ts';
+import type { ClientAction } from './rules/actions.ts';
 
 /** Bump on breaking changes; the server rejects clients below MIN_PROTOCOL_VERSION with s_error 'update_required'. */
 export const PROTOCOL_VERSION = '1.1.0';
@@ -46,25 +47,7 @@ export interface ClientPingPacket {
 export interface ClientActionPacket {
   type: 'c_action';
   id: number; // echoed in the result
-  action:
-    | { kind: 'equip'; vehicleId: string; slot: string; uid: string }
-    | { kind: 'unequip'; vehicleId: string; slot: string }
-    | { kind: 'upgrade'; uid: string; safe?: boolean }
-    | { kind: 'dismantle'; uid: string }
-    | { kind: 'craft'; recipeId: string }
-    | { kind: 'reroll'; uid: string; index: number }
-    | { kind: 'fuse'; uids: string[] }
-    | { kind: 'expand_inventory' }
-    | { kind: 'buy_vehicle'; vehicleId: string }
-    | { kind: 'set_vehicle'; vehicleId: string }
-    | { kind: 'rank_talent'; talentId: string }
-    | { kind: 'respec' }
-    | { kind: 'accept_quest'; questId: string }
-    | { kind: 'claim_quest'; questId: string }
-    | { kind: 'abandon_quest'; questId: string }
-    | { kind: 'claim_season_tier'; tier: number }
-    | { kind: 'buy_ammo'; ammo: AmmoType; packs: number }
-    | { kind: 'tutorial'; step: string };
+  action: ClientAction;
 }
 
 export type ClientMessage =

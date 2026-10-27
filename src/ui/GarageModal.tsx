@@ -5,7 +5,8 @@ import { AMMO_TYPES, AMMO_SIM_ID } from '../data/parts.ts';
 import { VEHICLE_CATALOG } from '../../shared/data/vehicles.ts';
 import { TALENTS_CATALOG } from '../../shared/data/talents.ts';
 import * as C from '../../shared/rules/character.ts';
-import { errorText, mutateCharacter } from '../game/actions.ts';
+import { errorText } from '../game/actions.ts';
+import type { ClientAction } from '../../shared/rules/actions.ts';
 import { UserProfile } from '../save/profile.ts';
 import { AmmoType, VehicleStats } from '../sim/types.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
@@ -17,7 +18,7 @@ interface GarageModalProps {
   profile: UserProfile;
   isOpen: boolean;
   onClose: () => void;
-  onChange: (profile: UserProfile) => void;
+  onAction: (action: ClientAction) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const VEHICLE_ORE_COST: Record<string, number> = Object.fromEntries(VEHICLE_CATALOG.map((v) => [v.id, v.costOre]));
@@ -32,18 +33,14 @@ export const GarageModal: React.FC<GarageModalProps> = ({
   profile,
   isOpen,
   onClose,
-  onChange,
+  onAction,
 }) => {
   const ch = profile.character;
   const [msg, setMsg] = useState('');
-  const run = (fn: (c: C.CharacterState, rng: any) => C.Result<any>) => {
+  const run = async (action: ClientAction) => {
     soundEngine.playUIClick();
-    const { profile: next, result } = mutateCharacter(profile, fn);
-    if (result.ok) {
-      onChange(next);
-      setMsg('');
-    } else setMsg(errorText(result.error));
-    return result;
+    const r = await onAction(action);
+    setMsg(r.ok ? '' : errorText(r.error || 'failed'));
   };
   const [activeTab, setActiveTab] = useState<'vehicles' | 'parts' | 'ammo'>('vehicles');
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleStats>(() => {
@@ -121,14 +118,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
   const oreNeeded = Math.round(VEHICLE_ORE_COST[selectedVehicle.id] ?? 0);
   const oreHave = ch.wallet.ore.iron + ch.wallet.ore.copper + ch.wallet.ore.titanium + ch.wallet.ore.crystal;
   const canAfford = ch.wallet.scrap >= selectedVehicle.costScrap && oreHave >= oreNeeded && ch.level >= selectedVehicle.minLevel;
-  const buyAmmo = (type: AmmoType, count: number, cost: number) => {
-    if (ch.wallet.scrap < cost) return setMsg('Not enough scrap');
-    soundEngine.playUIClick();
-    const next = structuredClone(profile);
-    next.character.wallet.scrap -= cost;
-    next.ammoInventory[type] = (next.ammoInventory[type] || 0) + count;
-    onChange(next);
-  };
+  const buyAmmo = (type: AmmoType, _count: number, _cost: number) => { void run({ kind: 'buy_ammo', ammo: type, packs: 1 }); };
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col p-4 md:p-6 text-slate-200 select-none overflow-hidden">
@@ -299,7 +289,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                     <button
                       onClick={() => {
                         soundEngine.playUIClick();
-                        run((c) => { if (!c.garage.some((g) => g.vehicleId === selectedVehicle.id)) return { ok: false, error: 'vehicle_not_owned' }; c.activeVehicle = selectedVehicle.id; return { ok: true }; });
+                        run({ kind: 'set_vehicle', vehicleId: selectedVehicle.id });
                       }}
                       className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium transition-colors"
                     >
@@ -309,7 +299,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                     <button
                       onClick={() => {
                         soundEngine.playUIClick();
-                        run((c) => C.buyVehicle(c, selectedVehicle.id));
+                        run({ kind: 'buy_vehicle', vehicleId: selectedVehicle.id });
                       }}
                       disabled={!canAfford}
                       className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
@@ -390,7 +380,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
             <div className="flex items-center justify-between text-xs mb-3">
               <span className="text-slate-300">Talent points available: <b className="text-orange-400">{C.talentPointsAvailable(ch)}</b> (from level 5, one per level)</span>
               <button
-                onClick={() => run((c) => C.respecTalents(c))}
+                onClick={() => run({ kind: 'respec' })}
                 className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
               >
                 Reset talents ({C.respecCost(ch).toLocaleString()} scrap)
@@ -407,7 +397,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                       return (
                         <button
                           key={t.id}
-                          onClick={() => run((c) => C.rankUpTalent(c, t.id))}
+                          onClick={() => run({ kind: 'rank_talent', talentId: t.id })}
                           className="w-full flex items-center justify-between p-1.5 rounded border border-slate-800 hover:border-slate-600 text-left text-xs"
                         >
                           <span className="text-slate-200">{talentLabel(t.id)} <span className="text-[10px] text-slate-500">{t.effectPerRank.isPercent ? `+${Math.round(t.effectPerRank.valuePerRank * 1000) / 10}%` : `+${t.effectPerRank.valuePerRank}`}/rank · Lv {t.minLevel}</span></span>

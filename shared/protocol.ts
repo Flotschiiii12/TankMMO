@@ -25,7 +25,7 @@ export interface ClientInputPacket {
 
 export interface ClientChatPacket {
   type: 'c_chat';
-  channel: 'G' | 'M' | 'F' | 'C' | 'P';
+  channel: 'G' | 'M' | 'F' | 'C' | 'P' | 'W' | 'T';
   text: string;
   targetRecipient?: string;
 }
@@ -50,7 +50,55 @@ export interface ClientActionPacket {
   action: ClientAction;
 }
 
+export type SocialOp =
+  | { op: 'friend_request'; name: string }
+  | { op: 'friend_accept'; name: string }
+  | { op: 'friend_remove'; name: string }
+  | { op: 'friend_list' }
+  | { op: 'block'; name: string }
+  | { op: 'unblock'; name: string }
+  | { op: 'block_list' }
+  | { op: 'report'; name: string; reason: string }
+  | { op: 'party_invite'; name: string }
+  | { op: 'party_accept'; name: string }
+  | { op: 'party_leave' }
+  | { op: 'party_kick'; name: string }
+  | { op: 'party_info' }
+  | { op: 'clan_create'; name: string; tag: string }
+  | { op: 'clan_invite'; name: string }
+  | { op: 'clan_accept'; clanId: number }
+  | { op: 'clan_invites' }
+  | { op: 'clan_leave' }
+  | { op: 'clan_kick'; name: string }
+  | { op: 'clan_role'; name: string; role: 'officer' | 'member' | 'leader' }
+  | { op: 'clan_info' }
+  | { op: 'clan_donate'; amount: number }
+  | { op: 'clan_research'; id: string }
+  | { op: 'profile'; name: string }
+  | { op: 'ranking'; kind: 'level' | 'clans' };
+
+export interface ClientSocialPacket {
+  type: 'c_social';
+  id: number;
+  req: SocialOp;
+}
+
+export interface ServerSocialResultPacket {
+  type: 's_social_result';
+  id: number;
+  ok: boolean;
+  error?: string;
+  data?: any;
+}
+
+export interface ServerSocialEventPacket {
+  type: 's_social_event';
+  kind: 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement';
+  data: any;
+}
+
 export type ClientMessage =
+  | ClientSocialPacket
   | ClientActionPacket
   | ClientInputPacket
   | ClientChatPacket
@@ -158,6 +206,8 @@ export interface ServerMapPacket {
 }
 
 export type ServerMessage =
+  | ServerSocialResultPacket
+  | ServerSocialEventPacket
   | ServerStatePacket
   | ServerCharacterPacket
   | ServerActionResultPacket

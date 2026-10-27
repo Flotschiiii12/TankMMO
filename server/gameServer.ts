@@ -7,7 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { getAllMaps, getMapById } from '../shared/data/maps.ts';
 import { rollLoot } from '../shared/data/loot.ts';
 import { compactEntity, DeltaEncoder, viewFor } from '../shared/net/delta.ts';
-import { MIN_PROTOCOL_VERSION, PROTOCOL_VERSION, ClientActionPacket, ClientMessage, ServerMessage } from '../shared/protocol.ts';
+import { MIN_PROTOCOL_VERSION, PROTOCOL_VERSION, ClientActionPacket, ClientMessage, ClientSocialPacket, ServerMessage } from '../shared/protocol.ts';
 import { SimRNG } from '../shared/prng.ts';
 import * as C from '../shared/rules/character.ts';
 import { AMMO_PRICES, executeAction } from '../shared/rules/actions.ts';
@@ -18,6 +18,7 @@ import { createWorld, stepWorld, World } from '../shared/sim/world.ts';
 import { AmmoType, MapDef, SimCommand, SimEntity, SimEvent, SIM_TIMESTEP } from '../shared/types.ts';
 import { AccountService } from './accounts.ts';
 import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
+import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
 import { createStarterCharacterForServer, DEFAULT_AMMO } from './starter.ts';
 
 export const TICK_HZ = 30;
@@ -64,7 +65,15 @@ interface Session {
   pendingEvents: SimEvent[];
   suspicious: number;
   rng: SimRNG;
+  partyId?: number;
+  clanId?: number;
+  clanTag?: string;
 }
+
+interface Party { id: number; leader: string; members: Set<string> }
+export const PARTY_MAX = 5;
+export const PARTY_XP_BONUS_PER_EXTRA = 0.1;
+const PARTY_SHARE_RADIUS = 1500;
 
 export interface ServerDeps {
   accounts: AccountRepo;
@@ -73,6 +82,7 @@ export interface ServerDeps {
   service: AccountService;
   clock?: Clock;
   adminToken?: string;
+  social: SocialRepo;
 }
 
 export class GameServer {
@@ -87,6 +97,9 @@ export class GameServer {
   private clock: Clock;
   readonly metrics = { ticks: 0, maxTickMs: 0, avgTickMs: 0, bytesOut: 0, msgsIn: 0 };
   private instanceCounter = 0;
+  private parties = new Map<number, Party>();
+  private partyCounter = 0;
+  private partyInvites = new Map<string, { from: string; party: number; exp: number }>();
 
   constructor(private deps: ServerDeps, httpServer?: http.Server) {
     this.clock = deps.clock ?? realClock;
@@ -109,6 +122,7 @@ export class GameServer {
   async close(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     for (const s of this.sessions.values()) { this.save(s); s.ws.close(1001, 'server_shutdown'); }
+    for (const c of this.wss.clients) c.terminate();
     await new Promise<void>((r) => this.wss.close(() => r()));
     await new Promise<void>((r) => this.http.close(() => r()));
   }
@@ -169,6 +183,24 @@ export class GameServer {
 
   playerCount(): number { return this.sessions.size; }
 
+  onlineNames(): Array<{ id: string; name: string; level: number; mapId: number; suspicious: number }> {
+    return [...this.sessions.values()].map((s) => ({ id: s.accountId, name: s.name, level: s.character.level, mapId: s.instance.mapId, suspicious: s.suspicious }));
+  }
+
+  /** Admin: disconnect a player (saves first). */
+  kick(accountId: string, reason = 'kicked'): boolean {
+    const s = this.sessions.get(accountId);
+    if (!s) return false;
+    this.send(s, { type: 's_error', code: reason, message: 'You were removed from the game', critical: true });
+    s.ws.close(4403, reason);
+    return true;
+  }
+
+  announce(text: string): void {
+    this.deps.social.addAnnouncement(text);
+    for (const s of this.sessions.values()) this.send(s, { type: 's_social_event', kind: 'announcement', data: { ts: this.clock.nowMs(), text } });
+  }
+
   /** Test hook. */
   getSessionState(accountId: string): { character: C.CharacterState; entity: SimEntity; instanceId: string; mapId: number } | undefined {
     const s = this.sessions.get(accountId);
@@ -222,6 +254,7 @@ export class GameServer {
     ws.on('close', () => {
       clearTimeout(joinTimeout);
       if (session && this.sessions.get(session.accountId) === session) {
+        this.leaveParty(session);
         this.leave(session);
         this.save(session);
         this.sessions.delete(session.accountId);
@@ -273,6 +306,9 @@ export class GameServer {
     Q.refreshQuests(character, Math.floor(this.clock.nowMs() / 1000));
     this.send(s, { type: 's_welcome', protocolVersion: PROTOCOL_VERSION, assignedEntityId: 0, mapId: String(mapId), serverTick: this.tick });
     this.enter(s, mapId);
+    this.applyClanTag(s);
+    if (!row) this.save(s); // new accounts appear in rankings right away
+    for (const a of this.deps.social.latestAnnouncements(1)) this.send(s, { type: 's_social_event', kind: 'announcement', data: a });
     for (const m of this.deps.chat.recent('G', 20)) this.send(s, { type: 's_chat', message: { id: `h${m.ts}`, sender: m.sender, channel: 'G', text: m.text, timestamp: m.ts } });
     return s;
   }
@@ -282,6 +318,7 @@ export class GameServer {
       case 'c_input': return this.handleInput(s, msg);
       case 'c_chat': return this.handleChat(s, msg);
       case 'c_action': return this.handleAction(s, msg);
+      case 'c_social': return this.handleSocial(s, msg);
       case 'c_ping': return this.send(s, { type: 's_pong', originalTimestamp: msg.timestamp, serverTimestamp: this.clock.nowMs() });
       default: return;
     }
@@ -340,10 +377,202 @@ export class GameServer {
     if ((last !== undefined && now - last < CHAT_MIN_INTERVAL_MS) || s.chatTimes.length >= CHAT_BURST.count) return this.send(s, { type: 's_error', code: 'slow_mode', message: 'Slow down' });
     s.chatTimes.push(now);
     const clean = text.replace(/\b(fuck|shit|nazi)\w*/gi, (m) => '*'.repeat(m.length));
-    const channel = msg.channel === 'M' ? 'M' : 'G';
-    const out: ServerMessage = { type: 's_chat', message: { id: `m${now}${s.accountId.slice(0, 4)}`, sender: s.name, channel, text: clean, timestamp: now } };
-    if (channel === 'G') { this.deps.chat.add('G', s.name, clean, now); for (const o of this.sessions.values()) this.send(o, out); }
-    else for (const o of s.instance.sessions) this.send(o, out);
+    const channel = msg.channel;
+    const out: ServerMessage = { type: 's_chat', message: { id: `m${now}${s.accountId.slice(0, 4)}`, sender: s.name, clanTag: s.clanTag, channel: channel as any, text: clean, timestamp: now } };
+    const blockedMe = new Set(this.deps.social.blockedBy(s.accountId)); // recipients who blocked the sender never see it
+    const deliver = (o: Session) => { if (!blockedMe.has(o.accountId)) this.send(o, out); };
+    switch (channel) {
+      case 'G': case 'T':
+        if (channel === 'G') this.deps.chat.add('G', s.name, clean, now);
+        for (const o of this.sessions.values()) deliver(o);
+        return;
+      case 'M': for (const o of s.instance.sessions) deliver(o); return;
+      case 'C': {
+        if (!s.clanId) return this.send(s, { type: 's_error', code: 'no_clan', message: 'You are not in a clan' });
+        for (const o of this.sessions.values()) if (o.clanId === s.clanId) deliver(o);
+        return;
+      }
+      case 'P': {
+        const party = s.partyId ? this.parties.get(s.partyId) : undefined;
+        if (!party) return this.send(s, { type: 's_error', code: 'no_party', message: 'You are not in a party' });
+        for (const id of party.members) { const o = this.sessions.get(id); if (o) deliver(o); }
+        return;
+      }
+      case 'W': {
+        const target = msg.targetRecipient ? this.deps.accounts.getByName(msg.targetRecipient) : undefined;
+        const o = target ? this.sessions.get(target.id) : undefined;
+        if (!o) return this.send(s, { type: 's_error', code: 'player_offline', message: 'That player is not online' });
+        if (this.deps.social.isBlocked(o.accountId, s.accountId)) return; // silently dropped
+        this.send(o, out);
+        this.send(s, out);
+        return;
+      }
+      default: return;
+    }
+  }
+
+  // ---------------------------------------------------------------- social (friends, parties, clans, profiles)
+
+  private online(name: string): Session | undefined {
+    const a = this.deps.accounts.getByName(name);
+    return a ? this.sessions.get(a.id) : undefined;
+  }
+
+  private applyClanTag(s: Session): void {
+    const c = this.deps.social.clanOf(s.accountId);
+    s.clanId = c?.id;
+    s.clanTag = c?.tag;
+    const e = s.instance?.world.entities.get(s.entityId);
+    if (e) e.clanTag = c?.tag ?? 'CMD';
+  }
+
+  private socialEvent(accountId: string, kind: any, data: any): void {
+    const o = this.sessions.get(accountId);
+    if (o) this.send(o, { type: 's_social_event', kind, data });
+  }
+
+  private partyInfo(s: Session): any {
+    const p = s.partyId ? this.parties.get(s.partyId) : undefined;
+    if (!p) return null;
+    return { id: p.id, leader: this.deps.accounts.get(p.leader)?.name, members: [...p.members].map((id) => {
+      const o = this.sessions.get(id);
+      return { name: o?.name ?? this.deps.accounts.get(id)?.name, level: o?.character.level ?? 1, hull: o ? Math.round((o.instance.world.entities.get(o.entityId)?.hull ?? 0)) : 0, mapId: o?.instance.mapId };
+    }) };
+  }
+
+  private leaveParty(s: Session): void {
+    const p = s.partyId ? this.parties.get(s.partyId) : undefined;
+    s.partyId = undefined;
+    if (!p) return;
+    p.members.delete(s.accountId);
+    if (p.members.size <= 1) {
+      for (const id of p.members) { const o = this.sessions.get(id); if (o) o.partyId = undefined; this.socialEvent(id, 'party_update', null); }
+      this.parties.delete(p.id);
+      return;
+    }
+    if (p.leader === s.accountId) p.leader = [...p.members][0];
+    for (const id of p.members) { const o = this.sessions.get(id); if (o) this.socialEvent(id, 'party_update', this.partyInfo(o)); }
+  }
+
+  private handleSocial(s: Session, p: ClientSocialPacket): void {
+    const reply = (r: { ok: boolean; error?: string; data?: any }) => this.send(s, { type: 's_social_result', id: p.id, ok: r.ok, error: r.ok ? undefined : r.error, data: r.data });
+    const social = this.deps.social;
+    const req = p.req;
+    const byName = (name: string) => this.deps.accounts.getByName(String(name ?? ''));
+    const needsPlayer = !['clan_create'].includes(req.op) && 'name' in req;
+    const target = needsPlayer ? byName((req as any).name) : undefined;
+    if (needsPlayer && !target) return reply({ ok: false, error: 'unknown_player' });
+
+    switch (req.op) {
+      case 'friend_request': {
+        const r = social.requestFriend(s.accountId, target!.id);
+        if (r.ok) this.socialEvent(target!.id, r.autoAccepted ? 'friend_accepted' : 'friend_request', { from: s.name });
+        return reply(r);
+      }
+      case 'friend_accept': { const r = social.acceptFriend(s.accountId, target!.id); if (r.ok) this.socialEvent(target!.id, 'friend_accepted', { from: s.name }); return reply(r); }
+      case 'friend_remove': return reply(social.removeFriend(s.accountId, target!.id));
+      case 'friend_list':
+        return reply({ ok: true, data: social.friendList(s.accountId).map((f) => ({ ...f, online: this.sessions.has(f.id), mapId: this.sessions.get(f.id)?.instance.mapId })) });
+      case 'block': return reply(social.block(s.accountId, target!.id));
+      case 'unblock': return reply(social.unblock(s.accountId, target!.id));
+      case 'block_list': return reply({ ok: true, data: social.blockList(s.accountId) });
+      case 'report': return reply(social.report(s.accountId, target!.id, String(req.reason ?? '')));
+
+      case 'party_invite': {
+        const o = this.sessions.get(target!.id);
+        if (!o) return reply({ ok: false, error: 'player_offline' });
+        if (o.accountId === s.accountId) return reply({ ok: false, error: 'self' });
+        if (o.partyId) return reply({ ok: false, error: 'target_in_party' });
+        if (social.isBlocked(o.accountId, s.accountId)) return reply({ ok: false, error: 'blocked' });
+        let party = s.partyId ? this.parties.get(s.partyId) : undefined;
+        if (party && party.leader !== s.accountId) return reply({ ok: false, error: 'not_leader' });
+        if (party && party.members.size >= PARTY_MAX) return reply({ ok: false, error: 'party_full' });
+        if (!party) { party = { id: ++this.partyCounter, leader: s.accountId, members: new Set([s.accountId]) }; this.parties.set(party.id, party); s.partyId = party.id; }
+        this.partyInvites.set(o.accountId, { from: s.accountId, party: party.id, exp: this.clock.nowMs() + 60_000 });
+        this.socialEvent(o.accountId, 'party_invite', { from: s.name });
+        return reply({ ok: true });
+      }
+      case 'party_accept': {
+        const inv = this.partyInvites.get(s.accountId);
+        const party = inv ? this.parties.get(inv.party) : undefined;
+        if (!inv || !party || inv.exp < this.clock.nowMs() || inv.from !== target!.id) return reply({ ok: false, error: 'no_invite' });
+        if (party.members.size >= PARTY_MAX) return reply({ ok: false, error: 'party_full' });
+        this.partyInvites.delete(s.accountId);
+        party.members.add(s.accountId);
+        s.partyId = party.id;
+        for (const id of party.members) { const o = this.sessions.get(id); if (o) this.socialEvent(id, 'party_update', this.partyInfo(o)); }
+        return reply({ ok: true });
+      }
+      case 'party_leave': this.leaveParty(s); return reply({ ok: true });
+      case 'party_kick': {
+        const party = s.partyId ? this.parties.get(s.partyId) : undefined;
+        if (!party || party.leader !== s.accountId) return reply({ ok: false, error: 'not_leader' });
+        const o = this.sessions.get(target!.id);
+        if (!o || o.partyId !== party.id || o === s) return reply({ ok: false, error: 'not_in_party' });
+        this.leaveParty(o);
+        this.socialEvent(o.accountId, 'party_update', null);
+        return reply({ ok: true });
+      }
+      case 'party_info': return reply({ ok: true, data: this.partyInfo(s) });
+
+      case 'clan_create': {
+        if (s.character.wallet.scrap < CLAN_CREATE_COST) return reply({ ok: false, error: 'not_enough_scrap' });
+        const r = social.createClan(s.accountId, String(req.name ?? ''), String(req.tag ?? ''));
+        if (r.ok) { s.character.wallet.scrap -= CLAN_CREATE_COST; s.dirty = true; this.applyClanTag(s); this.sendCharacter(s); }
+        return reply(r);
+      }
+      case 'clan_invite': {
+        const r = social.invite(s.accountId, target!.id);
+        if (r.ok) this.socialEvent(target!.id, 'clan_invite', { from: s.name, clan: social.clanOf(s.accountId)?.name });
+        return reply(r);
+      }
+      case 'clan_invites': return reply({ ok: true, data: social.invitesFor(s.accountId) });
+      case 'clan_accept': { const r = social.acceptInvite(s.accountId, Number(req.clanId)); if (r.ok) this.applyClanTag(s); return reply(r); }
+      case 'clan_leave': { const r = social.leave(s.accountId); if (r.ok) this.applyClanTag(s); return reply(r); }
+      case 'clan_kick': {
+        const r = social.kick(s.accountId, target!.id);
+        if (r.ok) { const o = this.sessions.get(target!.id); if (o) this.applyClanTag(o); }
+        return reply(r);
+      }
+      case 'clan_role': { const r = social.setRole(s.accountId, target!.id, req.role); if (r.ok) { const o = this.sessions.get(target!.id); if (o) this.applyClanTag(o); } return reply(r); }
+      case 'clan_info': { const c = social.clanOf(s.accountId); return reply(c ? { ok: true, data: { ...social.clanInfo(c.id), myRole: c.role } } : { ok: false, error: 'no_clan' }); }
+      case 'clan_donate': {
+        const n = Math.floor(Number(req.amount));
+        if (!(n > 0) || s.character.wallet.scrap < n) return reply({ ok: false, error: 'not_enough_scrap' });
+        const r = social.donate(s.accountId, n);
+        if (r.ok) { s.character.wallet.scrap -= n; s.dirty = true; this.sendCharacter(s); }
+        return reply(r);
+      }
+      case 'clan_research': return reply(social.research(s.accountId, String(req.id)));
+
+      case 'profile': {
+        const live = this.sessions.get(target!.id);
+        const row = live ? { character: live.character } : this.deps.profiles.get(target!.id);
+        const c = social.clanOf(target!.id);
+        const stats = row ? C.computeLoadoutStats(row.character) : undefined;
+        return reply({ ok: true, data: {
+          name: target!.name, level: row?.character.level ?? 1, clan: c ? { name: c.name, tag: c.tag } : null, online: !!live,
+          vehicle: row?.character.activeVehicle, power: stats ? Math.round(Math.sqrt(stats.dps * (stats.maxHull + stats.maxArmor))) : 0,
+          titles: row?.character.season.titles ?? [], isFriend: social.areFriends(s.accountId, target!.id), blocked: social.isBlocked(s.accountId, target!.id),
+        } });
+      }
+      case 'ranking':
+        return reply({ ok: true, data: req.kind === 'clans' ? social.clanRanking(20) : this.deps.profiles.topByLevel(20) });
+    }
+  }
+
+  /** Party members near the killer share the XP; the total is boosted by 10 % per extra member (data above). */
+  private partyShare(s: Session): Session[] {
+    const party = s.partyId ? this.parties.get(s.partyId) : undefined;
+    if (!party) return [s];
+    const me = s.instance.world.entities.get(s.entityId);
+    const near: Session[] = [];
+    for (const id of party.members) {
+      const o = this.sessions.get(id);
+      const e = o?.instance === s.instance ? o.instance.world.entities.get(o.entityId) : undefined;
+      if (o && e && me && e.hull > 0 && (e.pos.x - me.pos.x) ** 2 + (e.pos.y - me.pos.y) ** 2 <= PARTY_SHARE_RADIUS ** 2) near.push(o);
+    }
+    return near.length ? near : [s];
   }
 
   // ---------------------------------------------------------------- actions (workshop, garage, quests...)
@@ -422,13 +651,26 @@ export class GameServer {
     const isBoss = victim.kind === 'boss';
     const xp = calculateKillXP(ch.level, victim.level, !!victim.isElite, isBoss);
     const before = ch.level;
-    C.grantXP(ch, xp);
-    C.addMasteryXp(ch, ch.activeVehicle, Math.round(xp / 4));
+    const group = this.partyShare(s);
+    if (group.length > 1) {
+      const each = Math.round((xp * (1 + PARTY_XP_BONUS_PER_EXTRA * (group.length - 1))) / group.length);
+      for (const m of group) {
+        const mb = m.character.level;
+        C.grantXP(m.character, each);
+        C.addMasteryXp(m.character, m.character.activeVehicle, Math.round(each / 4));
+        Q.onQuestEvent(m.character, { type: 'kill', kind: victim.kind, level: victim.level, isElite: !!victim.isElite, isBoss }); // shared quest credit
+        if (m !== s) { m.dirty = true; if (m.character.level !== mb) { const e = m.instance.world.entities.get(m.entityId); if (e) refreshPlayerStats(e, m.character); } this.sendCharacter(m); }
+      }
+    } else {
+      C.grantXP(ch, xp);
+      C.addMasteryXp(ch, ch.activeVehicle, Math.round(xp / 4));
+    }
     const loot = rollLoot(s.rng, victim.level, 1, !!victim.isElite, isBoss, ch.pityCounter);
     ch.pityCounter = loot.newPityCounter;
     if (loot.itemId && loot.rarity) C.createItem(ch, loot.itemId, loot.rarity, s.rng);
     if (loot.keys > 0) ch.wallet.gateKeys += loot.keys;
-    Q.onQuestEvent(ch, { type: 'kill', kind: victim.kind, level: victim.level, isElite: !!victim.isElite, isBoss });
+    if (s.clanId) this.deps.social.addClanProgress(s.clanId, 'clan_hunt', 1);
+    if (group.length <= 1) Q.onQuestEvent(ch, { type: 'kill', kind: victim.kind, level: victim.level, isElite: !!victim.isElite, isBoss });
     if (isBoss) Q.onQuestEvent(ch, { type: 'defeat_boss', bossId: victim.archetypeId || 'boss' });
     if (ch.level !== before) {
       const ent = s.instance.world.entities.get(s.entityId);
@@ -445,7 +687,7 @@ export class GameServer {
     const w = s.character.wallet;
     if (kind === 'scrap') w.scrap += amount;
     else if (kind === 'parts') w.fragments += amount;
-    else if (kind === 'ore' && sub) { w.ore[sub as C.OreType] += amount; Q.onQuestEvent(s.character, { type: 'collect_ore', ore: sub, amount }); }
+    else if (kind === 'ore' && sub) { if (s.clanId) this.deps.social.addClanProgress(s.clanId, 'clan_mine', amount); w.ore[sub as C.OreType] += amount; Q.onQuestEvent(s.character, { type: 'collect_ore', ore: sub, amount }); }
     else if (kind === 'ore') { w.ore.iron += amount; Q.onQuestEvent(s.character, { type: 'collect_ore', ore: 'iron', amount }); }
     else if (kind === 'ammo' && sub) {
       s.ammo[sub] = (s.ammo[sub] ?? 0) + amount;
@@ -527,6 +769,7 @@ export class GameServer {
   }
 
   save(s: Session): void {
+    if (!this.deps.accounts.get(s.accountId)) return; // account was deleted (admin/GDPR): nothing to persist
     const ent = s.instance?.world.entities.get(s.entityId);
     if (ent) for (const k of Object.keys(s.ammo)) if (k !== 'STANDARD') s.ammo[k] = ent.ammoInventory[k as AmmoType] ?? s.ammo[k];
     this.deps.profiles.save({ accountId: s.accountId, character: s.character, ammo: s.ammo, mapId: s.instance?.mapId ?? 1, updatedAt: this.clock.nowMs() });

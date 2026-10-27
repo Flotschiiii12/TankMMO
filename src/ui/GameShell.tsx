@@ -80,6 +80,7 @@ export const GameShell: React.FC = () => {
 
     // Check ?debug=1 URL parameter for rapid testing
     if (typeof window !== 'undefined' && window.location.search.includes('debug=1')) {
+      (window as any).__tf = { client };
       setShowDebug(true);
       setProfile((prev) => {
         const bonusScrap = Math.max(prev.scrap, 50000);

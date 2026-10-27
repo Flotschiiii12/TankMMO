@@ -7,7 +7,7 @@ import { MarketRepo, PremiumWallet } from './market.ts';
 import { openDatabase, SqliteArenaRepo, SqliteWarRepo, SqliteAccountRepo, SqliteChatRepo, SqliteProfileRepo } from './db.ts';
 import { GameServer } from './gameServer.ts';
 
-export interface AppOptions { dbPath?: string; staticDir?: string; adminToken?: string }
+export interface AppOptions { dbPath?: string; staticDir?: string; adminToken?: string; clock?: { nowMs(): number } }
 
 const hits = new Map<string, number[]>();
 /** Tiny per-IP rate limiter for the REST endpoints. */
@@ -38,7 +38,7 @@ export function createApp(opts: AppOptions = {}) {
   const app = express();
   app.use(express.json({ limit: '8kb' }));
   const server = http.createServer(app);
-  const game = new GameServer({ accounts, profiles, chat, service, social, arena, war, market, premium, adminToken: opts.adminToken }, server);
+  const game = new GameServer({ accounts, profiles, chat, service, social, arena, war, market, premium, adminToken: opts.adminToken, clock: opts.clock }, server);
 
   app.get('/health', (_req, res) => res.json({ ok: true, players: game.playerCount(), instances: game.instanceInfo().length }));
   app.get('/metrics', (_req, res) => {
@@ -106,6 +106,7 @@ export function createApp(opts: AppOptions = {}) {
   const admin = express.Router();
   admin.use(adminOk);
   admin.get('/stats', (_req, res) => res.json({ accounts: accounts.count(), online: game.playerCount(), instances: game.instanceInfo(), metrics: game.metrics }));
+  admin.get('/flagged', (_req, res) => res.json(game.antiCheat.flagged(Date.now())));
   admin.get('/online', (_req, res) => res.json(game.onlineNames()));
   admin.get('/players', (req, res) => {
     const q = String(req.query.q ?? '').toLowerCase();

@@ -22,6 +22,7 @@ export type OnlineStatus = 'connecting' | 'online' | 'closed';
  */
 export class OnlineGameClient implements GameClient {
   playerId = 0;
+  mapId = 1;
   character: CharacterState | null = null;
   ammo: Record<string, number> = {};
   status: OnlineStatus = 'connecting';
@@ -91,6 +92,7 @@ export class OnlineGameClient implements GameClient {
     switch (m.type) {
       case 's_map': {
         this.playerId = m.assignedEntityId;
+        this.mapId = m.mapId;
         this.entities.clear();
         this.tweens.clear();
         this.predicted = null;

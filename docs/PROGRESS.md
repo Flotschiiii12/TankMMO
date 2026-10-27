@@ -11,8 +11,8 @@
 - [~] **Milestone 7 (M7)** (server done + tested; browser client still plays offline, RemoteGameClient with prediction/interpolation is next): Server core: accounts (guest + recovery code), persistence (`node:sqlite` schemas + repositories), instance manager, authoritative simulation, protocol, snapshots with interest management, client prediction/interpolation, online-only flow, version gate, rate limits.
 - [x] **Milestone 8 (M8)** (server + UI; faction chat channel not implemented, factions chosen at account creation): Social: chat channels (Global, Map, Faction, Clan, Party, Whisper, System), profanity filter, report/block, friends list, parties (up to 5), profile card, rankings, clans (storage, research, wars), moderation dashboard (`/admin`).
 - [x] **Milestone 9 (M9)** (server rules + tests; no PvP/arena/war UI yet beyond the generic social modal): PvP: protection rules (level 15+, ±5 levels, spawn protection, safe zones), honor, bounties, weekly faction war control points, competitive arena (1v1, 3v3, 5v5, leagues, rating).
-- [ ] **Milestone 10 (M10)**: Economy: currencies (scrap, ore, honor, marks, keys, fragments), sinks/faucets, auction house (hub only), direct trade, premium currency model behind disabled flag (`FLAGS.premiumCurrencyEnabled=false`), `npm run econ-sim`.
-- [ ] **Milestone 11 (M11)**: Anti-cheat basics, scheduler (events, bosses, daily/weekly resets), observability (`/health`, `/metrics`, debug overlay), load test bot client (`npm run bots -- --count 200`), performance pass (60 fps client, stable 30 Hz server tick).
+- [x] **Milestone 10 (M10)**: Economy: currencies (scrap, ore, honor, marks, keys, fragments), sinks/faucets, auction house (hub only), direct trade, premium currency model behind disabled flag (`FLAGS.premiumCurrencyEnabled=false`), `npm run econ-sim`.
+- [x] **Milestone 11 (M11)** (single-thread server; worker threads are the next scaling step): Anti-cheat basics, scheduler (events, bosses, daily/weekly resets), observability (`/health`, `/metrics`, debug overlay), load test bot client (`npm run bots -- --count 200`), performance pass (60 fps client, stable 30 Hz server tick).
 - [ ] **Milestone 12 (M12)**: Full QA pass: end-to-end tests across every system, balance sweep, complete documentation, list of known gaps.
 
 ---
@@ -105,3 +105,11 @@ npm run build
 - Arena (shared/rules/arena.ts + server): leagues by combat power, Elo per mode (1v1/3v3/5v5), queue + league-widening after 30 s, countdown, best of 3, forfeit/dodge penalty (10 min), rewards, return to the hub.
 - Faction chosen at account creation (start region 1/5/9); change costs 20,000 scrap and has a 7-day cooldown (action `change_faction`).
 - Tests: 104.
+
+### M10 / M11
+- Economy: auction house (hub only, 5 % tax reduced by talent/war discount, price band 0.5x-60x NPC value, 10 listings, 12/24/48 h, account >= 3 days, 2M scrap/day volume cap, escrow + mail for returns/proceeds), direct trade (friends or clan, both confirm, any change resets, atomic swap), NPC vendors (35 % of value), fast travel between visited maps (150 scrap per portal hop), premium "Cells" wallet with idempotent ledger and receipt-validation interface, all inert while FLAGS.premiumCurrencyEnabled is false, no random loot boxes.
+- `npm run econ-sim -- --players 100`: per-10-level faucet/sink table. Finding: sinks ~60-100 % of faucets after adding upgrades of all 4 gear pieces; levelling 1->60 takes ~44 simulated hours at 220 kills/h, which is FAR faster than the design target (months) -> XP curve / kill XP must be tuned before launch.
+- Anti-cheat basics: server authority, input clamping, command budget, replay rejection, bot heuristics (regular timing, floods, 20 h sessions) in /admin/api/flagged and the online list.
+- Scheduler (once a minute): daily/weekly quest rotation, season rollover, weekly war result announcement; events and world bosses run in instances; world messages are forwarded as system chat. Structured JSON logs, /health, /metrics.
+- Persistence: autosave 30 s plus immediate saves for craft/upgrade/trade/purchase/level-up/quest claims, save on disconnect and SIGTERM.
+- Tests: 113.

@@ -85,7 +85,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     clientRef.current = client;
     if (online) {
       const adopt = (ch: CharacterState, ammo: Record<string, number>) =>
-        setProfile((prev) => ({ ...prev, playerName: ch.name, character: ch, ammoInventory: { ...prev.ammoInventory, ...(ammo as any) } }));
+        setProfile((prev) => ({ ...prev, playerName: ch.name, currentMapId: String(online.mapId), character: ch, ammoInventory: { ...prev.ammoInventory, ...(ammo as any) } }));
       if (online.character) adopt(online.character, online.ammo);
       online.onCharacter(adopt);
       online.onSocialEvent((kind, d) => {
@@ -672,6 +672,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
   const handleTravelToMap = useCallback(
     (targetMapId: number | string) => {
+      if (online) {
+        void online.social({ op: 'fast_travel', mapId: Number(targetMapId) });
+        return;
+      }
       if (clientRef.current) {
         soundEngine.playGateHum();
         cameraRef.current.addShake(7);
@@ -789,7 +793,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         onAction={performAction}
       />
 
-      {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} />}
+      {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} character={profile.character} />}
       {online && gameState === 'PLAYING' && <ChatInput client={online} />}
 
       <QuestModal

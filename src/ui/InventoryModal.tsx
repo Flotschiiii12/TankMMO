@@ -172,6 +172,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                         </>
                       );
                     })()}
+                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { void run({ kind: 'sell_item', uid: sel.uid }, 'Sold to vendor'); setSelected(null); }} className="px-2 py-1 rounded bg-slate-700 text-white">Sell ({C.npcSellValue(sel)})</button>}
                     {!C.isEquipped(ch, sel.uid) && <button onClick={() => { run({ kind: 'dismantle', uid: sel.uid }, 'Dismantled'); setSelected(null); }} className="px-2 py-1 rounded bg-rose-700/70 text-white">Dismantle</button>}
                   </div>
                   {fusionCandidates.length >= 3 && (

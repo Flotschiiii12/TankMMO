@@ -22,6 +22,7 @@ import { AccountService } from './accounts.ts';
 import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
 import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
 import { SqliteArenaRepo, SqliteWarRepo } from './db.ts';
+import { AntiCheat } from './anticheat.ts';
 import { auctionTax, AUCTION_MAX_LISTINGS, DAILY_TRADE_VOLUME_CAP, MarketRepo, PremiumWallet, rejectingValidator, ReceiptValidator, SHOP_CATALOG, INVENTORY_FREE } from './market.ts';
 import { FLAGS } from '../shared/flags.ts';
 import { MAP_CONNECTIONS } from '../shared/data/maps.ts';
@@ -43,6 +44,12 @@ export const CHAT_MIN_INTERVAL_MS = 1000;
 export const CHAT_BURST = { count: 5, windowMs: 10_000 };
 
 export interface Clock { nowMs(): number }
+
+/** Structured JSON log line (one object per line) for log shippers. */
+export function log(level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown> = {}): void {
+  if (process.env.LOG_QUIET === '1' || process.env.VITEST) return;
+  console.log(JSON.stringify({ t: new Date().toISOString(), level, event, ...data }));
+}
 const realClock: Clock = { nowMs: () => Date.now() };
 
 interface Instance {
@@ -51,6 +58,7 @@ interface Instance {
   map: MapDef;
   world: World;
   sessions: Set<Session>;
+  chatSent: number;
   arena?: { state: AR.MatchState; teams: [Session[], Session[]]; forfeits: Set<string>; mode: AR.ArenaMode; ratings: Map<string, number>; returnTo: Map<string, { mapId: number }>; };
 }
 
@@ -121,6 +129,9 @@ export class GameServer {
   private arenaQueue: AR.QueueEntry[] = [];
   private arenaBans = new Map<string, number>(); // accountId -> until (ms)
   private arenaSeq = 0;
+  readonly antiCheat = new AntiCheat();
+  private lastDay = '';
+  private lastWeek = '';
   private trades = new Map<string, TradeSession>(); // by accountId (both sides point to the same session)
   private parties = new Map<number, Party>();
   private partyCounter = 0;
@@ -183,7 +194,7 @@ export class GameServer {
     }
     if (this.tick % TICK_HZ === 0) this.runMatchmaking();
     if (this.tick % (TICK_HZ * 30) === 0) this.flushWarScores();
-    if (this.tick % (TICK_HZ * 60) === 0) this.sweepAuctions();
+    if (this.tick % (TICK_HZ * 60) === 0) { this.sweepAuctions(); this.runScheduler(); }
     if (this.tick % (TICK_HZ * AUTOSAVE_SECONDS) === 0) for (const s of this.sessions.values()) if (s.dirty) this.save(s);
     const ms = performance.now() - t0;
     this.metrics.ticks++;
@@ -201,7 +212,7 @@ export class GameServer {
     const map = getMapById(mapId) as MapDef;
     const n = ++this.instanceCounter;
     const world = createWorld({ map, seed: mapId * 7919 + n, clockOffset: Math.floor(this.clock.nowMs() / 1000) });
-    const inst: Instance = { id: `i${mapId}-${list.length + 1}`, mapId, map, world, sessions: new Set() };
+    const inst: Instance = { id: `i${mapId}-${list.length + 1}`, mapId, map, world, sessions: new Set(), chatSent: world.chat.length };
     list.push(inst);
     void preferInstanceOf;
     return inst;
@@ -213,8 +224,9 @@ export class GameServer {
 
   playerCount(): number { return this.sessions.size; }
 
-  onlineNames(): Array<{ id: string; name: string; level: number; mapId: number; suspicious: number }> {
-    return [...this.sessions.values()].map((s) => ({ id: s.accountId, name: s.name, level: s.character.level, mapId: s.instance.mapId, suspicious: s.suspicious }));
+  onlineNames(): Array<{ id: string; name: string; level: number; mapId: number; suspicious: number; botScore: number }> {
+    const now = this.clock.nowMs();
+    return [...this.sessions.values()].map((s) => ({ id: s.accountId, name: s.name, level: s.character.level, mapId: s.instance.mapId, suspicious: s.suspicious, botScore: this.antiCheat.report(s.accountId, now)?.score ?? 0 }));
   }
 
   /** Admin: disconnect a player (saves first). */
@@ -307,6 +319,7 @@ export class GameServer {
         this.arenaQueue = this.arenaQueue.filter((e) => e.id !== session!.accountId);
         this.leave(session);
         this.save(session);
+        this.antiCheat.leave(session.accountId);
         this.sessions.delete(session.accountId);
       }
     });
@@ -352,6 +365,7 @@ export class GameServer {
       rng: new SimRNG((this.clock.nowMs() ^ auth.account.id.length) >>> 0),
     };
     this.sessions.set(s.accountId, s);
+    this.antiCheat.join(s.accountId, s.name, this.clock.nowMs());
     this.deps.accounts.touch(s.accountId, this.clock.nowMs());
     Q.refreshQuests(character, Math.floor(this.clock.nowMs() / 1000));
     this.send(s, { type: 's_welcome', protocolVersion: PROTOCOL_VERSION, assignedEntityId: 0, mapId: String(mapId), serverTick: this.tick });
@@ -378,16 +392,17 @@ export class GameServer {
 
   private handleInput(s: Session, msg: Extract<ClientMessage, { type: 'c_input' }>): void {
     if (!Array.isArray(msg.commands) || typeof msg.seq !== 'number') return;
-    if (msg.seq <= s.lastSeq) { s.suspicious++; return; } // replayed or out-of-order
+    if (msg.seq <= s.lastSeq) { s.suspicious++; this.antiCheat.rejected(s.accountId, 'replay'); return; } // replayed or out-of-order
+    this.antiCheat.input(s.accountId, this.clock.nowMs());
     s.lastSeq = msg.seq;
     const ent = s.instance.world.entities.get(s.entityId);
     if (!ent || ent.hull <= 0) return;
     if (s.instance.arena && s.instance.arena.state.phase !== 'fighting') return; // frozen during countdown/break
     for (const raw of msg.commands.slice(0, MAX_COMMANDS_PER_PACKET)) {
-      if (s.cmdBudget < 1) { s.suspicious++; break; }
+      if (s.cmdBudget < 1) { s.suspicious++; this.antiCheat.rejected(s.accountId, 'flood'); break; }
       s.cmdBudget--;
       const cmd = this.sanitize(s, raw);
-      if (cmd) s.pending.push(cmd);
+      if (cmd) s.pending.push(cmd); else this.antiCheat.rejected(s.accountId, 'invalid');
     }
   }
 
@@ -659,6 +674,8 @@ export class GameServer {
       if (ent) refreshPlayerStats(ent, s.character);
       s.dirty = true;
       this.sendCharacter(s);
+      // value-changing operations are persisted immediately, not on the 30 s autosave
+      if (['craft', 'upgrade', 'fuse', 'dismantle', 'buy_vehicle', 'sell_item', 'claim_quest', 'claim_season_tier', 'change_faction'].includes(p.action.kind)) this.save(s);
     }
   }
 
@@ -688,6 +705,11 @@ export class GameServer {
     const byEntity = new Map<number, Session>();
     for (const s of inst.sessions) byEntity.set(s.entityId, s);
 
+    // World messages (boss alerts, event starts) go out as system chat
+    while (inst.chatSent < world.chat.length) {
+      const m = world.chat[inst.chatSent++];
+      if (m.sender !== 'HQ Commander') for (const s of inst.sessions) this.send(s, { type: 's_chat', message: m });
+    }
     for (const ev of world.events) {
       for (const s of inst.sessions) s.pendingEvents.push(ev);
       switch (ev.type) {
@@ -899,7 +921,7 @@ export class GameServer {
         this.givePurchased(s, l.item);
         market.addVolume(s.accountId, l.price); market.addVolume(l.seller, l.price);
         this.mailTo(l.seller, 'scrap', l.price - tax, `Sold an item for ${l.price} scrap (tax ${tax})`);
-        s.dirty = true; this.sendCharacter(s);
+        s.dirty = true; this.sendCharacter(s); this.save(s);
         return reply({ ok: true, data: { tax } });
       }
       case 'mail_list': return reply({ ok: true, data: market.mail(s.accountId) });
@@ -1052,7 +1074,7 @@ export class GameServer {
     };
     move(sa, sb, oa); move(sb, sa, ob);
     this.deps.market.addVolume(sa.accountId, volume); this.deps.market.addVolume(sb.accountId, volume);
-    for (const s of [sa, sb]) { s.dirty = true; this.sendCharacter(s); }
+    for (const s of [sa, sb]) { s.dirty = true; this.sendCharacter(s); this.save(s); }
     return { ok: true };
   }
 
@@ -1093,7 +1115,7 @@ export class GameServer {
   private startArenaMatch(m: AR.FoundMatch): void {
     const map = getMapById(30) as MapDef;
     const world = createWorld({ map, seed: 30 * 104729 + ++this.arenaSeq, populate: false, safeZones: [], pvp: { pvpEnabled: true, arena: true } });
-    const inst: Instance = { id: `a${this.arenaSeq}`, mapId: 30, map, world, sessions: new Set() };
+    const inst: Instance = { id: `a${this.arenaSeq}`, mapId: 30, map, world, sessions: new Set(), chatSent: world.chat.length };
     const teams: [Session[], Session[]] = [[], []];
     const ratings = new Map<string, number>();
     const returnTo = new Map<string, { mapId: number }>();
@@ -1165,6 +1187,27 @@ export class GameServer {
       this.save(s);
     }
     this.arenaInstances.delete(inst);
+  }
+
+  /**
+   * Once a minute: daily/weekly quest rotation for everyone online, season rollover (inside the quest rules), the weekly
+   * faction-war result announcement, and structured log lines. Event windows and world bosses run inside the instances.
+   */
+  runScheduler(): void {
+    const nowSec = Math.floor(this.clock.nowMs() / 1000);
+    const day = Q.dayKey(nowSec); const week = Q.weekKey(nowSec);
+    for (const s of this.sessions.values()) {
+      const r = Q.refreshQuests(s.character, nowSec);
+      if (r.dailyChanged || r.weeklyChanged) { s.dirty = true; this.sendCharacter(s); }
+    }
+    if (this.lastWeek && week !== this.lastWeek) {
+      const winner = weeklyWinner(this.deps.war.scores(this.lastWeek));
+      const text = winner ? `Faction war result: ${winner} won last week and gets the banner and a 2% market discount.` : 'Faction war: last week ended without a winner.';
+      this.announce(text);
+      for (const s of this.sessions.values()) this.send(s, { type: 's_social_event', kind: 'war_result', data: { winner } });
+    }
+    this.lastDay = day; this.lastWeek = week;
+    log('info', 'scheduler', { day, week, players: this.sessions.size, instances: this.instanceInfo().length });
   }
 
   /** Expired listings go back to the seller by mail. */

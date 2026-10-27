@@ -3,11 +3,16 @@ import { X, Users } from 'lucide-react';
 import { soundEngine } from '../audio/soundEngine.ts';
 import type { OnlineGameClient } from '../net/onlineClient.ts';
 import type { SocialOp } from '../../shared/protocol.ts';
-import { errorText } from '../game/actions.ts';
+import { describeItem, errorText } from '../game/actions.ts';
+import { ITEM_BY_ID } from '../../shared/data/items.ts';
+import { priceBandClient } from '../game/priceBand.ts';
 
-type Tab = 'friends' | 'party' | 'clan' | 'ranking';
+type Tab = 'friends' | 'party' | 'clan' | 'ranking' | 'market' | 'arena';
 
-export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; onClose: () => void; notices: string[] }> = ({ client, isOpen, onClose, notices }) => {
+export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; onClose: () => void; notices: string[]; character: import('../../shared/rules/character.ts').CharacterState }> = ({ client, isOpen, onClose, notices, character }) => {
+  const [sellUid, setSellUid] = useState('');
+  const [sellPrice, setSellPrice] = useState('');
+  const [mode, setMode] = useState<'1v1' | '3v3' | '5v5'>('1v1');
   const [tab, setTab] = useState<Tab>('friends');
   const [msg, setMsg] = useState('');
   const [name, setName] = useState('');
@@ -25,7 +30,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
   }, [client]);
 
   const load = useCallback(async () => {
-    const req: SocialOp = tab === 'friends' ? { op: 'friend_list' } : tab === 'party' ? { op: 'party_info' } : tab === 'clan' ? { op: 'clan_info' } : { op: 'ranking', kind: rankKind };
+    const req: SocialOp = tab === 'market' ? { op: 'ah_search' } : tab === 'arena' ? { op: 'arena_status' } : tab === 'friends' ? { op: 'friend_list' } : tab === 'party' ? { op: 'party_info' } : tab === 'clan' ? { op: 'clan_info' } : { op: 'ranking', kind: rankKind };
     const r = await client.social(req);
     setData(r.ok ? r.data : tab === 'clan' ? { none: true, invites: (await client.social({ op: 'clan_invites' })).data ?? [] } : null);
   }, [client, tab, rankKind]);
@@ -45,7 +50,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
           <button onClick={() => { soundEngine.playUIClick(); onClose(); }} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
         <div className="flex gap-2 mt-2 text-xs items-center">
-          {(['friends', 'party', 'clan', 'ranking'] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded capitalize ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{t}</button>)}
+          {(['friends', 'party', 'clan', 'ranking', 'market', 'arena'] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded capitalize ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{t}</button>)}
           {msg && <span className="ml-auto text-[11px] text-orange-300">{msg}</span>}
         </div>
         {notices.length > 0 && <div className="mt-2 text-[11px] text-emerald-300">{notices.slice(-2).join(' · ')}</div>}
@@ -97,6 +102,40 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
                 {(data?.invites ?? []).map((i: any) => <div key={i.clanId} className={row}><span>[{i.tag}] {i.name}</span><button className={btn} onClick={() => call({ op: 'clan_accept', clanId: i.clanId })}>Join</button></div>)}
               </>
             )
+          )}
+
+          {tab === 'market' && (
+            <>
+              <div className="text-[11px] text-slate-400">Auction house works in the hub (map 13). 5 % tax on sales, listings last 12/24/48 h.</div>
+              <div className="flex gap-1.5 items-center">
+                <select value={sellUid} onChange={(e) => setSellUid(e.target.value)} className="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs">
+                  <option value="">Item to sell…</option>
+                  {character.inventory.map((i) => <option key={i.uid} value={i.uid}>{describeItem(i).name} ({i.rarity})</option>)}
+                </select>
+                <input value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} placeholder={(() => { const it = character.inventory.find((i) => i.uid === sellUid); const b = it && priceBandClient(it.defId); return b ? `${b.min}-${b.max}` : 'price'; })()} className="w-28 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" />
+                <button className={btn} onClick={() => call({ op: 'ah_sell', uid: sellUid, price: Number(sellPrice), hours: 24 })}>List 24h</button>
+              </div>
+              {(data ?? []).map((l: any) => (
+                <div key={l.id} className={row}><span><b className="text-white">{describeItem(l.item).name}</b> <span className="text-slate-500">{l.item.rarity} · {l.sellerName}</span></span>
+                  <span className="flex gap-2 items-center"><b className="text-amber-300 tabular-nums">{l.price.toLocaleString()}</b><button className={btn} onClick={() => call({ op: 'ah_buy', id: l.id })}>Buy</button></span></div>
+              ))}
+              {(data ?? []).length === 0 && <div className="text-xs text-slate-500 p-2">No listings.</div>}
+              <button className={ghost} onClick={async () => { const r = await call({ op: 'mail_list' }, false); for (const m of r.data ?? []) await call({ op: 'mail_claim', id: m.id }, false); void load(); }}>Collect mail</button>
+              <button className={ghost} onClick={async () => { const mine = await client.social({ op: 'ah_mine' }); setMsg(`${mine.data?.length ?? 0} of your listings are active`); }}>My listings</button>
+            </>
+          )}
+
+          {tab === 'arena' && data && (
+            <>
+              <div className="text-xs text-slate-300">Your vehicle power <b className="text-orange-400">{data.power}</b> → league <b className="text-white capitalize">{data.league}</b>. Everyone fights with their own vehicle and gear.</div>
+              {Object.entries(data.ratings).map(([m, r]: any) => <div key={m} className={row}><span className="text-white">{m}</span><span className="text-slate-400">rating {r.rating} · {r.wins}W/{r.losses}L</span></div>)}
+              {data.banMinutes > 0 && <div className="text-xs text-rose-300">Queue ban: {data.banMinutes} min (left a match early)</div>}
+              <div className="flex gap-1.5 items-center">
+                {(['1v1', '3v3', '5v5'] as const).map((m) => <button key={m} onClick={() => setMode(m)} className={`px-2 py-1 rounded text-xs ${mode === m ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{m}</button>)}
+                {data.queued ? <button className={ghost} onClick={() => call({ op: 'arena_leave' })}>Leave queue ({data.queued})</button> : <button className={btn} onClick={() => call({ op: 'arena_queue', mode })}>Queue</button>}
+              </div>
+              <button className={ghost} onClick={async () => { const r = await client.social({ op: 'war_status' }); setMsg(r.ok ? `War week ${r.data.week}: ${Object.entries(r.data.scores).map(([f, v]) => `${f} ${v}`).join(' · ')}` : ''); }}>Faction war scores</button>
+            </>
           )}
 
           {tab === 'ranking' && (

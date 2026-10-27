@@ -61,6 +61,18 @@ export function drawVehicle(
   ctx.shadowOffsetX = 3.5 * zoom;
   ctx.shadowOffsetY = 4.5 * zoom;
 
+  if (ent.isWreck) {
+    const wreckImg = spriteRegistry.getImage(spriteRegistry.getFxPath(ent.id % 2 === 0 ? 'fx_09' : 'fx_10'));
+    if (wreckImg) {
+      const w = radius * 2.4;
+      const h = radius * 2.0;
+      ctx.drawImage(wreckImg, -w / 2, -h / 2, w, h);
+      ctx.restore();
+      ctx.restore();
+      return;
+    }
+  }
+
   const bodyImg = spriteRegistry.getImage(spriteRegistry.getVehicleBodyPath(tier, ent.kind));
   if (bodyImg) {
     const w = radius * 2.4;
@@ -346,6 +358,15 @@ export function drawEnemy(
 
   if (ent.isWreck) {
     ctx.globalAlpha = Math.max(0.15, Math.min(1.0, (ent.wreckTimer || 8.0) / 8.0));
+    const wreckImg = spriteRegistry.getImage(spriteRegistry.getFxPath(ent.id % 2 === 0 ? 'fx_09' : 'fx_10'));
+    if (wreckImg) {
+      ctx.save();
+      ctx.rotate(ent.chassisAngle);
+      ctx.drawImage(wreckImg, -r * 1.3, -r * 1.3, r * 2.6, r * 2.6);
+      ctx.restore();
+      ctx.restore();
+      return;
+    }
   }
 
   const enemyImg = spriteRegistry.getImage(spriteRegistry.getEnemyPath(ent.kind));
@@ -506,24 +527,42 @@ export function drawLootCrate(
   ctx.shadowOffsetX = 3 * zoom;
   ctx.shadowOffsetY = 4 * zoom;
 
-  // Pulsing gold aura
+  // Pulsing aura
   const pulse = 0.5 + Math.sin(time * 6 + crate.id) * 0.3;
-  ctx.fillStyle = `rgba(234, 179, 8, ${pulse * 0.45})`;
+  ctx.fillStyle = `rgba(234, 179, 8, ${pulse * 0.4})`;
   ctx.beginPath();
   ctx.arc(0, 0, r * 1.8, 0, Math.PI * 2);
   ctx.fill();
 
-  // Metal cargo box
-  ctx.fillStyle = '#ca8a04';
-  ctx.strokeStyle = '#fef08a';
-  ctx.lineWidth = 1.5;
-  ctx.fillRect(-r, -r, r * 2, r * 2);
-  ctx.strokeRect(-r, -r, r * 2, r * 2);
+  // Determine loot sprite
+  const fxId =
+    crate.lootKind === 'scrap'
+      ? 'fx_01'
+      : crate.lootKind === 'ore'
+      ? 'fx_02'
+      : crate.lootKind === 'ammo'
+      ? 'fx_03'
+      : crate.lootKind === 'repair'
+      ? 'fx_04'
+      : 'fx_01';
 
-  // Cross straps
-  ctx.fillStyle = '#422006';
-  ctx.fillRect(-r * 0.3, -r, r * 0.6, r * 2);
-  ctx.fillRect(-r, -r * 0.3, r * 2, r * 0.6);
+  const crateImg = spriteRegistry.getImage(spriteRegistry.getFxPath(fxId));
+  if (crateImg) {
+    const size = r * 2.3;
+    ctx.drawImage(crateImg, -size / 2, -size / 2, size, size);
+  } else {
+    // Metal cargo box vector fallback
+    ctx.fillStyle = '#ca8a04';
+    ctx.strokeStyle = '#fef08a';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(-r, -r, r * 2, r * 2);
+    ctx.strokeRect(-r, -r, r * 2, r * 2);
+
+    // Cross straps
+    ctx.fillStyle = '#422006';
+    ctx.fillRect(-r * 0.3, -r, r * 0.6, r * 2);
+    ctx.fillRect(-r, -r * 0.3, r * 2, r * 0.6);
+  }
 
   ctx.restore();
 }
@@ -541,31 +580,45 @@ export function drawGate(
   ctx.save();
   ctx.translate(s.x, s.y);
 
-  // Outer gate ring
-  ctx.strokeStyle = '#38bdf8';
-  ctx.lineWidth = 3 * zoom;
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.stroke();
+  const vortexImg = spriteRegistry.getImage(spriteRegistry.getFxPath('fx_07'));
+  const pylonImg = spriteRegistry.getImage(spriteRegistry.getFxPath('fx_08'));
 
-  // Swirling portal energy
-  const gradient = ctx.createRadialGradient(0, 0, 5, 0, 0, r);
-  gradient.addColorStop(0, 'rgba(56, 189, 248, 0.45)');
-  gradient.addColorStop(0.7, 'rgba(14, 165, 233, 0.25)');
-  gradient.addColorStop(1, 'rgba(2, 132, 199, 0.05)');
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fill();
+  if (vortexImg && pylonImg) {
+    // Rotating swirling vortex core
+    ctx.save();
+    ctx.rotate(time * 0.6);
+    ctx.drawImage(vortexImg, -r, -r, r * 2, r * 2);
+    ctx.restore();
 
-  // Energy arcs rotating
-  for (let i = 0; i < 4; i++) {
-    const angle = time * 2 + (i * Math.PI) / 2;
-    ctx.strokeStyle = '#7dd3fc';
-    ctx.lineWidth = 2 * zoom;
+    // Outer metallic gate ring / pylon
+    ctx.drawImage(pylonImg, -r * 1.15, -r * 1.15, r * 2.3, r * 2.3);
+  } else {
+    // Vector fallback: outer gate ring
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 3 * zoom;
     ctx.beginPath();
-    ctx.arc(0, 0, r * 0.75, angle, angle + Math.PI * 0.35);
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.stroke();
+
+    // Swirling portal energy
+    const gradient = ctx.createRadialGradient(0, 0, 5, 0, 0, r);
+    gradient.addColorStop(0, 'rgba(56, 189, 248, 0.45)');
+    gradient.addColorStop(0.7, 'rgba(14, 165, 233, 0.25)');
+    gradient.addColorStop(1, 'rgba(2, 132, 199, 0.05)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Energy arcs rotating
+    for (let i = 0; i < 4; i++) {
+      const angle = time * 2 + (i * Math.PI) / 2;
+      ctx.strokeStyle = '#7dd3fc';
+      ctx.lineWidth = 2 * zoom;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.75, angle, angle + Math.PI * 0.35);
+      ctx.stroke();
+    }
   }
 
   // Name plate with outline for legibility
@@ -597,7 +650,27 @@ export function drawLandmark(
   ctx.shadowOffsetX = 6 * zoom;
   ctx.shadowOffsetY = 8 * zoom;
 
-  if (landmark.type === 'watchtower' || landmark.type === 'windmill') {
+  // Check for lighthouse raster sprite
+  const lighthouseImg = spriteRegistry.getImage(spriteRegistry.getLandmarkPath('green_valley'));
+  if (landmark.type === 'lighthouse' && lighthouseImg) {
+    const size = 180 * zoom;
+    ctx.drawImage(lighthouseImg, -size / 2, -size / 2, size, size);
+
+    // Dynamic rotating beacon light cone beam
+    ctx.save();
+    ctx.rotate(time * 0.8);
+    const beamGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, 350 * zoom);
+    beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0.65)');
+    beamGrad.addColorStop(0.4, 'rgba(253, 224, 71, 0.25)');
+    beamGrad.addColorStop(1, 'rgba(253, 224, 71, 0)');
+    ctx.fillStyle = beamGrad;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, 350 * zoom, -0.25, 0.25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  } else if (landmark.type === 'watchtower' || landmark.type === 'windmill' || landmark.type === 'lighthouse') {
     // Highland Windmill Landmark with spinning sails
     // Octagonal stone mill tower base
     ctx.fillStyle = '#d6d3d1';
@@ -714,3 +787,84 @@ export function drawTelegraph(
 
   ctx.restore();
 }
+
+export function drawResourceNode(
+  ctx: CanvasRenderingContext2D,
+  node: SimEntity,
+  camera: Camera,
+  time = 0
+) {
+  const s = camera.worldToScreen(node.pos);
+  const zoom = camera.zoom;
+  const r = (node.radius || 28) * zoom;
+  const oreType = (node as any).nodeType || 'iron';
+  const remaining = (node as any).nodeOreRemaining ?? 50;
+
+  ctx.save();
+  ctx.translate(s.x, s.y);
+
+  // Soft drop shadow cast to bottom-right
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowBlur = 6 * zoom;
+  ctx.shadowOffsetX = 4 * zoom;
+  ctx.shadowOffsetY = 5 * zoom;
+
+  // Base rock polygon
+  ctx.fillStyle = '#3f3f46';
+  ctx.beginPath();
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2;
+    const rad = r * (0.8 + 0.25 * Math.sin(i * 3 + 1));
+    const x = Math.cos(a) * rad;
+    const y = Math.sin(a) * rad;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // Ore vein crystal coloration
+  let oreColor = '#94a3b8'; // Iron
+  let glowColor = '#cbd5e1';
+  if (oreType === 'copper') {
+    oreColor = '#ea580c';
+    glowColor = '#fb923c';
+  } else if (oreType === 'titanium') {
+    oreColor = '#0284c7';
+    glowColor = '#38bdf8';
+  } else if (oreType === 'crystal') {
+    oreColor = '#9333ea';
+    glowColor = '#c084fc';
+  }
+
+  // Glowing crystal shards on the rock
+  const pulse = 0.8 + Math.sin(time * 3 + node.id) * 0.2;
+  ctx.fillStyle = oreColor;
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.6);
+  ctx.lineTo(r * 0.4, 0);
+  ctx.lineTo(0, r * 0.4);
+  ctx.lineTo(-r * 0.4, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = glowColor;
+  ctx.globalAlpha = pulse;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  // Ore text label if nearby
+  const fontSize = Math.max(10, Math.round(11 * zoom));
+  ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.strokeStyle = '#09090b';
+  ctx.lineWidth = 3;
+  const label = `${oreType.toUpperCase()} (${remaining})`;
+  ctx.strokeText(label, s.x, s.y - r - 8);
+  ctx.fillStyle = glowColor;
+  ctx.fillText(label, s.x, s.y - r - 8);
+}
+

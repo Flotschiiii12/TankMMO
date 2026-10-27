@@ -2,6 +2,7 @@ import { AMMO_TYPES } from '../data/parts.ts';
 import { ENEMY_ARCHETYPES, SCRIPTED_ALLY_DRIVERS, SCRIPTED_CHAT_LINES } from '../data/enemies.ts';
 import { MAP_CATALOG } from '../data/maps.ts';
 import { VEHICLE_TIERS } from '../data/vehicles.ts';
+import { resolveDamage } from '../../shared/rules/combat.ts';
 import { SimRNG } from './rng.ts';
 import {
   AmmoType,
@@ -74,11 +75,13 @@ export function createWorld(mapId = 'green_valley', seed = 42): World {
   };
 
   spawnGates(world);
+  spawnResourceNodes(world);
   spawnInitialEnemies(world);
   spawnScriptedAllies(world);
 
   return world;
 }
+
 
 function getNextId(world: World): number {
   return world.nextEntityId++;
@@ -119,8 +122,51 @@ function spawnGates(world: World) {
       invulnerableTime: 999999,
       isHostile: false,
       gateId: gate.id,
-      targetMapId: gate.targetMapId,
+      targetMapId: String(gate.targetMapId),
     });
+  }
+}
+
+function spawnResourceNodes(world: World) {
+  const sharedNodes = (world.mapDef as any).resourceNodes;
+  if (!sharedNodes) return;
+  for (const node of sharedNodes) {
+    const id = getNextId(world);
+    world.entities.set(id, {
+      id,
+      kind: 'resource_node',
+      name: `${String(node.type).toUpperCase()} Deposit`,
+      level: 1,
+      pos: { x: node.x, y: node.y },
+      vel: vec2(),
+      chassisAngle: 0,
+      turretAngle: 0,
+      radius: node.radius || 28,
+      hull: 999999,
+      maxHull: 999999,
+      armor: 0,
+      maxArmor: 0,
+      armorRegenTimer: 0,
+      maxSpeed: 0,
+      turnRate: 0,
+      turretTurnRate: 0,
+      targetSpeed: 0,
+      mainReloadRemaining: 0,
+      mainReloadTime: 1,
+      mgReloadRemaining: 0,
+      selectedAmmo: 'standard',
+      smokeRemaining: 0,
+      smokeCooldown: 0,
+      repairRemaining: 0,
+      repairCooldown: 0,
+      overdriveRemaining: 0,
+      overdriveCooldown: 0,
+      invulnerableTime: 999999,
+      isHostile: false,
+      lootKind: 'ore',
+      nodeType: node.type,
+      nodeOreRemaining: node.currentOre || 50,
+    } as any);
   }
 }
 
@@ -361,9 +407,13 @@ export function stepWorld(
   // 7. Update gate interactions
   updateGates(world, dt);
 
-  // 8. Update respawn queues & scripted driver chat
+  // 8. Update resource mining
+  updateResourceMining(world, dt);
+
+  // 9. Update respawn queues & scripted driver chat
   updateWorldState(world, dt);
 }
+
 
 function applyCommand(world: World, ent: SimEntity, cmd: SimCommand) {
   if (ent.hull <= 0) return;
@@ -725,8 +775,9 @@ function updatePhysicsAndMovement(world: World, dt: number) {
     ent.pos.x = clamp(ent.pos.x, margin, world.mapDef.width - margin);
     ent.pos.y = clamp(ent.pos.y, margin, world.mapDef.height - margin);
 
-    // Collide with map obstacles
+    // Collide with map obstacles (trees and buildings block with circle collision at base, plants/small stones do not)
     for (const obs of world.mapDef.obstacles) {
+      if (obs.blocks === false) continue;
       const dx = ent.pos.x - obs.x;
       const dy = ent.pos.y - obs.y;
       const d = Math.hypot(dx, dy);
@@ -1113,48 +1164,30 @@ export function inflictDamage(
   if (victim.hull <= 0 || victim.invulnerableTime > 0) return;
   if (isInSafeZone(world, victim.pos)) return;
 
-  // 1. Angle of Impact multiplier:
-  // Front: 0.7x, Side: 1.0x, Rear: 1.4x
-  let angleMult = 1.0;
-  if (impactPos) {
-    const toImpact = { x: impactPos.x - victim.pos.x, y: impactPos.y - victim.pos.y };
-    const impactDir = Math.atan2(toImpact.y, toImpact.x);
-    const diff = Math.abs(angleDiff(impactDir, victim.chassisAngle));
-    if (diff < Math.PI * 0.25) {
-      angleMult = 0.7; // Front armor deflection
-    } else if (diff > Math.PI * 0.75) {
-      angleMult = 1.4; // Rear engine critical hit
-    } else {
-      angleMult = 1.0; // Side skirt impact
-    }
-  }
+  const res = resolveDamage({
+    rawDamage,
+    attackerPos: impactPos,
+    targetPos: victim.pos,
+    targetChassisAngle: victim.chassisAngle,
+    targetArmor: victim.armor,
+    targetMaxArmor: victim.maxArmor,
+    targetFlatReduction: 0,
+    isCrit: false,
+    isInvulnerable: victim.invulnerableTime > 0,
+  });
 
-  const modifiedDamage = Math.round(rawDamage * angleMult);
+  const modifiedDamage = Math.round(res.damageAfterReduction);
+  const armorDamage = Math.round(res.armorDamage);
+  const hullDamage = Math.round(res.hullDamage);
 
-  // 2. Armor absorption:
-  // Standard: armor absorbs 65% of damage.
-  // AP: ignores 35% of armor absorption.
-  const apRatio = ammoType === 'ap' ? 0.35 : 0;
-  const armorAbsorptionRatio = 0.65 * (1 - apRatio);
-
-  let armorDamage = Math.round(modifiedDamage * armorAbsorptionRatio);
-  let hullDamage = modifiedDamage - armorDamage;
-
-  if (victim.armor >= armorDamage) {
-    victim.armor -= armorDamage;
-  } else {
-    // Excess spills into hull
-    const spill = armorDamage - victim.armor;
-    victim.armor = 0;
-    hullDamage += spill;
-  }
-
+  victim.armor = res.newArmor;
   victim.hull = Math.max(0, victim.hull - hullDamage);
   victim.armorRegenTimer = 0; // Reset 8s out-of-combat timer
   victim.repairRemaining = 0; // Interrupt active repair kit!
   victim.hitFlashTimer = 0.12; // Trigger crisp white damage flash
 
-  const isCrit = angleMult > 1.2; // Rear engine critical hit
+  const isCrit = res.isCrit || res.isRearHit; // Rear engine critical hit
+  const angleMult = res.angleMultiplier;
 
   world.events.push({
     type: 'damage',
@@ -1233,6 +1266,9 @@ function dropLootCrate(world: World, victim: SimEntity) {
   const ammoType: AmmoType = world.rng.next() > 0.5 ? 'ap' : 'he';
 
   const id = getNextId(world);
+  const lootKind: 'scrap' | 'ore' | 'ammo' | 'repair' =
+    hasAmmo ? 'ammo' : parts > scrap ? 'ore' : (world.rng.next() > 0.75 ? 'repair' : 'scrap');
+
   world.entities.set(id, {
     id,
     kind: 'loot_crate',
@@ -1267,6 +1303,7 @@ function dropLootCrate(world: World, victim: SimEntity) {
     lootScrap: scrap,
     lootParts: parts,
     lootAmmo: hasAmmo ? { type: ammoType, count: 5 } : undefined,
+    lootKind,
   });
 }
 
@@ -1436,8 +1473,57 @@ function updateWorldState(world: World, dt: number) {
   }
 }
 
+function updateResourceMining(world: World, dt: number) {
+  const player = Array.from(world.entities.values()).find((e) => e.kind === 'player' && e.hull > 0);
+  if (!player) return;
+
+  let nearbyNode: SimEntity | undefined;
+  for (const ent of world.entities.values()) {
+    if (ent.kind === 'resource_node' && ((ent as any).nodeOreRemaining ?? 50) > 0) {
+      if (dist(player.pos, ent.pos) <= ent.radius + 40) {
+        nearbyNode = ent;
+        break;
+      }
+    }
+  }
+
+  if (nearbyNode) {
+    (player as any).miningTimer = ((player as any).miningTimer || 0) + dt;
+    if ((player as any).miningTimer >= 3.0) {
+      (player as any).miningTimer = 0;
+      const oreType = (nearbyNode as any).nodeType || 'iron';
+      const remaining = (nearbyNode as any).nodeOreRemaining ?? 50;
+      const oreMined = Math.min(25, remaining);
+      (nearbyNode as any).nodeOreRemaining = Math.max(0, remaining - oreMined);
+
+      world.events.push({
+        type: 'loot_collected',
+        payload: {
+          collectorId: player.id,
+          isPlayer: true,
+          scrap: 15,
+          parts: 25,
+          oreType,
+          oreAmount: oreMined,
+          pos: { ...nearbyNode.pos },
+        },
+      });
+    }
+  } else {
+    (player as any).miningTimer = 0;
+  }
+}
+
 export function isInSafeZone(world: World, pos: Vec2): boolean {
+  if (world.mapDef.safeZones && world.mapDef.safeZones.length > 0) {
+    for (const sz of world.mapDef.safeZones) {
+      if (distSq(pos, { x: sz.x, y: sz.y }) <= sz.radius * sz.radius) {
+        return true;
+      }
+    }
+  }
   if (!world.mapDef.safeZone) return false;
   const sz = world.mapDef.safeZone;
   return distSq(pos, { x: sz.x, y: sz.y }) <= sz.radius * sz.radius;
 }
+

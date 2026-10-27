@@ -1,14 +1,19 @@
 import { clamp, MapDef, SimEntity, Vec2, dist } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { ParticleSystem } from './particles.ts';
+import { spriteRegistry } from './assets.ts';
 import {
   drawEnemy,
   drawGate,
   drawLandmark,
   drawLootCrate,
+  drawResourceNode,
   drawTelegraph,
   drawVehicle,
 } from './vectorDraw.ts';
+
+
+const CHUNK_SIZE = 1000;
 
 export class WorldRenderer {
   private camera: Camera;
@@ -16,10 +21,159 @@ export class WorldRenderer {
 
   // Cached offscreen pattern canvases for high performance
   private terrainPatternCanvases = new Map<string, CanvasPattern>();
+  private chunkCanvases = new Map<string, HTMLCanvasElement>();
 
   constructor(camera: Camera, particles: ParticleSystem) {
     this.camera = camera;
     this.particles = particles;
+
+    // Invalidate chunk cache whenever newly discovered sprites finish loading
+    spriteRegistry.onChange(() => {
+      this.chunkCanvases.clear();
+      this.terrainPatternCanvases.clear();
+    });
+  }
+
+  private getChunkCanvas(mapDef: MapDef, cx: number, cy: number): HTMLCanvasElement {
+    const key = `${mapDef.id}_${cx}_${cy}`;
+    if (this.chunkCanvases.has(key)) {
+      return this.chunkCanvases.get(key)!;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = CHUNK_SIZE;
+    canvas.height = CHUNK_SIZE;
+    const cctx = canvas.getContext('2d');
+    if (!cctx) return canvas;
+
+    const worldX = cx * CHUNK_SIZE;
+    const worldY = cy * CHUNK_SIZE;
+
+    // 1. Base Ground (meadow.png for Green Valley, biome texture for others)
+    const baseGroundName = mapDef.biome === 'green_valley' ? 'meadow' : mapDef.biome;
+    const baseImg = spriteRegistry.getImage(spriteRegistry.getGroundPath(baseGroundName));
+    if (baseImg) {
+      const pattern = cctx.createPattern(baseImg, 'repeat');
+      if (pattern && typeof DOMMatrix !== 'undefined') {
+        const m = new DOMMatrix();
+        m.translateSelf(-worldX, -worldY);
+        pattern.setTransform(m);
+        cctx.fillStyle = pattern;
+      } else {
+        cctx.fillStyle = mapDef.biome === 'green_valley' ? '#559445' : '#c7844a';
+      }
+      cctx.fillRect(0, 0, CHUNK_SIZE, CHUNK_SIZE);
+    } else {
+      cctx.fillStyle = mapDef.biome === 'green_valley' ? '#559445' : '#c7844a';
+      cctx.fillRect(0, 0, CHUNK_SIZE, CHUNK_SIZE);
+      // Soft procedural grass tufts
+      for (let i = 0; i < 40; i++) {
+        const px = ((i * 73 + cx * 101) % CHUNK_SIZE);
+        const py = ((i * 127 + cy * 179) % CHUNK_SIZE);
+        cctx.fillStyle = i % 2 === 0 ? '#63a352' : '#49833a';
+        cctx.beginPath();
+        cctx.arc(px, py, 6 + (i % 4) * 3, 0, Math.PI * 2);
+        cctx.fill();
+      }
+    }
+
+    // 2. Green Valley Special Layers: Roads & Shore Blends
+    if (mapDef.biome === 'green_valley') {
+      // 2a. Shore Transition Layers along the River near y = 1400 + sin(x*0.003)*120
+      // Check if chunk vertical range [worldY, worldY + CHUNK_SIZE] intersects river [1250, 1550]
+      if (worldY <= 1600 && worldY + CHUNK_SIZE >= 1200) {
+        const coastalImg = spriteRegistry.getImage(spriteRegistry.getGroundPath('coastal_grass'));
+        const beachImg = spriteRegistry.getImage(spriteRegistry.getGroundPath('beach_sand'));
+        const wetImg = spriteRegistry.getImage(spriteRegistry.getGroundPath('wet_sand'));
+
+        const drawRiverBand = (patternImg: HTMLImageElement | null, color: string, lineWidth: number, alpha: number) => {
+          cctx.save();
+          cctx.globalAlpha = alpha;
+          if (patternImg) {
+            const p = cctx.createPattern(patternImg, 'repeat');
+            if (p && typeof DOMMatrix !== 'undefined') {
+              const m = new DOMMatrix();
+              m.translateSelf(-worldX, -worldY);
+              p.setTransform(m);
+              cctx.strokeStyle = p;
+            } else {
+              cctx.strokeStyle = color;
+            }
+          } else {
+            cctx.strokeStyle = color;
+          }
+
+          cctx.lineWidth = lineWidth;
+          cctx.lineCap = 'round';
+          cctx.lineJoin = 'round';
+          cctx.beginPath();
+          for (let x = worldX - 100; x <= worldX + CHUNK_SIZE + 100; x += 120) {
+            const y = 1400 + Math.sin(x * 0.003) * 120;
+            const lx = x - worldX;
+            const ly = y - worldY;
+            if (x === worldX - 100) cctx.moveTo(lx, ly);
+            else cctx.lineTo(lx, ly);
+          }
+          cctx.stroke();
+          cctx.restore();
+        };
+
+        // Feathered blend bands: coastal grass (widest) -> beach sand -> wet sand (narrowest near water)
+        drawRiverBand(coastalImg, '#78ab5a', 260, 0.85);
+        drawRiverBand(beachImg, '#dfcaa0', 190, 0.90);
+        drawRiverBand(wetImg, '#a68d66', 135, 0.95);
+      }
+
+      // 2b. Gravel Roads: North-South Highway (x=2000), East-West (y=2000), and Spur to Village
+      const gravelImg = spriteRegistry.getImage(spriteRegistry.getGroundPath('gravel_road'));
+      cctx.save();
+      if (gravelImg) {
+        const gp = cctx.createPattern(gravelImg, 'repeat');
+        if (gp && typeof DOMMatrix !== 'undefined') {
+          const m = new DOMMatrix();
+          m.translateSelf(-worldX, -worldY);
+          gp.setTransform(m);
+          cctx.strokeStyle = gp;
+        } else {
+          cctx.strokeStyle = '#c49a6c';
+        }
+      } else {
+        cctx.strokeStyle = '#c49a6c';
+      }
+
+      cctx.lineWidth = 85;
+      cctx.lineCap = 'round';
+      cctx.lineJoin = 'round';
+
+      // Road 1: North-South (x = 2000)
+      if (worldX <= 2100 && worldX + CHUNK_SIZE >= 1900) {
+        const lx = 2000 - worldX;
+        cctx.beginPath();
+        cctx.moveTo(lx, -50);
+        cctx.lineTo(lx, CHUNK_SIZE + 50);
+        cctx.stroke();
+      }
+
+      // Road 2: East-West Highway (y = 2000)
+      if (worldY <= 2100 && worldY + CHUNK_SIZE >= 1900) {
+        const ly = 2000 - worldY;
+        cctx.beginPath();
+        cctx.moveTo(-50, ly);
+        cctx.lineTo(CHUNK_SIZE + 50, ly);
+        cctx.stroke();
+      }
+
+      // Road 3: Spur to Northeast Village (from (2000, 2000) to (2700, 1650))
+      cctx.beginPath();
+      cctx.moveTo(2000 - worldX, 2000 - worldY);
+      cctx.lineTo(2700 - worldX, 1650 - worldY);
+      cctx.stroke();
+
+      cctx.restore();
+    }
+
+    this.chunkCanvases.set(key, canvas);
+    return canvas;
   }
 
   private getTerrainPattern(ctx: CanvasRenderingContext2D, biome: string): CanvasPattern | null {
@@ -137,8 +291,12 @@ export class WorldRenderer {
     // 3. Render Slow Zones (Mud, Water, Snow)
     this.renderSlowZones(ctx, mapDef);
 
-    // 4. Render Safe Zone perimeter
-    if (mapDef.safeZone) {
+    // 4. Render Safe Zone perimeters
+    if (mapDef.safeZones && mapDef.safeZones.length > 0) {
+      for (const sz of mapDef.safeZones) {
+        this.renderSafeZone(ctx, sz, time);
+      }
+    } else if (mapDef.safeZone) {
       this.renderSafeZone(ctx, mapDef.safeZone, time);
     }
 
@@ -152,25 +310,35 @@ export class WorldRenderer {
       }
     }
 
-    // 7. Render Props (Trees, Rocks, Ruins) with drop shadows and top-left lighting
+    // 7. Render Resource Nodes
+    for (const ent of entities) {
+      if (ent.kind === 'resource_node') {
+        drawResourceNode(ctx, ent, this.camera, time);
+      }
+    }
+
+    // 8. Render Props (Trees, Rocks, Ruins) with drop shadows and top-left lighting
     this.renderObstacles(ctx, mapDef);
 
-    // 8. Render Landmark
-    drawLandmark(ctx, mapDef.landmark, this.camera, time);
+    // 9. Render Landmark
+    if (mapDef.landmark) {
+      drawLandmark(ctx, mapDef.landmark, this.camera, time);
+    }
 
-    // 9. Render Telegraph Danger Rings
+    // 10. Render Telegraph Danger Rings
     for (const ent of entities) {
       if (ent.kind === 'telegraph') {
         drawTelegraph(ctx, ent, this.camera);
       }
     }
 
-    // 10. Render Loot Crates
+    // 11. Render Loot Crates
     for (const ent of entities) {
       if (ent.kind === 'loot_crate') {
         drawLootCrate(ctx, ent, this.camera, time);
       }
     }
+
 
     // 11. Render Vehicles & Enemies (Culled off-screen)
     for (const ent of entities) {
@@ -243,27 +411,26 @@ export class WorldRenderer {
 
   private renderTerrain(ctx: CanvasRenderingContext2D, mapDef: MapDef) {
     const zoom = this.camera.zoom;
-    const pattern = this.getTerrainPattern(ctx, mapDef.biome);
 
-    if (pattern) {
-      ctx.save();
-      const originX = (this.camera.viewportWidth / 2 - this.camera.pos.x * zoom);
-      const originY = (this.camera.viewportHeight / 2 - this.camera.pos.y * zoom);
+    // 1. Calculate visible chunks covering the current camera viewport
+    const halfVw = (this.camera.viewportWidth / 2) / zoom;
+    const halfVh = (this.camera.viewportHeight / 2) / zoom;
+    const worldLeft = this.camera.pos.x - halfVw;
+    const worldRight = this.camera.pos.x + halfVw;
+    const worldTop = this.camera.pos.y - halfVh;
+    const worldBottom = this.camera.pos.y + halfVh;
 
-      // Apply matrix translation so the texture pattern moves naturally with camera
-      if (typeof DOMMatrix !== 'undefined') {
-        const matrix = new DOMMatrix();
-        matrix.translateSelf(originX, originY);
-        matrix.scaleSelf(zoom, zoom);
-        pattern.setTransform(matrix);
+    const minCX = Math.max(0, Math.floor(worldLeft / CHUNK_SIZE));
+    const maxCX = Math.min(Math.floor(mapDef.width / CHUNK_SIZE), Math.floor(worldRight / CHUNK_SIZE));
+    const minCY = Math.max(0, Math.floor(worldTop / CHUNK_SIZE));
+    const maxCY = Math.min(Math.floor(mapDef.height / CHUNK_SIZE), Math.floor(worldBottom / CHUNK_SIZE));
+
+    for (let cy = minCY; cy <= maxCY; cy++) {
+      for (let cx = minCX; cx <= maxCX; cx++) {
+        const chunkCanvas = this.getChunkCanvas(mapDef, cx, cy);
+        const s = this.camera.worldToScreen({ x: cx * CHUNK_SIZE, y: cy * CHUNK_SIZE });
+        ctx.drawImage(chunkCanvas, s.x, s.y, CHUNK_SIZE * zoom, CHUNK_SIZE * zoom);
       }
-
-      ctx.fillStyle = pattern;
-      ctx.fillRect(0, 0, this.camera.viewportWidth, this.camera.viewportHeight);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = mapDef.biome === 'green_valley' ? '#559445' : '#c7844a';
-      ctx.fillRect(0, 0, this.camera.viewportWidth, this.camera.viewportHeight);
     }
 
     // Subtle soft world grid
@@ -299,7 +466,27 @@ export class WorldRenderer {
 
     // Continuous winding river across map near y = 1400
     ctx.save();
-    ctx.strokeStyle = '#38bdf8';
+
+    // Check for shallow_water.png tile texture to animate by scrolling pattern
+    const waterImg = spriteRegistry.getImage(spriteRegistry.getGroundPath('shallow_water'));
+    if (waterImg) {
+      const pattern = ctx.createPattern(waterImg, 'repeat');
+      if (pattern && typeof DOMMatrix !== 'undefined') {
+        const originX = (this.camera.viewportWidth / 2 - this.camera.pos.x * zoom);
+        const originY = (this.camera.viewportHeight / 2 - this.camera.pos.y * zoom);
+        const m = new DOMMatrix();
+        // Slowly scrolling water ripple tile animation
+        m.translateSelf(originX + (time * 18) * zoom, originY + (time * 10) * zoom);
+        m.scaleSelf(zoom, zoom);
+        pattern.setTransform(m);
+        ctx.strokeStyle = pattern;
+      } else {
+        ctx.strokeStyle = '#38bdf8';
+      }
+    } else {
+      ctx.strokeStyle = '#38bdf8';
+    }
+
     ctx.lineWidth = 90 * zoom;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -313,11 +500,11 @@ export class WorldRenderer {
     }
     ctx.stroke();
 
-    // Animated water ripples
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.lineWidth = 2 * zoom;
-    ctx.setLineDash([14, 22]);
-    ctx.lineDashOffset = -time * 40;
+    // Animated water surface caustic ripples
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.lineWidth = 2.5 * zoom;
+    ctx.setLineDash([14, 24]);
+    ctx.lineDashOffset = -time * 45;
     ctx.stroke();
 
     // Wooden Crossing Bridge at (2000, 1400)
@@ -376,10 +563,26 @@ export class WorldRenderer {
   private renderSafeZone(ctx: CanvasRenderingContext2D, safeZone: { x: number; y: number; radius: number }, time: number) {
     const s = this.camera.worldToScreen({ x: safeZone.x, y: safeZone.y });
     const r = safeZone.radius * this.camera.zoom;
+    const zoom = this.camera.zoom;
 
     ctx.save();
+
+    // Draw /assets/props/home_base.png at safe zone center
+    const homeBaseImg = spriteRegistry.getImage(spriteRegistry.getPropPath('home_base'));
+    if (homeBaseImg) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+      ctx.shadowBlur = 10 * zoom;
+      ctx.shadowOffsetX = 6 * zoom;
+      ctx.shadowOffsetY = 8 * zoom;
+      const baseSize = 220 * zoom;
+      ctx.drawImage(homeBaseImg, s.x - baseSize / 2, s.y - baseSize / 2, baseSize, baseSize);
+      ctx.restore();
+    }
+
+    // Outer safe perimeter defensive field
     ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
-    ctx.lineWidth = 2.5 * this.camera.zoom;
+    ctx.lineWidth = 2.5 * zoom;
     ctx.setLineDash([12, 8]);
     ctx.lineDashOffset = -time * 15;
     ctx.beginPath();
@@ -402,14 +605,75 @@ export class WorldRenderer {
 
       // Viewport culling
       if (
-        s.x < -r - 50 ||
-        s.x > this.camera.viewportWidth + r + 50 ||
-        s.y < -r - 50 ||
-        s.y > this.camera.viewportHeight + r + 50
+        s.x < -r - 60 ||
+        s.x > this.camera.viewportWidth + r + 60 ||
+        s.y < -r - 60 ||
+        s.y > this.camera.viewportHeight + r + 60
       ) {
         continue;
       }
 
+      // 1. Check for pluggable prop sprite (/assets/props/ or /assets/fx/)
+      if (obs.propId) {
+        if (obs.propId === 'fx_12') {
+          // Campfire prop with warm pulsating glow aura
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          const pulse = 0.5 + Math.sin(Date.now() * 0.006) * 0.25;
+          const auraGrad = ctx.createRadialGradient(0, 0, 5 * zoom, 0, 0, 48 * zoom);
+          auraGrad.addColorStop(0, `rgba(251, 146, 60, ${0.45 * pulse})`);
+          auraGrad.addColorStop(0.6, `rgba(234, 88, 12, ${0.2 * pulse})`);
+          auraGrad.addColorStop(1, 'rgba(234, 88, 12, 0)');
+          ctx.fillStyle = auraGrad;
+          ctx.beginPath();
+          ctx.arc(0, 0, 48 * zoom, 0, Math.PI * 2);
+          ctx.fill();
+
+          const fireImg = spriteRegistry.getImage(spriteRegistry.getFxPath('fx_12'));
+          if (fireImg) {
+            const sz = 34 * zoom;
+            ctx.drawImage(fireImg, -sz / 2, -sz / 2, sz, sz);
+          } else {
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(0, 0, 12 * zoom, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+          continue;
+        }
+
+        const propImg = spriteRegistry.getImage(spriteRegistry.getPropPath(obs.propId));
+        if (propImg) {
+          ctx.save();
+          ctx.translate(s.x, s.y);
+
+          // Soft drop shadow cast to bottom-right
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.38)';
+          ctx.shadowBlur = 6 * zoom;
+          ctx.shadowOffsetX = 4 * zoom;
+          ctx.shadowOffsetY = 6 * zoom;
+
+          let pw = (obs.width || obs.radius * 2.2) * zoom;
+          let ph = (obs.height || obs.radius * 2.2) * zoom;
+          if (obs.type === 'tree') {
+            pw = 80 * zoom;
+            ph = 80 * zoom;
+          } else if (obs.type === 'plant') {
+            pw = 36 * zoom;
+            ph = 36 * zoom;
+          } else if (obs.type === 'harbor') {
+            pw = 56 * zoom;
+            ph = 56 * zoom;
+          }
+
+          ctx.drawImage(propImg, -pw / 2, -ph / 2, pw, ph);
+          ctx.restore();
+          continue;
+        }
+      }
+
+      // 2. Procedural Vector Fallback
       ctx.save();
       ctx.translate(s.x, s.y);
 
@@ -421,34 +685,34 @@ export class WorldRenderer {
 
       if (obs.type === 'tree') {
         // Multi-layered pine/foliage canopy with top-left sun illumination
-        // Dark base canopy
         ctx.fillStyle = '#064e3b';
         ctx.beginPath();
         ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.fill();
 
-        // Mid-tone canopy
         ctx.fillStyle = '#059669';
         ctx.beginPath();
         ctx.arc(-r * 0.15, -r * 0.15, r * 0.75, 0, Math.PI * 2);
         ctx.fill();
 
-        // Sunlit top-left highlight
         ctx.fillStyle = '#34d399';
         ctx.beginPath();
         ctx.arc(-r * 0.28, -r * 0.28, r * 0.45, 0, Math.PI * 2);
         ctx.fill();
       } else if (obs.type === 'rock') {
-        // Faceted polygon rock with lit top-left and shadow bottom-right
         ctx.fillStyle = '#3f3f46';
         ctx.beginPath();
         ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.fill();
 
-        // Lit facet
         ctx.fillStyle = '#71717a';
         ctx.beginPath();
         ctx.arc(-r * 0.2, -r * 0.2, r * 0.65, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (obs.type === 'plant') {
+        ctx.fillStyle = '#16a34a';
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.8, 0, Math.PI * 2);
         ctx.fill();
       } else {
         // Ruin / Wall / Building
@@ -457,7 +721,6 @@ export class WorldRenderer {
         ctx.fillStyle = '#475569';
         ctx.fillRect(-w / 2, -h / 2, w, h);
 
-        // Highlight roof ridge
         ctx.fillStyle = '#64748b';
         ctx.fillRect(-w / 2, -h / 2, w * 0.5, h);
       }
@@ -482,6 +745,22 @@ export class WorldRenderer {
         continue;
       }
 
+      const isTracer = proj.name === 'MG Tracer' || (proj.radius && proj.radius <= 2);
+      const spritePath = spriteRegistry.getFxPath(isTracer ? 'fx_19' : 'fx_18');
+      const pImg = spriteRegistry.getImage(spritePath);
+
+      if (pImg) {
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(proj.chassisAngle);
+        const pw = (isTracer ? 18 : 24) * zoom;
+        const ph = (isTracer ? 7 : 12) * zoom;
+        ctx.drawImage(pImg, -pw / 2, -ph / 2, pw, ph);
+        ctx.restore();
+        continue;
+      }
+
+      // Vector fallback
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.rotate(proj.chassisAngle);

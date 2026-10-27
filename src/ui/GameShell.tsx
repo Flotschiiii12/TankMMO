@@ -15,6 +15,7 @@ import { TutorialOverlay } from './TutorialOverlay.tsx';
 import { DebugPanel } from './DebugPanel.tsx';
 import { TitleScreen } from './TitleScreen.tsx';
 import { PortraitWarning } from './PortraitWarning.tsx';
+import { WorldMapModal } from './WorldMapModal.tsx';
 import { isInSafeZone, spawnDebugTargetEnemies } from '../sim/world.ts';
 import { VEHICLE_TIERS } from '../data/vehicles.ts';
 
@@ -30,7 +31,9 @@ export const GameShell: React.FC = () => {
   const [garageOpen, setGarageOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [worldMapOpen, setWorldMapOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(profile.tutorialStep < 4);
+
   const [showDebug, setShowDebug] = useState(profile.settings.showDebug);
   const [soundMuted, setSoundMuted] = useState(!profile.settings.soundEnabled);
 
@@ -186,7 +189,11 @@ export const GameShell: React.FC = () => {
           const p = event.payload;
           if (p.isPlayer) {
             soundEngine.playPickup();
-            particles.emitDamageText(p.pos, `+${p.scrap} Scrap`, '#eab308');
+            if (p.oreAmount && p.oreType) {
+              particles.emitDamageText(p.pos, `+${p.oreAmount} ${String(p.oreType).toUpperCase()}`, '#38bdf8');
+            } else {
+              particles.emitDamageText(p.pos, `+${p.scrap} Scrap`, '#eab308');
+            }
 
             // Tutorial auto-advance: Collected loot!
             if (profile.tutorialStep === 3) {
@@ -194,6 +201,7 @@ export const GameShell: React.FC = () => {
               saveProfile(updated);
               setTutorialOpen(false);
             }
+
 
             // Update user profile currencies
             setProfile((prev) => {
@@ -371,17 +379,32 @@ export const GameShell: React.FC = () => {
     };
   }, [profile, saveProfile, showDebug]);
 
-  // F3 Key listener for debug panel toggle
+  // Keyboard shortcuts listener for M (Map), I (Inventory), V (Garage), F3 (Debug)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.code === 'F3') {
         e.preventDefault();
         setShowDebug((prev) => !prev);
+      } else if (e.code === 'KeyM') {
+        e.preventDefault();
+        setWorldMapOpen((prev) => !prev);
+      } else if (e.code === 'KeyI') {
+        e.preventDefault();
+        setInventoryOpen((prev) => !prev);
+      } else if (e.code === 'KeyV') {
+        e.preventDefault();
+        setGarageOpen((prev) => !prev);
+      } else if (e.code === 'Escape') {
+        setWorldMapOpen(false);
+        setInventoryOpen(false);
+        setGarageOpen(false);
+        setSettingsOpen(false);
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
+
 
   // Multi-Touch Pinch-to-Zoom & Canvas Interaction Handlers
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -587,8 +610,25 @@ export const GameShell: React.FC = () => {
     }
   };
 
+  const handleTravelToMap = useCallback(
+    (targetMapId: number | string) => {
+      if (clientRef.current) {
+        soundEngine.playGateHum();
+        cameraRef.current.addShake(7);
+        clientRef.current.fastTravelToMap(String(targetMapId));
+        setProfile((prev) => {
+          const updated = { ...prev, currentMapId: String(targetMapId) };
+          profileStoreRef.current.save(updated);
+          return updated;
+        });
+      }
+    },
+    []
+  );
+
   const activeSnapshot = clientRef.current?.getSnapshot();
   const playerEntity = clientRef.current?.getPredictedPlayer() || null;
+
   const currentMapDef = clientRef.current?.['clientWorld']?.mapDef;
   const inSafeZone =
     currentMapDef && playerEntity && clientRef.current
@@ -644,12 +684,14 @@ export const GameShell: React.FC = () => {
             }}
             onOpenGarage={() => setGarageOpen(true)}
             onOpenInventory={() => setInventoryOpen(true)}
+            onOpenWorldMap={() => setWorldMapOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenTutorial={() => {
               setTutorialOpen(true);
               saveProfile({ ...profile, tutorialStep: 0 });
             }}
           />
+
 
           <ControlsOverlay
             player={playerEntity}

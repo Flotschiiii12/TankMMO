@@ -9,44 +9,39 @@ Treadfront is a playable prototype of a 2D top-down vehicle combat web applicati
 The codebase maintains strict separation between **Simulation**, **Networking/Snapshot Serialization**, **Rendering**, **Audio Synthesis**, and **UI Shell**:
 
 ```
-/src
-├── sim/                # Pure TypeScript simulation (ZERO browser or DOM dependencies)
-│   ├── types.ts        # Vectors, entities, command definitions, events
-│   ├── rng.ts          # Deterministic 32-bit Mulberry32 PRNG
-│   ├── world.ts        # Fixed 30Hz simulation step, physics, combat rules, AI
-│   ├── realm.ts        # MapInstance (capacity) & Realm routing (gates)
-│   └── snapshot.ts     # Snapshot serialization & delta application
-├── net/                # Multiplayer-ready networking layer
-│   ├── protocol.ts     # ClientMessage & ServerMessage union types
-│   ├── transport.ts    # Transport interface & WebSocketTransport stub
-│   └── client.ts       # GameClient interface, LocalGameClient, RemoteGameClient
-├── save/               # Profile persistence
-│   └── profile.ts      # ProfileStore interface & LocalStorageProfileStore
-├── data/               # Plain data tables (balance, vehicle stats, enemies, maps)
-│   ├── vehicles.ts     # 6 vehicle tiers (Patchwork Scout to Aegis Titan)
-│   ├── parts.ts        # Cannons, Armors, Engines, and Ammo types
-│   ├── enemies.ts      # Buggies, Gunner trucks, Artillery, Convoy, Bosses
-│   └── maps.ts         # 4 Biomes (Green Valley, Canyon, Frostline, Ash City)
-├── audio/              # Procedural Web Audio API sound engine
-│   └── soundEngine.ts  # Cannons, machine guns, impacts, explosions, engine hum
-├── render/             # 2D canvas rendering & visual FX
-│   ├── assets.ts       # Pluggable sprite registry with silent vector fallback
-│   ├── camera.ts       # Smooth lerp camera with decaying screen shake
-│   ├── particles.ts    # Pooled particle system (dust, treads, muzzle, sparks)
-│   ├── vectorDraw.ts   # Procedural vector drawing for all tiers and enemies
-│   └── worldRenderer.ts# Main composite canvas renderer
-└── ui/                 # React UI shell (<25% screen occlusion on mobile)
-    ├── GameShell.tsx   # Top-level viewport manager & loop coordinator
-    ├── TitleScreen.tsx # Game title lockup & Start CTA
-    ├── HUD.tsx         # Quiet perimeter HUD (Currencies, ammo, map)
-    ├── Radar.tsx       # Circular radar with sector IDs and hostile counters
-    ├── ControlsOverlay.tsx # Virtual joystick, big Fire button & ability rings
-    ├── ChatLog.tsx     # Simulated driver communications log
-    ├── GarageModal.tsx # Safe-zone hangar for purchasing/equipping tiers & parts
-    ├── InventoryModal.tsx # Loadout inspection
-    ├── SettingsModal.tsx  # Audio volume, debug toggle, progress reset
-    ├── TutorialOverlay.tsx# 3-step Combat Field Manual for new pilots
-    └── DebugPanel.tsx  # F3 diagnostic metrics (FPS, tick duration, entities)
+/shared                 # Pure TypeScript simulation, combat rules, data tables, protocol
+├── types.ts            # Math vectors, entity definitions, commands, events
+├── flags.ts            # Feature flags (premiumCurrencyEnabled, pvpEnabled, auctionEnabled)
+├── prng.ts             # Deterministic sfc32 seeded PRNG
+├── rules/              # Pure game mechanics and combat formulas
+│   ├── combat.ts       # 80/20 armor split, impact angles (0.7x/1.0x/1.4x), flat reduction, crits
+│   ├── ammo.ts         # Ammo multipliers, armor-piercing bypass, splash, empty fallback
+│   ├── status.ts       # Status durations, Burning DoT, EMP stun diminishing returns
+│   ├── collision.ts    # Obstacle collisions, soft-push separation, terrain slow zones
+│   └── power.ts        # Vehicle combat power rating calculation
+├── sim/                # Deterministic 30 Hz simulation engine
+│   └── world.ts        # Pure World, createWorld, stepWorld, hashWorldState
+└── protocol.ts         # Network message schemas & handshake
+
+/src (client)           # React UI shell, Canvas 2D renderer, audio engine
+├── render/             # HTML5 2D canvas world renderer, camera lerp, particle pools
+├── ui/                 # Mobile-first HUD, virtual joystick, radar, modals
+├── audio/              # WebAudio procedural synthesis
+├── net/                # LocalGameClient & RemoteGameClient stubs
+└── save/               # Profile persistence
+
+/docs                   # System specifications & balance documentation
+├── GDD.md              # Complete Game Design Document
+├── BALANCE.md          # Exact formulas, damage models, XP, and TTK
+├── PROTOCOL.md         # WebSocket network protocol specification
+└── PROGRESS.md         # Milestone status tracking (M1 complete, M2-M12 checklist)
+
+/test                   # Vitest unit test suite
+├── combat.test.ts      # Angles, armor split, flat reduction, crits, marked
+├── ammo.test.ts        # Ammo multipliers, targets, fallback
+├── status.test.ts      # Durations, DoT, EMP diminishing returns
+├── collision.test.ts   # Obstacle blocking, water zones, vehicle push
+└── determinism.test.ts # 300-tick replay test verifying bit-identical state hashes
 ```
 
 ---
@@ -98,31 +93,51 @@ All gameplay tuning parameters are centralized in `/src/data/`:
 
 ---
 
-## 4. Pluggable Art Pipeline & Silent Console
+## 4. Pluggable Art Pipeline & Manifest Layer
 
-The asset pipeline uses `/public/assets/manifest.json` to inventory all available raster sprites:
-- Only files explicitly declared in the manifest are fetched. If an asset is missing or the manifest is empty (`"sprites": []`), the engine never issues speculative network requests, guaranteeing **zero 404 console errors**.
-- At startup, the asset loader logs exactly one clean telemetry line:
-  `[Treadfront Assets] 0 of 0 sprites found in manifest. Using procedural vector rendering.`
-- Dropping real sprite images into `/public/assets/` and listing their paths in `manifest.json` immediately swaps procedural rendering for raster sprites:
+The asset pipeline uses `/public/assets/manifest.json` to inventory all available raster sprites. Only files explicitly declared in the manifest are fetched; if an asset is not yet loaded or missing, the engine falls back silently to vector placeholders, guaranteeing **zero 404 console errors**.
 
-```json
-{
-  "sprites": [
-    "/assets/vehicles/t1_starter_body.png",
-    "/assets/vehicles/t1_starter_turret.png"
-  ]
-}
-```
+### Supported Art Assets:
 
-### Supported Asset IDs:
-- **Vehicle Chassis**: `/assets/vehicles/<tier>_<id>_body.png` (Facing right $\rightarrow$, transparent PNG).
-- **Vehicle Turret**: `/assets/vehicles/<tier>_<id>_turret.png` (Facing right $\rightarrow$, pivot point at center).
-- **Enemies**: `/assets/enemies/<id>.png` (e.g. `scout_buggy.png`, `boss_siege_crawler.png`).
-- **Props**: `/assets/props/<id>.png` (e.g. `tree.png`, `rock.png`, `ruin.png`).
-- **Landmarks**: `/assets/landmarks/<map>.png` (e.g. `green_valley.png`, `canyon_flats.png`).
-- **Ground Tile**: `/assets/ground/<map>.png` (Seamless tileable 512x512 texture).
-- **VFX**: `/assets/fx/muzzle.png`, `/assets/fx/explosion.png`, `/assets/fx/smoke.png`.
+1. **Ground Textures (512x512 Seamless Tiles, Cached into Offscreen Canvases per 1000x1000 Chunk)**:
+   - `/assets/ground/meadow.png`: Lush summer meadow ground base for Green Valley.
+   - `/assets/ground/gravel_road.png`: Compacted road texture applied along highways and village roads.
+   - `/assets/ground/coastal_grass.png`: Feathered transition band approaching the water line.
+   - `/assets/ground/beach_sand.png`: Fine sunlit sand along river banks.
+   - `/assets/ground/wet_sand.png`: Darker damp packed sand adjacent to the water edge.
+   - `/assets/ground/shallow_water.png`: Clear aqua water animated by smoothly scrolling the texture pattern over time.
+   - `/assets/ground/canyon_flats.png`: Sandstone plateau ground tile.
+   - `/assets/ground/frostline_pass.png`: Crisp ice/snow terrain tile.
+   - `/assets/ground/ash_city.png`: Slate asphalt and industrial rubble tile.
+
+2. **Top-Down Props (Straight-Above Perspective, Soft Bottom-Right Drop Shadows)**:
+   - `/assets/props/tree_01.png` to `tree_05.png`: Oak, Pine, Birch, Cherry, Autumn trees (**block vehicles** with circle collision at the base).
+   - `/assets/props/building_01.png` to `building_13.png`: Outpost structures, terracotta houses, hangars (**block vehicles**).
+   - `/assets/props/harbor_01.png` to `harbor_06.png`: Piers, barrel clusters, buoys, mooring chains, crates near the shore.
+   - `/assets/props/stone_01.png` to `stone_06.png`: Stones 1-3 are boulders (**block vehicles**), stones 4-6 are small pebbles (**non-blocking**).
+   - `/assets/props/plant_01.png` to `plant_06.png`: Meadow shrubs, ferns, flowering bushes (**non-blocking**).
+   - `/assets/props/home_base.png`: Fortified safe-zone headquarters with repair cross pad and hazard perimeter at $(2000, 2000)$.
+
+3. **Landmarks**:
+   - `/assets/landmarks/green_valley.png`: Cape Solitude Lighthouse with dynamic rotating lantern beam near the map edge.
+
+4. **Loot, Gates, and Wrecks**:
+   - `/assets/fx/fx_01.png`: Scrap supply crate.
+   - `/assets/fx/fx_02.png`: Tech parts / crystal ore crate.
+   - `/assets/fx/fx_03.png`: Ammunition crate.
+   - `/assets/fx/fx_04.png`: Field repair kit container.
+   - `/assets/fx/fx_05.png` & `fx_06.png`: Rare and gold loot caches.
+   - `/assets/fx/fx_07.png`: Swirling gate spatial vortex core (rotates continuously).
+   - `/assets/fx/fx_08.png`: Outer metallic gate accelerator pylon frame.
+   - `/assets/fx/fx_09.png` & `fx_10.png`: Charred burned vehicle wrecks and smoking wrecks with embers (linger 8s).
+   - `/assets/fx/fx_12.png`: Warm campfire prop with flickering radial light aura.
+
+5. **Combat Effects**:
+   - `/assets/fx/fx_13.png` to `fx_17.png`: Kinetic muzzle flashes (random pick, additive `lighter` blending, short burst).
+   - `/assets/fx/fx_18.png`: Main cannon shell projectile with heat glow.
+   - `/assets/fx/fx_19.png`: Secondary machine gun tracer needle.
+   - `/assets/fx/fx_20.png` to `fx_23.png`: Explosions scaled by target size (small pop to massive boss detonation).
+   - `/assets/fx/fx_24.png` to `fx_25.png`: Billowy smoke puffs and driving dust particles.
 
 ---
 

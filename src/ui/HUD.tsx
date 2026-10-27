@@ -4,7 +4,7 @@ import { UserProfile } from '../save/profile.ts';
 import { Radar } from './Radar.tsx';
 import { ChatLog } from './ChatLog.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
-import { Volume2, VolumeX, Wrench, Package, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
+import { Volume2, VolumeX, Wrench, Package, Map as MapIcon, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
 
 interface HUDProps {
   player: SimEntity | null;
@@ -19,9 +19,11 @@ interface HUDProps {
   onToggleMute: () => void;
   onOpenGarage: () => void;
   onOpenInventory: () => void;
+  onOpenWorldMap: () => void;
   onOpenSettings: () => void;
   onOpenTutorial: () => void;
 }
+
 
 export const HUD: React.FC<HUDProps> = ({
   player,
@@ -36,9 +38,11 @@ export const HUD: React.FC<HUDProps> = ({
   onToggleMute,
   onOpenGarage,
   onOpenInventory,
+  onOpenWorldMap,
   onOpenSettings,
   onOpenTutorial,
 }) => {
+
   return (
     <div className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between p-3 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
       {/* TOP BAR */}
@@ -110,11 +114,24 @@ export const HUD: React.FC<HUDProps> = ({
                 soundEngine.playUIClick();
                 onOpenInventory();
               }}
-              title="Inventory & Loadout"
+              title="Inventory & Loadout (I)"
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
               <Package size={18} />
             </button>
+
+            {/* World Map button */}
+            <button
+              onClick={() => {
+                soundEngine.playUIClick();
+                onOpenWorldMap();
+              }}
+              title="World Map & Fast Travel (M)"
+              className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-sky-400 flex items-center justify-center hover:text-white hover:border-sky-500 active:scale-95 shadow-sm"
+            >
+              <MapIcon size={18} />
+            </button>
+
 
             {/* Tutorial Guide button */}
             <button

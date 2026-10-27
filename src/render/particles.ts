@@ -1,5 +1,6 @@
 import { Vec2 } from '../sim/types.ts';
 import { Camera } from './camera.ts';
+import { spriteRegistry } from './assets.ts';
 
 export interface Particle {
   active: boolean;
@@ -16,6 +17,7 @@ export interface Particle {
   alpha: number;
   angle: number;
   text?: string;
+  spriteId?: string;
 }
 
 export interface TreadMark {
@@ -76,13 +78,14 @@ export class ParticleSystem {
     p.y = pos.y + (Math.random() - 0.5) * 16;
     p.vx = Math.cos(backAngle) * speed;
     p.vy = Math.sin(backAngle) * speed;
-    p.size = 5 + Math.random() * 6;
+    p.size = 6 + Math.random() * 6;
     p.maxSize = p.size * 2.2;
     p.life = 0.5 + Math.random() * 0.4;
     p.maxLife = p.life;
     p.color = '#a89f91';
-    p.alpha = 0.4;
+    p.alpha = 0.45;
     p.angle = Math.random() * Math.PI * 2;
+    p.spriteId = Math.random() > 0.5 ? 'fx_24' : 'fx_25';
   }
 
   public addTreadMark(pos: Vec2, angle: number, width = 28) {
@@ -99,21 +102,23 @@ export class ParticleSystem {
   }
 
   public emitMuzzleFlash(pos: Vec2, angle: number) {
-    // Blast flare
+    // Muzzle blast flare with random pick from fx_13-fx_17
     const p = this.alloc();
     if (p) {
+      const flashNum = 13 + Math.floor(Math.random() * 5); // fx_13 to fx_17
       p.type = 'muzzle';
       p.x = pos.x;
       p.y = pos.y;
-      p.vx = Math.cos(angle) * 80;
-      p.vy = Math.sin(angle) * 80;
-      p.size = 14;
-      p.maxSize = 28;
-      p.life = 0.09;
-      p.maxLife = 0.09;
+      p.vx = Math.cos(angle) * 70;
+      p.vy = Math.sin(angle) * 70;
+      p.size = 18;
+      p.maxSize = 34;
+      p.life = 0.08; // Short life, high kinetic pop
+      p.maxLife = 0.08;
       p.color = '#fbbf24';
       p.alpha = 1.0;
       p.angle = angle;
+      p.spriteId = `fx_${flashNum}`;
     }
 
     // A couple smoke puffs
@@ -126,13 +131,14 @@ export class ParticleSystem {
       sp.y = pos.y;
       sp.vx = Math.cos(smokeAngle) * (40 + Math.random() * 60);
       sp.vy = Math.sin(smokeAngle) * (40 + Math.random() * 60);
-      sp.size = 6;
-      sp.maxSize = 18;
+      sp.size = 8;
+      sp.maxSize = 22;
       sp.life = 0.35 + Math.random() * 0.2;
       sp.maxLife = sp.life;
       sp.color = '#71717a';
       sp.alpha = 0.6;
       sp.angle = Math.random() * Math.PI * 2;
+      sp.spriteId = Math.random() > 0.5 ? 'fx_24' : 'fx_25';
     }
   }
 
@@ -157,24 +163,34 @@ export class ParticleSystem {
     }
   }
 
-  public emitExplosion(pos: Vec2, isLarge = false) {
+  public emitExplosion(pos: Vec2, isLarge = false, targetScale: 'small' | 'medium' | 'large' | 'boss' = isLarge ? 'large' : 'medium') {
     const count = isLarge ? 22 : 12;
 
-    // Center fireball
+    // Center fireball from fx_20-fx_23 scaled by target size
     const p = this.alloc();
     if (p) {
+      const expSprite =
+        targetScale === 'small'
+          ? 'fx_20'
+          : targetScale === 'medium'
+          ? 'fx_21'
+          : targetScale === 'large'
+          ? 'fx_22'
+          : 'fx_23';
+
       p.type = 'explosion';
       p.x = pos.x;
       p.y = pos.y;
       p.vx = 0;
       p.vy = 0;
-      p.size = 18;
-      p.maxSize = isLarge ? 85 : 55;
-      p.life = 0.35;
-      p.maxLife = 0.35;
+      p.size = targetScale === 'small' ? 18 : targetScale === 'medium' ? 26 : targetScale === 'large' ? 42 : 60;
+      p.maxSize = targetScale === 'small' ? 44 : targetScale === 'medium' ? 64 : targetScale === 'large' ? 95 : 140;
+      p.life = 0.38;
+      p.maxLife = 0.38;
       p.color = '#f97316';
       p.alpha = 1.0;
-      p.angle = 0;
+      p.angle = Math.random() * Math.PI * 2;
+      p.spriteId = expSprite;
     }
 
     // Flying debris sparks and smoke
@@ -188,13 +204,14 @@ export class ParticleSystem {
       sp.y = pos.y;
       sp.vx = Math.cos(angle) * speed;
       sp.vy = Math.sin(angle) * speed;
-      sp.size = sp.type === 'smoke' ? 12 : 3;
-      sp.maxSize = sp.type === 'smoke' ? 42 : 3;
+      sp.size = sp.type === 'smoke' ? 14 : 3;
+      sp.maxSize = sp.type === 'smoke' ? 45 : 3;
       sp.life = 0.4 + Math.random() * 0.5;
       sp.maxLife = sp.life;
       sp.color = sp.type === 'smoke' ? '#3f3f46' : '#ef4444';
       sp.alpha = 0.8;
       sp.angle = angle;
+      sp.spriteId = Math.random() > 0.5 ? 'fx_24' : 'fx_25';
     }
   }
 
@@ -328,40 +345,73 @@ export class ParticleSystem {
         ctx.fill();
         ctx.restore();
       } else if (p.type === 'dust' || p.type === 'smoke') {
-        ctx.save();
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.alpha;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, scaledSize, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        const smokeImg = p.spriteId ? spriteRegistry.getImage(spriteRegistry.getFxPath(p.spriteId)) : null;
+        if (smokeImg) {
+          ctx.save();
+          ctx.globalAlpha = p.alpha;
+          ctx.translate(s.x, s.y);
+          ctx.rotate(p.angle);
+          ctx.drawImage(smokeImg, -scaledSize, -scaledSize, scaledSize * 2, scaledSize * 2);
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.alpha;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, scaledSize, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
       } else if (p.type === 'muzzle') {
-        ctx.save();
-        ctx.translate(s.x, s.y);
-        ctx.rotate(p.angle);
-        ctx.fillStyle = '#fef08a';
-        ctx.globalAlpha = p.alpha;
-        ctx.beginPath();
-        ctx.moveTo(scaledSize * 1.5, 0);
-        ctx.lineTo(-scaledSize * 0.5, scaledSize * 0.8);
-        ctx.lineTo(-scaledSize * 0.2, 0);
-        ctx.lineTo(-scaledSize * 0.5, -scaledSize * 0.8);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
+        const flashImg = p.spriteId ? spriteRegistry.getImage(spriteRegistry.getFxPath(p.spriteId)) : null;
+        if (flashImg) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter'; // Additive blending for kinetic pop
+          ctx.globalAlpha = p.alpha;
+          ctx.translate(s.x, s.y);
+          ctx.rotate(p.angle);
+          ctx.drawImage(flashImg, -scaledSize * 0.8, -scaledSize, scaledSize * 2.2, scaledSize * 2);
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.translate(s.x, s.y);
+          ctx.rotate(p.angle);
+          ctx.fillStyle = '#fef08a';
+          ctx.globalAlpha = p.alpha;
+          ctx.beginPath();
+          ctx.moveTo(scaledSize * 1.5, 0);
+          ctx.lineTo(-scaledSize * 0.5, scaledSize * 0.8);
+          ctx.lineTo(-scaledSize * 0.2, 0);
+          ctx.lineTo(-scaledSize * 0.5, -scaledSize * 0.8);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
       } else if (p.type === 'explosion') {
-        ctx.save();
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.alpha * 0.8;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, scaledSize, 0, Math.PI * 2);
-        ctx.fill();
-        // Inner hot core
-        ctx.fillStyle = '#fef08a';
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, scaledSize * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        const expImg = p.spriteId ? spriteRegistry.getImage(spriteRegistry.getFxPath(p.spriteId)) : null;
+        if (expImg) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = p.alpha;
+          ctx.translate(s.x, s.y);
+          ctx.rotate(p.angle);
+          ctx.drawImage(expImg, -scaledSize, -scaledSize, scaledSize * 2, scaledSize * 2);
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.alpha * 0.8;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, scaledSize, 0, Math.PI * 2);
+          ctx.fill();
+          // Inner hot core
+          ctx.fillStyle = '#fef08a';
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, scaledSize * 0.45, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
       }
     }
 

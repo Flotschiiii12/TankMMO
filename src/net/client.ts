@@ -13,7 +13,9 @@ export interface GameClient {
   getPredictedPlayer(): SimEntity | null;
   onEvent(handler: (event: SimEvent) => void): () => void;
   switchMap(targetMapId: string, gateId: string): void;
+  fastTravelToMap(targetMapId: string): void;
   updateProfile(profile: UserProfile): void;
+
   disconnect(): void;
   getTickStats(): { fps: number; tickTime: number; entityCount: number; tickRate: number };
 }
@@ -306,7 +308,42 @@ export class LocalGameClient implements GameClient {
     }
   }
 
+  fastTravelToMap(targetMapId: string) {
+    const inst = this.realm.getInstance(this.currentMapId);
+    const player = inst.getPlayer(this.playerId);
+    if (!player) return;
+
+    const { targetInstance, newPos } = this.realm.teleportPlayer(
+      this.currentMapId,
+      targetMapId,
+      player
+    );
+
+    this.currentMapId = targetMapId;
+    this.clientWorld.mapId = targetMapId;
+    this.clientWorld.mapDef = targetInstance.world.mapDef;
+    this.predictedPlayer.pos = { ...newPos };
+    this.predictedPlayer.vel = vec2();
+
+    this.syncAuthoritativeSnapshot();
+
+    for (const h of this.eventHandlers) {
+      h({
+        type: 'chat',
+        payload: {
+          id: `msg_map_travel_${Date.now()}`,
+          sender: 'HQ DISPATCH',
+          clanTag: 'CMD',
+          channel: 'S',
+          text: `Fast traveled to zone: ${targetInstance.world.mapDef.name}.`,
+          timestamp: targetInstance.world.time,
+        },
+      });
+    }
+  }
+
   updateProfile(profile: UserProfile) {
+
     const bonus = this.computeEquippedBonus(profile);
     const stats = this.realm.createPlayerEntity(
       this.playerId,
@@ -397,7 +434,12 @@ export class RemoteGameClient implements GameClient {
     // Remote command to switch instance
   }
 
+  fastTravelToMap(targetMapId: string): void {
+    // Remote command to travel to instance
+  }
+
   updateProfile(profile: UserProfile): void {
+
     // Send updated loadout to remote server
   }
 

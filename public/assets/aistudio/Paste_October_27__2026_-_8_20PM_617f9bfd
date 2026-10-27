@@ -1,0 +1,191 @@
+ You are building the COMPLETE CODE (all game mechanics, systems, data, server and UI logic) of an online 2D top-down vehicle-combat MMO called "Treadfront" (working title). Another team will do the final art later. Therefore: visuals are clean vector PLACEHOLDERS only; do not spend effort on beauty. Spend ALL effort on correctness, completeness, structure and testability of the mechanics. Everything described below must be implemented and playable, not stubbed, unless it is explicitly marked "stub".
+
+  Work in the numbered MILESTONES (M1..M12) at the end of this message. Finish each milestone completely (code + tests + short notes in /docs/PROGRESS.md) before starting the next. If you run out of room, stop at a clean milestone boundary and tell me which milestone to continue with; I will then send "Continue with M<n>". Never delete working earlier code to make room; extend it.
+
+  =====================================================================
+  0. TECH AND REPOSITORY STRUCTURE
+  =====================================================================
+  - TypeScript everywhere. Full-stack web app: React (UI) + HTML canvas 2D (world) in the client, Node.js + Express + ws (WebSocket) in the server. Vite for the client.
+  - One repository with three folders:
+    /shared  : pure TypeScript simulation and game rules, data tables, types, protocol. NO DOM, NO Node APIs, NO Date.now(), NO Math.random() (time = ticks, randomness = seeded RNG passed in). It runs unchanged in the browser and in Node.
+    /server  : authoritative game server, persistence, accounts, admin tools, bots for load tests.
+    /client  : React UI, canvas renderer, input, audio, prediction/interpolation.
+  - Database access only through interfaces (`AccountRepo`, `ProfileRepo`, `ClanRepo`, `MarketRepo`, `ChatRepo`, `QuestRepo` ...). Implementation now: SQLite (use Node's built-in `node:sqlite` or better-sqlite3), schema written as plain SQL so it can move to PostgreSQL later.
+  - All balance numbers live in data tables under /shared/data (vehicles, parts, enemies, maps, quests, talents, ranks, items, loot tables, events). Formulas are documented in /docs/BALANCE.md and implemented in one place (/shared/rules).
+  - All player-facing text goes through an i18n layer with German (de) and English (en). Data tables hold text keys, not literal strings.
+  - A feature-flag file (/shared/flags.ts) with: premiumCurrencyEnabled=false, pvpEnabled=true, auctionEnabled=true, etc.
+  - Write /docs/GDD.md (a concise game design document that mirrors this prompt), /docs/PROGRESS.md, /docs/PROTOCOL.md, /docs/BALANCE.md, README.md.
+  - Tests: Vitest for /shared (determinism, damage model, XP, economy, crafting) and for server logic; a headless bot client (`npm run bots -- --count 200`) for load tests.
+
+  =====================================================================
+  1. CORE LOOP AND CONTROLS (mobile-first landscape, desktop supported)
+  =====================================================================
+  - Left thumb: virtual joystick. The vehicle chassis turns toward the stick direction with tank-like acceleration and turn rate; it cannot strafe; releasing decelerates.
+  - Right thumb: big round TARGET/FIRE button: tap = lock nearest enemy in range, tap again = toggle auto-fire. A cooldown ring shows main-cannon reload. Around it a cluster of round buttons: Ability 1..4, Next Target, Cycle Ammo. Tapping an enemy also locks it.
+  - The turret rotates independently toward the target (its own turn rate). The main cannon fires when the turret is aligned and the target is in range. The secondary weapon (machine gun) fires automatically at any enemy within its range.
+  - Desktop: WASD/arrows, mouse to lock target, Space = toggle auto-fire, Q/E/F/G abilities, 1-5 ammo types, Tab = next target, M = world map, I = inventory, C = character, V = vehicle/garage (in safe zone), P = party, O = clan, J = quests, Enter = chat.
+  - Multi-touch with pointer capture, safe-area insets, "rotate your phone" overlay in portrait, touch-action none.
+  - HUD (compact, <=25% of the screen): circular radar with sector id and player count, hull/armor numbers and bars under the own vehicle, name plates above all vehicles (clan tag, rank icon placeholder, name, level, health bar), semi-transparent chat log at the bottom, right-edge column of round buttons (inventory, garage, quests, map, clan, settings), off-screen indicators for target/loot/gate.
+  - Camera follows the vehicle, default zoom so ~12-15 vehicles fit on a phone, pinch-to-zoom (0.5-1.2).
+
+  =====================================================================
+  2. COMBAT MODEL (implement exactly)
+  =====================================================================
+  - World units: 1 unit = 1 px at zoom 1. Sim tick 30 Hz; server snapshot rate 10 Hz.
+  - Vehicle stats: hull (HP, regenerates only in safe zone/with repair), armor (second bar, absorbs damage, regenerates after 8 s without damage at 4%/s of max), speed, turn rate, turret turn rate, radius, slots.
+  - Damage resolution: incoming damage D with impact angle theta relative to the target's chassis facing: front arc (|theta|<=45 deg) x0.7, side x1.0, rear (|theta|>=135) x1.4. Armor absorbs 80% of D until depleted; the remaining 20% (and 100% when armor is 0) goes to hull. Flat damage reduction from armor parts and talents is applied before the split (never below 10% of D). Critical hits (chance from talents/parts) x1.5.
+  - Main cannon: range 700 (varies by weapon), reload per weapon, projectile speed, damage, ammo type multipliers (see ammo). Machine gun: range 300, rate-of-fire based, low damage, unlimited ammo.
+  - Ammo types (per slot, bought/crafted/dropped as stacks): STANDARD (free, unlimited, 1.0x), REINFORCED (1.25x, costs scrap), ARMOR-PIERCING (ignores 40% of target armor reduction; x1.0 vs light, x0.8 vs heavy bodies... define by armor class), SHAPED CHARGE (x1.6 vs bosses/bunkers, x0.7 vs vehicles), EXPLOSIVE (small splash radius 60, x0.85). If special ammo is out, auto-fallback to STANDARD.
+  - Abilities (cooldown, duration): Smoke (enemies lose lock, 4 s), Repair Kit (heal 25% hull over 5 s, canceled by damage), Boost (+30% speed, -25% reload, 6 s), Radar Pulse (reveals stealth/off-screen enemies in 1200 range, 3 s), Emergency Shield (invulnerable 2 s), plus class abilities: Scout: Dash; Medium: Overcharge; Heavy: Fortify (+40% armor, -40% speed); Artillery: Barrage (ground-targeted splash volley); Support: Repair Aura (heals nearby allies).
+  - Status effects: Slowed, Burning (DoT), Stunned (EMP, 1.5 s, diminishing returns), Marked (+15% damage taken), Smoked. Stacking rules and immunity windows in /shared/rules/status.ts.
+  - Targeting: lock range 800, lock lost when target leaves range+10%, is smoked, dies, or is in a safe zone. PvP lock only on valid PvP targets (see section 11).
+  - Death: wreck stays 8 s, respawn at the home base (or nearest rescue point) with 5 s invulnerability. No item loss ever. Repair cost in scrap (0 for level < 10) scaled by vehicle tier. In PvP maps: honor loss (see section 11).
+  - Collisions: vehicle-vs-obstacle (circle/polygon), vehicle-vs-vehicle soft push. Terrain zones: slow (mud/water/snow x0.6), no instant death.
+  - Time-to-kill targets used for balancing tests: normal enemy 5-15 s, elite 30-60 s, boss 3-8 min (group), PvP 20-40 s at equal gear.
+
+  =====================================================================
+  3. VEHICLES (5 classes x 10 tiers = 50)
+  =====================================================================
+  Classes: SCOUT (fast, light, 1 main + 1 MG, high speed), MEDIUM (balanced), HEAVY (high armor/hull, slow, more slots), ARTILLERY (range 900+, splash, fragile, ground-target Barrage), SUPPORT (repair aura, radar, low damage).
+  Tiers 1-10 unlock at player level 1, 8, 16, 24, 34, 44, 56, 68, 80, 92; names: Patchwork, Drifter, Wanderer, Warden, Striker, Bulwark, Conqueror, Behemoth, Titan, Colossus. Stats scale with tier by factor 1.45 per tier for hull/armor/damage base and 1.04 per tier for speed; class multipliers in a table.
+  Slots per vehicle: weapon slots (1-2 main), 1 secondary, 1 armor plating, 1 engine, 2-4 modules (more on higher tiers), 1-2 drone slots. Garage holds up to 8 vehicles (starts with 1, plus one per 10 levels), each with its own loadout and its own Mastery (level 1-10, +1% efficiency per level, unlocks skins). Vehicle switch only in a safe zone. Skin system (cosmetic) per vehicle.
+  Provide placeholder vector drawing per class and tier (shape differs by class; detail count grows with tier; tier 1 looks patched).
+
+  =====================================================================
+  4. EQUIPMENT, ITEMS, CRAFTING
+  =====================================================================
+  - Items have: id, family, tier (1-8), rarity (Common, Uncommon, Rare, Epic, Legendary), level requirement, base stats, 0-3 bonus affixes (by rarity), upgrade level (+0..+15), binding (account-bound or tradable).
+  - Families: MAIN WEAPONS (cannon, rapid-fire, rocket, mortar, railgun, flamethrower; 6 families x 8 tiers), SECONDARY (machine gun, flak, mine layer, arc coil; 4 x 6), ARMOR (4 families x 8 tiers: reactive, composite, sloped, cage), ENGINES (3 families x 8: speed, torque, efficiency), MODULES (~20: auto-repair, radar range, loot magnet, smoke amplifier, targeting aid, emergency shield, camo net, fuel saver, ...), DRONES (8 types x 5 tiers) with formations (Shield, Attack, Heal, Scout) that orbit the vehicle and auto-act.
+  - Workshop (in safe zones, hub has the full version): UPGRADE (+1..+15, increasing cost in scrap + ore + fragments, success always, but from +10 you may choose "safe mode" (costs more) or normal (may drop 1 level on failure); no real-money randomness), DISMANTLE (items -> ore + fragments), CRAFT (recipes from quests/bosses/reputation; materials), REROLL (reroll one affix, max 3 times per item, cost grows), FUSION (3 identical items -> 1 item with higher chance of a better rarity).
+  - Inventory: 60 slots (expandable with scrap up to 150), sort/filter, item comparison tooltip, equip from inventory.
+  - Loot tables per enemy/boss/gate/crate (data tables) with rarity weights scaled by enemy level; pity counter for Rare+ drops (guaranteed after N drops, N in data).
+
+  =====================================================================
+  5. PROGRESSION
+  =====================================================================
+  - Player level 1-100. XP needed for level n: round(80 * n^2.1). Kill XP = base(enemyLevel) * levelDiffFactor (1.0 at equal level, 0.0 if the enemy is 10+ levels below, up to 1.25 if 5 levels above). Quest, boss, gate, exploration and arena XP exist.
+  - Level-up: +talent point from level 5 (total ~96 points at 100), +base hull/armor, unlocks (tiers, maps, parts, garage slots).
+  - TALENT TREE (3 branches, each ~12 talents with ranks): OFFENSE (damage, reload, crit chance, crit damage, range, projectile speed, pierce, ammo efficiency, splash, execute bonus...), DEFENSE (armor, hull, regen, angle protection, status resistance, repair efficiency, emergency shield duration...), LOGISTICS (speed, loot amount, scrap amount, repair cost reduction, radar range, ability cooldown, inventory space, trade tax reduction...). Respec costs scrap (rises with level). Define all talents in /shared/data/talents.ts with effects as data.
+  - RANKS (honor, 21): Recruit, Private, Corporal, Sergeant, Staff Sergeant, Master Sergeant, Warrant Officer, Second Lieutenant, Lieutenant, Captain, Major, Lieutenant Colonel, Colonel, Brigadier, Major General, Lieutenant General, General, Field Marshal, Marshal of the Realm, High Marshal, Supreme Marshal (placeholder names, localizable). Honor points thresholds in a table. Ranks give title + cosmetic only.
+  - FACTION REPUTATION (per faction NPC vendors): 7 levels, unlocks recipes, skins, quests, small discounts.
+  - CODEX: entries for each enemy, item, map, landmark; unlocked by encounter, with completion rewards. TITLES/BADGES from achievements (50+ achievements in a data table).
+  - SEASON PASS (free track): 8-week seasons, 50 tiers, points from daily/weekly activity (cap per day), rewards in data table (scrap, ore, skins, titles, season marks).
+  - Level cap raised later; keep all caps in data.
+
+  =====================================================================
+  6. WORLD: 30 MAPS (data-driven, build all 30 now as playable maps with placeholder art)
+  =====================================================================
+  Each map = data entry: id, name key, biome, size (width, height), level range, type (HOME, PVE, HUB, PVP, ENDGAME, ARENA), safe zones, spawn zones (enemy groups with types/counts/respawn 20-40 s), resource nodes (ore types), loot spots, secrets/landmarks (explorer quests), gates/portals (with target map and spawn point), weather and time-of-day preset, instance capacity (100 players), ground/prop generation parameters (seeded procedural placement of obstacles, slow zones, roads). Maps are generated deterministically from their seed + params (so the same map looks the same on server and client); obstacles are circles/polygons used by collision.
+  Maps:
+   FACTION HOME REGIONS (PvE only, one per faction as start):
+    1 Gravel Bay (L1-5, HOME, Coastal Union), 2 Dune Path (3-8), 3 Salt Marsh (6-12), 4 Lighthouse Cape (10-15; mini boss; gate entrance)
+    5 Birch Vale (L1-5, HOME, Highland Union), 6 Quarry Valley (3-8), 7 Mist Forest (6-12), 8 Eagle Pass (10-15; mini boss; gate entrance)
+    9 Wheat Sea (L1-5, HOME, Steppe Caravan), 10 Copper Canyon (3-8), 11 Salt Pans (6-12), 12 Windmill Plateau (10-15; mini boss; gate entrance)
+   NEUTRAL MIDDLE (PvE):
+    13 Crossfield (HUB: market, auction house, full workshop, arena entrance, safe zone, all factions)
+    14 Green Crossing (15-22; convoys), 15 River Delta (18-26; water slows), 16 Red Canyon (22-30; artillery positions), 17 Frost Border (26-34; snowstorm weather), 18 Glacier Lakes (30-38; thin ice slows), 19 Old Highway (34-42; world boss spawn), 20 Glowworm Swamp (38-46; night atmosphere, rare parts)
+   PVP BORDERLANDS (open PvP, faction war):
+    21 Bridgehead (25+), 22 Customs Station (30+), 23 Ashfield (40+; rich ore), 24 No Man's Land (50+; war objective)
+   ENDGAME (L60-100):
+    25 Ruined City Vaelmar (60-70), 26 Obsidian Desert (65-75), 27 Storm Coast (70-80; world boss), 28 Iron Crown (80-90; gate series), 29 The Burning Valley (90-100)
+   ARENA:
+    30 The Pit (arena)
+  Portal graph (bidirectional): 1-2,2-3,3-4,4-14, 5-6,6-7,7-8,8-14, 9-10,10-11,11-12,12-14, 14-13, 14-15,15-16,16-17,17-18,18-19,19-20, 15-21, 17-22, 19-23, 21-24,22-24,23-24, 20-25, 24-25, 25-26,26-27,27-28,28-29, 13-30. Home bases 1, 5, 9 and the hub 13 are safe zones; every portal has a 400-unit radius in which no combat damage happens, and 5 s spawn protection after jumping. Jump takes 3 s standing still in the portal circle (interrupted by damage).
+  Instances: server creates a map instance per map with capacity 100; when full, a second instance of the same map opens; players of the same party/clan are routed to the same instance when possible. Each instance runs its own authoritative world.
+  Required per-map systems: enemy spawn zones with respawn timers, resource nodes (mining takes 3 s holding position, gives ore), loot crates, secrets (explorer quests), weather effects as gameplay modifiers (sandstorm/snowstorm: -30% vision and -10% speed; rain: ground slows slightly; thunder: random lightning strike telegraphs on Storm Coast), day/night cycle (visual + radar range modifier).
+
+  =====================================================================
+  7. ENEMIES AND PVE CONTENT
+  =====================================================================
+  - Enemy archetypes with state machines (idle/patrol -> aggro -> attack -> return/flee): SCOUT BUGGY (fast, weak), GUNNER TRUCK (shoots while moving), ARTILLERY (distance 800+, telegraphed splash: red ring 1 s before impact), BUNKER TURRET (stationary, strong, guards loot/gates), FLAK WAGON, ENGINEER (lays mines), LOOT CONVOY (slow truck + 2 escorts, drops a lot), biome specialists (ice tank, swamp crawler, lava truck, sandstorm raider...). Aggro range, leash range, group behavior (call for help), flee at low HP for some types.
+  - ELITES (3 per map, +HP/damage, better loot), MINI BOSSES (maps 4, 8, 12 and later maps), WORLD BOSSES (spawn on a rotating schedule every 2 h on maps 19 and 27 and more; everyone nearby fights; rewards by damage share tiers; announce in chat), GROUP BOSSES in gates.
+  - Boss mechanics in data: phases by HP threshold, summons, telegraphed area attacks, enrage timer, adds, immunity windows.
+  - GATES (instanced dungeons, 6): each with wave definitions (5-10 waves) and a boss, party size 1-5, scaling by party size, daily free keys (3 per day) plus keys earned by quests. Own instance per party, 15-min timer, rewards table and a first-clear bonus.
+  - EVENTS (scheduler on the server, data-driven): Invasion (waves attack a home base, everyone defends), Convoy Race, Storm Event, Meteor Shower (rare ore nodes), Weekend XP boost (convenience only). Events appear in the event log and quest list.
+  - QUESTS: STORY (10 chapters, 8-12 quests each, one chapter per ~10 levels, each ends with a boss/gate), FACTION quests (reputation), DAILY (5 per day chosen from a pool of 40, appropriate to player level), WEEKLY (3 larger), BOUNTY (repeatable hunt of a named enemy), EXPLORER (find secrets/landmarks), CLAN quests (shared progress). Quest framework: objectives (kill N of type, collect, deliver, escort, reach, defeat boss, clear gate, win arena match, craft, upgrade), rewards (xp, scrap, items, reputation, keys), prerequisites, tracking, auto-completion detection by server events.
+  - Tutorial/first-time-user flow: guided first 15 minutes (drive, lock, fire, pick up loot, open garage, equip, first level-up, first portal jump) driven by the quest framework, with small edge-of-screen hint cards.
+
+  =====================================================================
+  8. PVP AND FACTION WAR
+  =====================================================================
+  - PvP is ONLY on maps 21-29 against players of OTHER factions (and in the arena). Maps 1-20 are PvE-only for everyone (player-vs-player damage disabled).
+  - Protection rules: players below level 15 can never be attacked; from 15 on, only by players within +-5 levels; 5 s protection after respawn and after a portal jump; no damage inside safe zones and within 400 units of a portal; kill cap: after being killed 3 times within 30 minutes by the same player, that player cannot damage you for 1 hour; honor is only awarded against targets within +-5 levels and only once per victim per 30 minutes.
+  - Honor: +honor for PvP kills, faction-war objectives, convoy escorts; -honor when killed in PvP maps (small). Monthly honor ranking.
+  - Bounties: players who exceed a kill-streak threshold get a bounty (scrap + honor) others can claim.
+  - FACTION WAR (weekly cycle): control points on maps 21-24 (capture by staying in the zone, contested when both factions are present). Faction score per tick; at week end the winner gets cosmetic banner + market discount for the next week (data table), never combat stats.
+  - ARENA (map 30, matches in separate instances): 1v1, 3v3, 5v5; everyone drives THEIR OWN vehicle with THEIR OWN gear. Matchmaking by LEAGUE based on vehicle combat power (Bronze..Master, defined by power thresholds), not by level, with a rating (Elo-like) per mode and seasonal reset with rewards (titles, skins, season marks). Queue, ready check, countdown, round rules (best of 3), forfeit handling, anti-dodge penalty, spectator stub.
+  - Combat power formula in /shared/rules/power.ts (e.g. sqrt(DPS * (hull+armor)) with modifiers) and shown on the profile and in lists.
+
+  =====================================================================
+  9. ECONOMY (premium currency is prepared but DISABLED)
+  =====================================================================
+  Currencies: SCRAP (soft), ORE (iron, copper, titanium, crystal), HONOR, FACTION MARKS, SEASON MARKS, GATE KEYS, FRAGMENTS (from dismantling). PREMIUM currency "Cells": implement the full data model, wallet, transaction log, shop catalogue and server-side purchase validation behind the flag premiumCurrencyEnabled=false (when false: not shown, not earnable, endpoints return "disabled"). Design the shop so that premium can later buy time savers, convenience (garage/inventory slots), access (extra gate keys), cosmetics, but NEVER random loot boxes. Include an IAP receipt-validation interface (stub for Apple/Google) and idempotent purchase handling.
+  Faucets: loot, quests, bosses, convoys, daily rewards, events, selling to NPC vendors. Sinks: repair, ammo, upgrades, reroll, garage/inventory expansion, market tax 5%, faction change, respec, fast travel between visited safe zones (cost by distance).
+  Auction house (hub only): list items (account-tradable only) with buyout price and optional duration (12/24/48 h), 5% tax on sale, listing limits per account, minimum account age 3 days, daily trade volume cap, price floors/ceilings by item tier to prevent exploits. Direct trade between friends/clan mates (both confirm). Item binding rules in data.
+  Economy simulation script (`npm run econ-sim`) that runs N simulated players through levels 1-60 and prints scrap/ore faucet vs sink per level so the balance can be tuned.
+
+  =====================================================================
+  10. SOCIAL SYSTEMS
+  =====================================================================
+  - Accounts: guest account on first start (name "Driver-0000123"), one free rename, 13+ age gate, recovery code (shown once, only hash stored), data export (JSON), account deletion, sign-in with recovery code on a new device. Credential format "<accountId>.<secret>" stored hashed (sha256) on the server. One active connection per account (second login kicks the first).
+  - Factions: chosen at first start (3 factions, equal in strength), start map = that faction's home; one change later with 7-day cooldown and scrap cost.
+  - Clans: create (cost scrap), tag (2-5 chars), roles (Leader, Officer, Member), invite/apply/accept, kick/promote, clan chat, clan storage (items/scrap donations with log), clan research (small cosmetic/convenience bonuses, no combat stats), clan quests, clan wars over bases on PvP maps (control points owned by clans, weekly income), alliances/rivalries, clan ranking.
+  - Parties (up to 5): invite, leave, kick, shared XP (+10% per extra member), shared quest credit, party markers on radar, party chat, join the same instance.
+  - Chat channels: Map, Faction, Clan, Party, Private (whisper), Trade, Global. Slow-mode (1 message/s, 5/10 s burst limit), profanity filter for names and messages, report and block, mute, strangers' direct messages ON by default with a setting to turn off, block list stored on the server, chat history last 50 per channel, system messages (boss spawned, event started, achievements). Fixed emotes (no free text emotes).
+  - Friends: requests, accept, online status, jump to friend's instance (not into PvP maps), friend list max 100.
+  - Profile card: level, rank, vehicle, combat power, clan, titles, achievements, stats; opened from names in chat/lists.
+  - Rankings (server computed, cached): level/XP, honor, arena rating per mode, clans, world-boss damage, codex completion, kills.
+  - Moderation: reports table, admin dashboard (web page /admin protected by token env var ADMIN_TOKEN): players search/detail, ban/mute/kick/rename/delete, chat moderation, reports, announcements, event scheduler, tunables (rates, caps), audit log. Rate limits on all REST/WS endpoints. Age/privacy pages stubs (/privacy, /imprint, /account-deletion).
+
+  =====================================================================
+  11. SERVER ARCHITECTURE (authoritative)
+  =====================================================================
+  - Server runs map instances; each instance owns a `World` from /shared and steps at 30 Hz with fixed timestep and an accumulator; snapshots to clients at 10 Hz containing only entities within the player's interest radius (use a spatial grid for interest management and collision broad-phase). Deltas: only changed fields; entity ids are stable numbers; protocol messages are typed unions defined in /shared/protocol.ts (client->server: input commands with sequence numbers; server->client: welcome, snapshot/delta, events, chat, errors).
+  - Client-side prediction for the own vehicle (replay unacknowledged inputs after each snapshot) and interpolation (~100 ms in the past) for everyone else.
+  - All validation server-side: movement speed limits, cooldowns, ammo, range, line of fire, inventory operations, crafting costs, market rules. The client never sends damage, position of hits, loot, or currency.
+  - Persistence: periodic and event-based saves per player (on logout, level-up, trade, craft), transactional for currency/item operations; SQLite schema for accounts, profiles, vehicles, items, wallets, transactions, quests, achievements, codex, clans, clan members, clan storage, friends, blocks, chat (limited), reports, market listings, arena ratings, seasons, event log, admin log, bans.
+  - Instance manager: capacity, spawning/despawning instances, routing, graceful shutdown with save. Gate/arena instances are created on demand and destroyed when empty.
+  - Scheduler: world boss rotation, events, daily/weekly reset (server time), season rollover, arena season rollover, market expiry, faction-war cycle.
+  - Observability: structured logs, /health, /metrics (tick time per instance, players, entities, bytes/s), debug overlay in the client.
+  - Anti-cheat basics: speed/teleport validation, command rate limit (max N inputs per tick), sequence validation, suspicious-behavior log, bot heuristics (perfectly regular input patterns, 24/7 sessions) flagged in the admin dashboard.
+  - Version gate: server rejects clients below a minimum protocol version with a clear "update required" message. Client shows "No connection" with retry; game is online-only.
+
+  =====================================================================
+  12. CLIENT UI SCREENS (functional placeholders, clean layout)
+  =====================================================================
+  Title/login (guest, recovery code, age gate, faction choice), in-game HUD, garage (vehicles, loadout, stats compare), inventory, workshop (upgrade, dismantle, craft, reroll, fusion), character (level, talents, ranks, reputation, codex, achievements, titles), world map (30 maps, discovered portals, fast travel), quest log with tracker, map event log, party panel, clan panel (members, storage, research, wars), friends, chat (channels, whisper, report/block), auction house, vendors (NPC shops), arena lobby (modes, queue, league, rating), rankings, season pass, daily login/streak, settings (graphics, zoom, sound, language, controls, notifications, privacy, delete account), profile card, tutorial hints, error/maintenance screens. Everything usable on a phone in landscape.
+
+  =====================================================================
+  13. ART PIPELINE (hooks only)
+  =====================================================================
+  Implement an asset registry with logical keys (vehicle body/turret per class and tier, enemies, props, ground tiles per map, landmarks, fx, ui icons). It reads /assets/manifest.json and loads only listed files; missing files fall back silently to the vector placeholders (one console.info line at start). No visual polish needed now.
+
+  =====================================================================
+  14. AUDIO (procedural placeholders)
+  =====================================================================
+  WebAudio procedural sounds for cannon, MG, hit, explosion, pickup, portal, UI, ability, level-up, engine hum by speed; master/music/sfx volume. Sound keys go through a registry so real files can replace them later.
+
+  =====================================================================
+  15. MILESTONES (do them in order, each complete with tests)
+  =====================================================================
+  M1  Repo skeleton, /shared types, RNG, tick loop, vehicle/combat core (damage model, ammo, abilities, status effects, collisions), unit tests, local single-player sandbox with joystick controls and compact HUD.
+  M2  Data tables: vehicles (50), items (all families/tiers/rarities), enemies, loot tables, talents, ranks, achievements, i18n de/en; stat/power formulas; BALANCE.md.
+  M3  Procedural map generator + all 30 map data entries + portal graph + safe zones + weather/time of day + resource nodes; world map screen; single-player roaming of all maps.
+  M4  PvE content: all enemy archetypes, AI state machines, elites, mini/world/group bosses, spawn zones, convoys, gates (6), events.
+  M5  Progression: levels, talents, ranks, reputation, codex, achievements, garage (8 vehicles), mastery, skins, inventory, workshop (all five operations), vendors.
+  M6  Quests: framework + story (10 chapters), daily/weekly/bounty/explorer/clan quests, tutorial flow, season pass (free track).
+  M7  Server core: accounts (guest + recovery code), persistence (SQLite schemas + repos), instance manager, authoritative sim, protocol, snapshots with interest management, client prediction/interpolation, online-only flow, version gate, rate limits.
+  M8  Social: chat channels, filter, report/block, friends, parties, profile card, rankings, clans (all features), moderation + admin dashboard.
+  M9  PvP: protection rules, honor, bounties, faction war, arena (queue, leagues, rating, seasons).
+  M10 Economy: currencies, vendors, sinks/faucets, auction house, trade, premium currency model behind a disabled flag, econ-sim script.
+  M11 Anti-cheat basics, scheduler (events, bosses, resets), observability, bots for load tests (200 bots), performance pass (60 fps client, stable tick server), save/load safety.
+  M12 Full QA pass: end-to-end tests of every system, balance sweep, README and docs complete, list of known gaps.
+
+  RULES FOR ALL MILESTONES
+  - Every number is in a data table; every rule in /shared/rules with unit tests.
+  - The sim must be deterministic given (seed, inputs). Provide a replay test.
+  - No console errors, no TODO stubs except the ones explicitly marked "stub" above. If something cannot be finished, write it down in /docs/PROGRESS.md under "Known gaps" and continue.
+  - After each milestone: update /docs/PROGRESS.md (done / not done), list the new npm scripts and how to run and test.
+  - Start now with M1.
+
+  So benutzt du ihn

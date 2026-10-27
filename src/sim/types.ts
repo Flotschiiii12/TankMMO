@@ -52,7 +52,8 @@ export type EntityKind =
   | 'projectile'
   | 'loot_crate'
   | 'gate'
-  | 'telegraph';
+  | 'telegraph'
+  | 'resource_node';
 
 export interface VehicleStats {
   id: string;
@@ -177,20 +178,24 @@ export interface SimEntity {
   telegraphTimer?: number;
   telegraphTotal?: number;
 
-  // Visual polish fields
+  // Visual polish & loot fields
   hitFlashTimer?: number;
   distanceDriven?: number;
   wreckTimer?: number;
   isWreck?: boolean;
+  lootKind?: 'scrap' | 'ore' | 'ammo' | 'repair';
 }
 
 export interface MapObstacle {
   x: number;
   y: number;
   radius: number;
-  type: 'rock' | 'tree' | 'ruin' | 'wall' | 'building';
+  type: 'rock' | 'tree' | 'ruin' | 'wall' | 'building' | 'plant' | 'harbor' | 'prop';
+  propId?: string;
+  blocks?: boolean;
   width?: number;
   height?: number;
+  rotation?: number;
 }
 
 export interface MapSlowZone {
@@ -207,14 +212,19 @@ export interface MapGateDef {
   x: number;
   y: number;
   radius: number;
-  targetMapId: string;
-  targetGateId: string;
+  targetMapId: string | number;
+  targetGateId?: string;
+  spawnPoint?: Vec2;
+  minLevel?: number;
+  safeZoneRadius?: number;
 }
 
 export interface MapDef {
-  id: string;
+  id: string | number;
+  numericId?: number;
+  key?: string;
   name: string;
-  biome: 'green_valley' | 'canyon_flats' | 'frostline_pass' | 'ash_city';
+  biome: string;
   width: number;
   height: number;
   safeZone?: {
@@ -222,11 +232,19 @@ export interface MapDef {
     y: number;
     radius: number;
   };
-  landmark: {
+  safeZones?: Array<{
     name: string;
     x: number;
     y: number;
-    type: 'watchtower' | 'canyon_arch' | 'frozen_waterfall' | 'collapsed_skyscraper';
+    radius: number;
+    repairRate?: number;
+    faction?: string;
+  }>;
+  landmark?: {
+    name: string;
+    x: number;
+    y: number;
+    type: string;
   };
   gates: MapGateDef[];
   obstacles: MapObstacle[];
@@ -238,12 +256,15 @@ export interface MapDef {
     area: { x: number; y: number; width: number; height: number };
   }>;
   bossSpawn?: {
-    type: 'siege_crawler' | 'storm_walker' | 'fortress_train';
+    type?: string;
     name: string;
     level: number;
     pos: Vec2;
   };
+  weather?: string;
+  timeOfDay?: string;
 }
+
 
 // Commands
 export type SimCommand =

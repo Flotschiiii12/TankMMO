@@ -100,7 +100,7 @@ export class Realm {
       repairCooldown: 0,
       overdriveRemaining: 0,
       overdriveCooldown: 0,
-      invulnerableTime: 3.0,
+      invulnerableTime: 5.0,
       isHostile: false,
     };
   }
@@ -115,21 +115,54 @@ export class Realm {
     fromInst.removeEntity(player.id);
 
     const targetInst = this.getInstance(targetMapId);
-    const targetMapDef = MAP_CATALOG[targetMapId];
+    const targetMapDef = targetInst.world.mapDef;
 
     // Find destination gate position
-    const matchingGate = targetMapDef.gates.find((g) => g.targetMapId === fromMapId) || targetMapDef.gates[0];
-    const spawnPos = matchingGate
+    const matchingGate =
+      targetMapDef.gates.find((g) => String(g.targetMapId) === String(fromMapId)) ||
+      targetMapDef.gates[0];
+
+    const spawnPos = matchingGate && matchingGate.spawnPoint
+      ? { ...matchingGate.spawnPoint }
+      : matchingGate
       ? { x: matchingGate.x + 80, y: matchingGate.y + 80 }
       : { x: targetMapDef.width / 2, y: targetMapDef.height / 2 };
 
     player.pos = { ...spawnPos };
     player.vel = vec2();
     player.gateHoldTimer = 0;
-    player.invulnerableTime = 2.0;
+    player.invulnerableTime = 5.0; // 5s spawn protection after jumping
+
+    targetInst.insertPlayer(player);
+
+    return { targetInstance: targetInst, newPos: spawnPos };
+  }
+
+  teleportPlayer(
+    fromMapId: string,
+    targetMapId: string,
+    player: SimEntity
+  ): { targetInstance: MapInstance; newPos: { x: number; y: number } } {
+    const fromInst = this.getInstance(fromMapId);
+    fromInst.removeEntity(player.id);
+
+    const targetInst = this.getInstance(targetMapId);
+    const targetMapDef = targetInst.world.mapDef;
+
+    const spawnPos = targetMapDef.safeZone
+      ? { x: targetMapDef.safeZone.x, y: targetMapDef.safeZone.y }
+      : targetMapDef.safeZones && targetMapDef.safeZones.length > 0
+      ? { x: targetMapDef.safeZones[0].x, y: targetMapDef.safeZones[0].y }
+      : { x: targetMapDef.width / 2, y: targetMapDef.height / 2 };
+
+    player.pos = { ...spawnPos };
+    player.vel = vec2();
+    player.gateHoldTimer = 0;
+    player.invulnerableTime = 5.0;
 
     targetInst.insertPlayer(player);
 
     return { targetInstance: targetInst, newPos: spawnPos };
   }
 }
+

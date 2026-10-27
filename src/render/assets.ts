@@ -5,16 +5,30 @@
  * Emits a single informational log at startup.
  */
 
-const TOTAL_EXPECTED_SPRITES = 24; // 12 vehicle chassis/turrets + 8 enemies + 4 landmarks
+const TOTAL_EXPECTED_SPRITES = 71;
 
 export class SpriteRegistry {
   private images = new Map<string, HTMLImageElement | null>();
   private allowedFiles = new Set<string>();
   private manifestLoaded = false;
   private pending = new Set<string>();
+  private listeners: Array<() => void> = [];
 
   constructor() {
     this.loadManifest();
+  }
+
+  public onChange(listener: () => void) {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  private notify() {
+    for (const listener of this.listeners) {
+      listener();
+    }
   }
 
   private async loadManifest() {
@@ -37,6 +51,11 @@ export class SpriteRegistry {
       console.info(
         `[Treadfront Art Pipeline] ${foundCount} of ${TOTAL_EXPECTED_SPRITES} sprites found, using vector placeholders`
       );
+
+      // Preload priority assets immediately
+      for (const path of this.allowedFiles) {
+        this.getImage(path);
+      }
     }
   }
 
@@ -65,6 +84,7 @@ export class SpriteRegistry {
     img.onload = () => {
       this.images.set(path, img);
       this.pending.delete(path);
+      this.notify();
     };
     img.onerror = () => {
       this.images.set(path, null);
@@ -88,16 +108,21 @@ export class SpriteRegistry {
   }
 
   public getPropPath(id: string): string {
-    return `/assets/props/${id}.png`;
+    return id.endsWith('.png') ? `/assets/props/${id}` : `/assets/props/${id}.png`;
   }
 
   public getLandmarkPath(mapId: string): string {
     return `/assets/landmarks/${mapId}.png`;
   }
 
-  public getGroundPath(mapId: string): string {
-    return `/assets/ground/${mapId}.png`;
+  public getGroundPath(name: string): string {
+    return name.endsWith('.png') ? `/assets/ground/${name}` : `/assets/ground/${name}.png`;
+  }
+
+  public getFxPath(id: string): string {
+    return id.endsWith('.png') ? `/assets/fx/${id}` : `/assets/fx/${id}.png`;
   }
 }
 
 export const spriteRegistry = new SpriteRegistry();
+

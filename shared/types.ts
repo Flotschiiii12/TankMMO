@@ -231,6 +231,11 @@ export interface SimEntity {
   lootOre?: number;
   lootAmmo?: { type: AmmoType; count: number };
   lootKind?: 'scrap' | 'ore' | 'ammo' | 'repair';
+  isElite?: boolean;
+  /** Summoned/event spawn: never respawns. */
+  temporary?: boolean;
+  isWorldBoss?: boolean;
+  damageBy?: Record<number, number>;
 }
 
 // ==========================================
@@ -321,6 +326,12 @@ export type SimEvent =
   | { type: 'status_applied'; entityId: number; status: StatusEffectType; duration: number }
   | { type: 'player_died'; entityId: number }
   | { type: 'explosion'; pos: Vec2; radius: number }
+  | { type: 'dungeon_wave'; wave: number; total: number }
+  | { type: 'dungeon_cleared'; dungeonId: string; timeLeft: number }
+  | { type: 'dungeon_failed'; dungeonId: string; reason: 'timeout' | 'wipe' }
+  | { type: 'boss_rewards'; bossId: number; rewards: Array<{ entityId: number; share: number; tier: 'gold' | 'silver' | 'bronze' }> }
+  | { type: 'event_started'; eventId: string; kind: string }
+  | { type: 'event_ended'; eventId: string; kind: string }
   | { type: 'level_up'; entityId: number; newLevel: number };
 
 // ==========================================

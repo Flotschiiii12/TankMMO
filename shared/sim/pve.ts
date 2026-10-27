@@ -18,6 +18,8 @@ import {
   Vec2,
   vec2,
 } from '../types.ts';
+import { stepDungeon } from './dungeon.ts';
+import { activeEvents, eventAppliesToMap, WORLD_BOSS_PERIOD_SECONDS } from './events.ts';
 import { getNextEntityId, isPosInSafeZone, spawnVehicle, World, fireMainCannon } from './world.ts';
 
 export const PORTAL_HOLD_SECONDS = 3;
@@ -25,15 +27,28 @@ export const WRECK_SECONDS = 8;
 export const MINING_SECONDS = 3;
 const LOOT_MAGNET_RADIUS = 130;
 const MAX_CHAT = 40;
+export const ELITES_PER_MAP = 3;
+/** Boss catalog entry used on each boss map (numeric map id). */
+export const BOSS_BY_MAP: Record<number, string> = {
+  4: 'boss_cape_warden',
+  8: 'boss_eagle_colossus',
+  12: 'boss_windmill_goliath',
+  19: 'boss_highway_behemoth',
+  27: 'boss_storm_coast_leviathan',
+};
+/** Share of total boss damage needed for each reward tier. */
+export const BOSS_REWARD_TIERS = [{ tier: 'gold', minShare: 0.1 }, { tier: 'silver', minShare: 0.03 }, { tier: 'bronze', minShare: 0 }] as const;
 
 export interface PveState {
-  respawnQueue: Array<{ type: string; level: number; homePos: Vec2; timer: number }>;
+  respawnQueue: Array<{ type: string; level: number; homePos: Vec2; timer: number; elite?: boolean }>;
   bossTimer: number;
   bossId?: number;
+  activeEvents: string[];
+  nextInvasionWave: number;
 }
 
 export function createPveState(): PveState {
-  return { respawnQueue: [], bossTimer: 0 };
+  return { respawnQueue: [], bossTimer: 0, activeEvents: [], nextInvasionWave: 0 };
 }
 
 /** Entities that are scenery/interactables, not vehicles: no AI, no physics, no targeting. */
@@ -87,23 +102,45 @@ export function populateWorld(world: World, map: MapDef): void {
       spawnEnemy(world, spawn.type, level, { x, y });
     }
   }
+  if (map.type !== 'HOME' && map.type !== 'HUB' && map.type !== 'ARENA' && map.enemySpawns.length > 0) {
+    for (let i = 0; i < ELITES_PER_MAP; i++) {
+      const spawn = map.enemySpawns[i % map.enemySpawns.length];
+      const level = spawn.levelRange[1] + 1;
+      const x = spawn.area.x + world.rng.next() * spawn.area.width;
+      const y = spawn.area.y + world.rng.next() * spawn.area.height;
+      spawnEnemy(world, spawn.type, level, { x, y }, { elite: true });
+    }
+  }
   if (map.bossSpawn) spawnBoss(world);
 }
 
-export function spawnEnemy(world: World, type: string, level: number, pos: Vec2): SimEntity {
+export interface SpawnOptions {
+  elite?: boolean;
+  /** Extra hull multiplier (dungeon party scaling). */
+  hullMult?: number;
+}
+
+export function spawnEnemy(world: World, type: string, level: number, pos: Vec2, opts: SpawnOptions = {}): SimEntity {
   const arch = archetypeFor(type);
   const mult = 1 + (level - 1) * 0.12;
+  const eliteHull = opts.elite ? 3 : 1;
+  const eliteDmg = opts.elite ? 1.5 : 1;
+  const hullMult = (opts.hullMult ?? 1) * eliteHull;
   const e = spawnVehicle(world, arch.kind, `${arch.displayName} [Lv.${level}]`, level, pos, {
-    maxHull: Math.round(arch.baseHull * mult),
-    maxArmor: Math.round(arch.baseArmor * mult),
+    maxHull: Math.round(arch.baseHull * mult * hullMult),
+    maxArmor: Math.round(arch.baseArmor * mult * hullMult),
     maxSpeed: arch.maxSpeed,
     turnRate: arch.turnRate,
     turretTurnRate: arch.turretTurnRate,
-    mainDamage: Math.round(arch.baseDamage * mult),
+    mainDamage: Math.round(arch.baseDamage * mult * eliteDmg),
     mainReloadTime: arch.reloadTime,
-    radius: arch.radius,
+    radius: Math.round(arch.radius * (opts.elite ? 1.2 : 1)),
     isHostile: true,
   });
+  if (opts.elite) {
+    e.isElite = true;
+    e.name = `Elite ${arch.displayName} [Lv.${level}]`;
+  }
   e.chassisAngle = world.rng.next() * Math.PI * 2;
   e.mainRange = arch.attackRange;
   e.mainReloadRemaining = world.rng.range(0.2, arch.reloadTime);
@@ -121,7 +158,8 @@ export function spawnEnemy(world: World, type: string, level: number, pos: Vec2)
 export function spawnBoss(world: World): SimEntity | undefined {
   const def = world.map?.bossSpawn;
   if (!def) return undefined;
-  const bd = BOSS_CATALOG.find((b) => b.id === def.type) || BOSS_CATALOG.find((b) => b.name === def.name) || BOSS_CATALOG[0];
+  const bossId = def.type || (world.map ? BOSS_BY_MAP[Number(world.map.numericId ?? world.map.id)] : undefined);
+  const bd = BOSS_CATALOG.find((b) => b.id === bossId) || BOSS_CATALOG[0];
   const boss = spawnVehicle(world, 'boss', def.name, def.level, def.pos, {
     maxHull: bd.baseHull,
     maxArmor: bd.baseArmor,
@@ -142,6 +180,8 @@ export function spawnBoss(world: World): SimEntity | undefined {
   boss.aggroRange = 900;
   boss.leashRange = 1600;
   boss.archetypeId = bd.id;
+  boss.isWorldBoss = bd.type === 'world_boss';
+  boss.damageBy = {};
   world.pve.bossId = boss.id;
   pushChat(world, 'SATELLITE WARNING', 'WARN', 'S', `CRITICAL ALERT: ${def.name} detected on the battlefield!`);
   return boss;
@@ -159,6 +199,8 @@ export function stepPve(world: World, dt: number): void {
   updatePortals(world, dt);
   updateMining(world, dt);
   updateWrecksAndRespawns(world, dt);
+  stepDungeon(world, dt);
+  stepEvents(world);
 }
 
 function handleDeaths(world: World): void {
@@ -181,13 +223,68 @@ function handleDeaths(world: World): void {
     if (!v.isHostile) continue;
     dropLoot(world, v);
     if (v.kind === 'boss') {
-      world.pve.bossTimer = world.map?.bossSpawn?.respawnSeconds ?? 300;
+      world.pve.bossTimer = v.isWorldBoss ? WORLD_BOSS_PERIOD_SECONDS : (world.map?.bossSpawn?.respawnSeconds ?? 300);
       world.pve.bossId = undefined;
       pushChat(world, 'SATELLITE HQ', 'CMD', 'S', `VICTORY: ${v.name} has been neutralized!`);
-    } else {
-      world.pve.respawnQueue.push({ type: v.archetypeId || v.kind, level: v.level, homePos: v.homePos ? { ...v.homePos } : { ...v.pos }, timer: world.rng.range(20, 35) });
+      announceBossRewards(world, v);
+    } else if (!world.dungeon && !v.temporary) {
+      world.pve.respawnQueue.push({ type: v.archetypeId || v.kind, level: v.level, homePos: v.homePos ? { ...v.homePos } : { ...v.pos }, timer: v.isElite ? world.rng.range(90, 150) : world.rng.range(20, 35), elite: v.isElite });
     }
   }
+}
+
+/** Runs once per second: starts/ends scheduled events and applies their effects. */
+function stepEvents(world: World): void {
+  if (world.tick % 30 !== 0 || world.dungeon || !world.map) return;
+  const mapId = Number(world.map.numericId ?? world.map.id);
+  const now = world.clockOffset + world.time;
+  const active = activeEvents(now).filter((e) => eventAppliesToMap(e.kind, mapId));
+  const ids = active.map((e) => e.id);
+  for (const e of active) {
+    if (world.pve.activeEvents.includes(e.id)) continue;
+    world.events.push({ type: 'event_started', eventId: e.id, kind: e.kind });
+    pushChat(world, 'EVENT', 'EVT', 'S', `Event started: ${e.kind.replace('_', ' ')}`);
+    if (e.kind === 'meteor_shower') spawnMeteorNodes(world);
+    if (e.kind === 'invasion') world.pve.nextInvasionWave = world.time;
+  }
+  for (const old of world.pve.activeEvents) {
+    if (!ids.includes(old)) world.events.push({ type: 'event_ended', eventId: old, kind: old.split('@')[0] });
+  }
+  world.pve.activeEvents = ids;
+  if (active.some((e) => e.kind === 'invasion') && world.time >= world.pve.nextInvasionWave) {
+    world.pve.nextInvasionWave = world.time + 60;
+    spawnInvasionWave(world);
+  }
+}
+
+function spawnMeteorNodes(world: World): void {
+  for (let i = 0; i < 4; i++) {
+    const n = makeInert(world, 'resource_node', 'METEOR Crystal', { x: world.rng.range(300, world.width - 300), y: world.rng.range(300, world.height - 300) }, 32, 999999);
+    n.nodeType = 'crystal';
+    n.nodeOreRemaining = 150;
+  }
+}
+
+function spawnInvasionWave(world: World): void {
+  const zone = world.safeZones[0];
+  const cx = zone ? zone.x : world.width / 2;
+  const cy = zone ? zone.y : world.height / 2;
+  for (let i = 0; i < 6; i++) {
+    const a = world.rng.next() * Math.PI * 2;
+    const r = (zone?.radius ?? 400) + 500;
+    spawnEnemy(world, i % 3 === 0 ? 'gunner_truck' : 'scout_buggy', world.map ? world.map.levelRange[1] : 5, { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }).temporary = true;
+  }
+}
+
+function announceBossRewards(world: World, boss: SimEntity): void {
+  const by = boss.damageBy ?? {};
+  const total = Object.values(by).reduce((a, b) => a + b, 0);
+  if (total <= 0) return;
+  const rewards = Object.entries(by)
+    .map(([id, dmg]) => ({ entityId: Number(id), share: dmg / total }))
+    .sort((a, b) => b.share - a.share)
+    .map((r) => ({ ...r, tier: BOSS_REWARD_TIERS.find((t) => r.share >= t.minShare)!.tier }));
+  world.events.push({ type: 'boss_rewards', bossId: boss.id, rewards });
 }
 
 function dropLoot(world: World, victim: SimEntity): void {
@@ -326,8 +423,8 @@ function bossAI(world: World, ent: SimEntity, target: SimEntity | undefined, dt:
   } else if (ratio < 0.66 && ent.bossPhase === 1) {
     ent.bossPhase = 2;
     pushChat(world, ent.name, 'BOSS', 'S', `${ent.name} deploys scout escorts and initiates barrage protocol!`);
-    spawnEnemy(world, 'scout_buggy', Math.max(1, ent.level - 4), { x: ent.pos.x - 80, y: ent.pos.y - 80 });
-    spawnEnemy(world, 'scout_buggy', Math.max(1, ent.level - 4), { x: ent.pos.x + 80, y: ent.pos.y + 80 });
+    spawnEnemy(world, 'scout_buggy', Math.max(1, ent.level - 4), { x: ent.pos.x - 80, y: ent.pos.y - 80 }).temporary = true;
+    spawnEnemy(world, 'scout_buggy', Math.max(1, ent.level - 4), { x: ent.pos.x + 80, y: ent.pos.y + 80 }).temporary = true;
   }
   ent.bossSkillCooldown = (ent.bossSkillCooldown ?? 0) - dt;
   if (!target) { ent.targetSpeed = ent.maxSpeed * 0.3; return; }
@@ -477,7 +574,7 @@ function updateWrecksAndRespawns(world: World, dt: number): void {
     const q = world.pve.respawnQueue[i];
     q.timer -= dt;
     if (q.timer <= 0) {
-      spawnEnemy(world, q.type, q.level, q.homePos);
+      spawnEnemy(world, q.type, q.level, q.homePos, { elite: q.elite });
       world.pve.respawnQueue.splice(i, 1);
     }
   }

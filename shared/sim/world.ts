@@ -7,6 +7,7 @@
 
 import { SimRNG } from '../prng.ts';
 import { generateProceduralMap } from './mapGenerator.ts';
+import type { DungeonState } from './dungeon.ts';
 import { createPveState, isInertKind, populateWorld, PveState, stepPve } from './pve.ts';
 import {
   AMMO_CONFIGS,
@@ -67,6 +68,9 @@ export interface World {
   slowZones: NonNullable<MapDef['slowZones']>;
   chat: ChatMessage[];
   pve: PveState;
+  dungeon?: DungeonState;
+  /** Server clock (epoch seconds) at world time 0: drives the event/world-boss schedule. */
+  clockOffset: number;
 }
 
 export interface WorldInitOptions {
@@ -80,6 +84,7 @@ export interface WorldInitOptions {
   map?: MapDef;
   /** Spawn enemies/boss/nodes/portals from `map` (default true when a map is given). */
   populate?: boolean;
+  clockOffset?: number;
 }
 
 export function createWorld(options: WorldInitOptions = {}): World {
@@ -118,6 +123,7 @@ export function createWorld(options: WorldInitOptions = {}): World {
       ? [{ id: 'msg_welcome', sender: 'HQ Commander', clanTag: 'CMD', channel: 'S', text: `Welcome to ${map.name}. Secure resources, watch your flanks, and upgrade in the safe zone.`, timestamp: 0 }]
       : [],
     pve: createPveState(),
+    clockOffset: options.clockOffset ?? 0,
   };
 
   if (map && options.populate !== false) populateWorld(world, map);
@@ -643,6 +649,7 @@ function updateSecondaryWeapons(world: World): void {
     });
     target.armor = res.newArmor;
     target.hull = Math.max(0, target.hull - res.hullDamage);
+    recordBossDamage(target, ent.id, res.totalDamageDealt);
     target.armorRegenTimer = 0;
     target.lastDamagedTick = world.tick;
     target.hitFlashTimer = 0.12;
@@ -659,6 +666,10 @@ function updateSecondaryWeapons(world: World): void {
       world.events.push({ type: 'entity_killed', victimId: target.id, killerId: ent.id, pos: { ...target.pos }, level: target.level, scrapReward: 25 * target.level, xpReward: 80 * target.level });
     }
   }
+}
+
+export function recordBossDamage(victim: SimEntity, attackerId: number | undefined, amount: number): void {
+  if (victim.damageBy && attackerId !== undefined) victim.damageBy[attackerId] = (victim.damageBy[attackerId] ?? 0) + amount;
 }
 
 function applyHit(world: World, proj: SimEntity, primaryTarget: SimEntity, splashRadius: number): void {
@@ -706,6 +717,7 @@ function applyHit(world: World, proj: SimEntity, primaryTarget: SimEntity, splas
 
     victim.armor = result.newArmor;
     victim.hull = Math.max(0, victim.hull - result.hullDamage);
+    recordBossDamage(victim, sourceId, result.totalDamageDealt);
     victim.armorRegenTimer = 0; // Reset out of combat regen timer
     victim.lastDamagedTick = world.tick;
     victim.hitFlashTimer = 0.12;

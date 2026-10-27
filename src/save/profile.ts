@@ -1,4 +1,5 @@
 import { AmmoType } from '../sim/types.ts';
+import { migrateVehicleId, STARTER_VEHICLE_ID } from '../data/vehicles.ts';
 
 /** Saves from before the simulation merge used lowercase ammo ids. */
 const LEGACY_AMMO: Record<string, AmmoType> = { standard: 'STANDARD', ap: 'ARMOR_PIERCING', he: 'EXPLOSIVE' };
@@ -45,8 +46,8 @@ export const DEFAULT_PROFILE: UserProfile = {
   xp: 0,
   scrap: 400,
   parts: 25,
-  unlockedVehicles: ['patchwork_scout'],
-  currentVehicleId: 'patchwork_scout',
+  unlockedVehicles: [STARTER_VEHICLE_ID],
+  currentVehicleId: STARTER_VEHICLE_ID,
   equippedParts: {
     cannon: 'cannon_t1',
     armor: 'armor_t1',
@@ -86,6 +87,8 @@ export class LocalStorageProfileStore implements ProfileStore {
         return {
           ...DEFAULT_PROFILE,
           ...parsed,
+          unlockedVehicles: Array.from(new Set<string>((parsed.unlockedVehicles || [STARTER_VEHICLE_ID]).map(migrateVehicleId))),
+          currentVehicleId: migrateVehicleId(parsed.currentVehicleId || STARTER_VEHICLE_ID),
           ammoInventory: { ...DEFAULT_PROFILE.ammoInventory, ...migrateAmmo(parsed.ammoInventory || {}) },
           equippedParts: { ...DEFAULT_PROFILE.equippedParts, ...(parsed.equippedParts || {}) },
           settings: { ...DEFAULT_PROFILE.settings, ...(parsed.settings || {}) },

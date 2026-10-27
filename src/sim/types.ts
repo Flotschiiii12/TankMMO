@@ -11,7 +11,10 @@ import type { Vec2, EntityKind, MapObstacle, AmmoType } from '../../shared/types
 export interface VehicleStats {
   id: string;
   name: string;
+  vehicleClass: 'scout' | 'medium' | 'heavy' | 'artillery' | 'support';
   tier: number;
+  damage: number;
+  range: number;
   baseHull: number;
   baseArmor: number;
   maxSpeed: number;

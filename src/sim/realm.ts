@@ -74,6 +74,8 @@ export class Realm {
     const scratch = createScratchWorld({ populate: false });
     const ent = spawnVehicle(scratch, 'player', name, level, { x: 2000, y: 2000 }, {
       tier: stats.tier,
+      vehicleClass: stats.vehicleClass,
+      mainDamage: Math.round(stats.damage * (1 + equippedBonus.dpsBonus / 380)),
       clanTag: 'CMD',
       maxHull: Math.round((stats.baseHull + equippedBonus.hullBonus) * levelMult),
       maxArmor: Math.round((stats.baseArmor + equippedBonus.armorBonus) * levelMult),
@@ -83,6 +85,7 @@ export class Realm {
       mainReloadTime: stats.reloadTime,
       radius: 26 + stats.tier * 2,
     });
+    ent.mainRange = stats.range;
     ent.id = id;
     ent.invulnerableTime = 5.0;
     return ent;

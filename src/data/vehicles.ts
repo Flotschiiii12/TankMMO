@@ -1,99 +1,63 @@
 import { VehicleStats } from '../sim/types.ts';
+import { TIER_CONFIGS, VEHICLE_CATALOG } from '../../shared/data/vehicles.ts';
 
-export const VEHICLE_TIERS: VehicleStats[] = [
-  {
-    id: 'patchwork_scout',
-    name: 'Patchwork Scout',
-    tier: 1,
-    baseHull: 3200,
-    baseArmor: 1800,
-    maxSpeed: 215,
-    turnRate: 2.8,
-    turretTurnRate: 3.6,
-    reloadTime: 1.8,
-    costScrap: 0,
-    costParts: 0,
-    minLevel: 1,
-    description: 'Scrappy frame welded together from salvaged sheet metal and scavenged scout treads. Agile but fragile.',
-  },
-  {
-    id: 'ranger',
-    name: 'Ranger Recon',
-    tier: 2,
-    baseHull: 4800,
-    baseArmor: 2800,
-    maxSpeed: 198,
-    turnRate: 2.5,
-    turretTurnRate: 3.2,
-    reloadTime: 1.65,
-    costScrap: 850,
-    costParts: 45,
-    minLevel: 4,
-    description: 'Field-retrofitted light combat vehicle with reinforced side skirts and improved suspension.',
-  },
-  {
-    id: 'warden',
-    name: 'Iron Warden',
-    tier: 3,
-    baseHull: 6800,
-    baseArmor: 4200,
-    maxSpeed: 180,
-    turnRate: 2.2,
-    turretTurnRate: 2.9,
-    reloadTime: 1.5,
-    costScrap: 2400,
-    costParts: 160,
-    minLevel: 8,
-    description: 'Tactical front-line combat tank. Features sloped ballistic plates and stabilized gun mount.',
-  },
-  {
-    id: 'bulwark',
-    name: 'Bulwark Mk-IV',
-    tier: 4,
-    baseHull: 9600,
-    baseArmor: 6500,
-    maxSpeed: 162,
-    turnRate: 1.95,
-    turretTurnRate: 2.5,
-    reloadTime: 1.35,
-    costScrap: 6200,
-    costParts: 420,
-    minLevel: 14,
-    description: 'Heavy breakthrough chassis with dual-track stability and reinforced frontal armor composite.',
-  },
-  {
-    id: 'sentinel',
-    name: 'Vanguard Sentinel',
-    tier: 5,
-    baseHull: 13500,
-    baseArmor: 9800,
-    maxSpeed: 175,
-    turnRate: 2.15,
-    turretTurnRate: 2.8,
-    reloadTime: 1.2,
-    costScrap: 14500,
-    costParts: 1050,
-    minLevel: 20,
-    description: 'High-spec military prototype. Clean lines, magnetic shield conduits, and rapid-traverse turret ring.',
-  },
-  {
-    id: 'titan',
-    name: 'Aegis Titan',
-    tier: 6,
-    baseHull: 19000,
-    baseArmor: 14500,
-    maxSpeed: 155,
-    turnRate: 1.85,
-    turretTurnRate: 2.4,
-    reloadTime: 1.05,
-    costScrap: 32000,
-    costParts: 2400,
-    minLevel: 26,
-    description: 'Apex land fortress. Quad heavy tracks, thick nanocore armor, and automated fire-control array.',
-  },
-];
+const CLASS_LABEL: Record<string, string> = {
+  scout: 'Scout',
+  medium: 'Medium',
+  heavy: 'Heavy',
+  artillery: 'Artillery',
+  support: 'Support',
+};
+
+const CLASS_BLURB: Record<string, string> = {
+  scout: 'Fast and light. Dash to close in or break away.',
+  medium: 'Balanced all-rounder with Overcharge.',
+  heavy: 'Slow, thick armor and extra slots. Fortify to hold the line.',
+  artillery: 'Long range splash damage, fragile. Barrage hits a marked area.',
+  support: 'Repair aura and radar for the group, low damage.',
+};
+
+/** All 50 vehicles (5 classes x 10 tiers) from the shared data tables. */
+export const VEHICLE_TIERS: VehicleStats[] = VEHICLE_CATALOG.map((v) => {
+  const tierName = TIER_CONFIGS[v.tier - 1].name;
+  return {
+    id: v.id,
+    name: `${tierName} ${CLASS_LABEL[v.vehicleClass]}`,
+    vehicleClass: v.vehicleClass,
+    tier: v.tier,
+    damage: v.baseDamage,
+    range: v.range,
+    baseHull: v.baseHull,
+    baseArmor: v.baseArmor,
+    maxSpeed: v.baseSpeed,
+    turnRate: v.turnRate,
+    turretTurnRate: v.turretTurnRate,
+    reloadTime: v.reloadTime,
+    costScrap: v.costScrap,
+    // Ore is not a profile currency yet (economy milestone): parts stand in at 1/10.
+    costParts: Math.round(v.costOre / 10),
+    minLevel: v.minLevel,
+    description: CLASS_BLURB[v.vehicleClass],
+  };
+});
+
+export const STARTER_VEHICLE_ID = 'veh_medium_t1';
+
+/** Saves from before the 50-vehicle roster used six prototype ids. */
+export const LEGACY_VEHICLE_IDS: Record<string, string> = {
+  patchwork_scout: 'veh_medium_t1',
+  ranger: 'veh_medium_t2',
+  warden: 'veh_medium_t3',
+  bulwark: 'veh_heavy_t4',
+  sentinel: 'veh_medium_t5',
+  titan: 'veh_heavy_t6',
+};
+
+export function migrateVehicleId(id: string): string {
+  return LEGACY_VEHICLE_IDS[id] || id;
+}
 
 export function getVehicleById(id: string): VehicleStats {
-  const found = VEHICLE_TIERS.find((v) => v.id === id);
-  return found || VEHICLE_TIERS[0];
+  const found = VEHICLE_TIERS.find((v) => v.id === migrateVehicleId(id));
+  return found || VEHICLE_TIERS.find((v) => v.id === STARTER_VEHICLE_ID)!;
 }

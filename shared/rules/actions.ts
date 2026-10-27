@@ -5,6 +5,7 @@
 import { SimRNG } from '../prng.ts';
 import type { AmmoType } from '../types.ts';
 import * as C from './character.ts';
+import { bump } from './achievements.ts';
 import * as Q from './quests.ts';
 
 export type ClientAction =
@@ -46,11 +47,11 @@ export function executeAction(ch: C.CharacterState, a: ClientAction, rng: SimRNG
   switch (a.kind) {
     case 'equip': { C.unequipItem(ch, a.vehicleId, a.slot); return C.equipItem(ch, a.vehicleId, a.slot, a.uid); }
     case 'unequip': return C.unequipItem(ch, a.vehicleId, a.slot);
-    case 'upgrade': { const r = C.upgradeItem(ch, a.uid, rng, !!a.safe); if (r.ok) Q.onQuestEvent(ch, { type: 'upgrade' }); return r; }
-    case 'dismantle': return C.dismantleItem(ch, a.uid);
-    case 'craft': { const r = C.craftItem(ch, a.recipeId, rng); if (r.ok) Q.onQuestEvent(ch, { type: 'craft' }); return r; }
-    case 'reroll': return C.rerollAffix(ch, a.uid, a.index, rng);
-    case 'fuse': return C.fuseItems(ch, a.uids, rng);
+    case 'upgrade': { const r = C.upgradeItem(ch, a.uid, rng, !!a.safe); if (r.ok) { Q.onQuestEvent(ch, { type: 'upgrade' }); bump(ch, 'upgrades'); } return r; }
+    case 'dismantle': { const r = C.dismantleItem(ch, a.uid); if (r.ok) bump(ch, 'dismantled'); return r; }
+    case 'craft': { const r = C.craftItem(ch, a.recipeId, rng); if (r.ok) { Q.onQuestEvent(ch, { type: 'craft' }); bump(ch, 'crafted'); } return r; }
+    case 'reroll': { const r = C.rerollAffix(ch, a.uid, a.index, rng); if (r.ok) bump(ch, 'rerolls'); return r; }
+    case 'fuse': { const r = C.fuseItems(ch, a.uids, rng); if (r.ok && r.upgraded) bump(ch, 'fusions'); return r; }
     case 'expand_inventory': return C.expandInventory(ch);
     case 'buy_vehicle': return C.buyVehicle(ch, a.vehicleId);
     case 'set_vehicle':

@@ -88,6 +88,10 @@ export interface CharacterState {
   faction: PlayerFaction;
   /** maps whose safe zones the player has reached (fast travel targets) */
   visitedMaps: number[];
+  /** event counters feeding achievements (see achievements.ts) */
+  stats: Record<string, number>;
+  achievements: string[];
+  codex: Record<string, string[]>;
   /** server seconds of the last change (0 = never changed after the free first choice) */
   factionChangedAt: number;
 }
@@ -114,6 +118,9 @@ export function createCharacter(name: string): CharacterState {
     reputation: {},
     faction: 'coastal',
     visitedMaps: [1],
+    stats: {},
+    achievements: [],
+    codex: {},
     factionChangedAt: 0,
   };
 }

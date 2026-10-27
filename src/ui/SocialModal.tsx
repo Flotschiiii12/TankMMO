@@ -6,8 +6,11 @@ import type { SocialOp } from '../../shared/protocol.ts';
 import { describeItem, errorText } from '../game/actions.ts';
 import { ITEM_BY_ID } from '../../shared/data/items.ts';
 import { priceBandClient } from '../game/priceBand.ts';
+import { ACHIEVEMENTS_CATALOG } from '../../shared/data/achievements.ts';
+import { getRankForHonor } from '../../shared/data/ranks.ts';
+import { codexProgress, progressOf } from '../../shared/rules/achievements.ts';
 
-type Tab = 'friends' | 'party' | 'clan' | 'ranking' | 'market' | 'arena';
+type Tab = 'friends' | 'party' | 'clan' | 'ranking' | 'market' | 'arena' | 'gates' | 'career';
 
 export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; onClose: () => void; notices: string[]; character: import('../../shared/rules/character.ts').CharacterState }> = ({ client, isOpen, onClose, notices, character }) => {
   const [sellUid, setSellUid] = useState('');
@@ -30,7 +33,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
   }, [client]);
 
   const load = useCallback(async () => {
-    const req: SocialOp = tab === 'market' ? { op: 'ah_search' } : tab === 'arena' ? { op: 'arena_status' } : tab === 'friends' ? { op: 'friend_list' } : tab === 'party' ? { op: 'party_info' } : tab === 'clan' ? { op: 'clan_info' } : { op: 'ranking', kind: rankKind };
+    const req: SocialOp = tab === 'gates' ? { op: 'dungeon_list' } : tab === 'career' ? { op: 'friend_list' } : tab === 'market' ? { op: 'ah_search' } : tab === 'arena' ? { op: 'arena_status' } : tab === 'friends' ? { op: 'friend_list' } : tab === 'party' ? { op: 'party_info' } : tab === 'clan' ? { op: 'clan_info' } : { op: 'ranking', kind: rankKind };
     const r = await client.social(req);
     setData(r.ok ? r.data : tab === 'clan' ? { none: true, invites: (await client.social({ op: 'clan_invites' })).data ?? [] } : null);
   }, [client, tab, rankKind]);
@@ -50,7 +53,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
           <button onClick={() => { soundEngine.playUIClick(); onClose(); }} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
         <div className="flex gap-2 mt-2 text-xs items-center">
-          {(['friends', 'party', 'clan', 'ranking', 'market', 'arena'] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded capitalize ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{t}</button>)}
+          {(['friends', 'party', 'clan', 'ranking', 'market', 'arena', 'gates', 'career'] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded capitalize ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{t}</button>)}
           {msg && <span className="ml-auto text-[11px] text-orange-300">{msg}</span>}
         </div>
         {notices.length > 0 && <div className="mt-2 text-[11px] text-emerald-300">{notices.slice(-2).join(' · ')}</div>}
@@ -103,6 +106,34 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
               </>
             )
           )}
+
+          {tab === 'gates' && data && (
+            <>
+              <div className="text-xs text-slate-300">Free keys left today: <b className="text-orange-400">{data.freeKeysLeft}</b> · Gate keys: <b className="text-white">{data.gateKeys}</b>. Parties (up to 5) enter together; enemies scale with party size. 15 minute limit.</div>
+              {data.dungeons.map((d: any) => (
+                <div key={d.id} className={row}><span><b className="text-white">{d.name}</b> <span className="text-slate-500">Lv {d.minLevel}+ · {d.waves} waves + boss {d.cleared ? '· cleared' : ''}</span></span>
+                  <button className={btn} onClick={() => call({ op: 'dungeon_enter', dungeonId: d.id })}>Enter</button></div>
+              ))}
+              <button className={ghost} onClick={() => call({ op: 'dungeon_leave' })}>Leave current gate</button>
+            </>
+          )}
+
+          {tab === 'career' && (() => {
+            const prog = codexProgress(character);
+            const rank = getRankForHonor(character.wallet.honor);
+            return (
+              <>
+                <div className="text-xs text-slate-300">Honor <b className="text-white">{character.wallet.honor}</b> · rank {rank.level} / 21 · season marks {character.wallet.seasonMarks} · faction <b className="capitalize text-white">{character.faction}</b></div>
+                <div className="text-xs text-slate-400">Titles: {character.season.titles.join(', ') || 'none yet'}</div>
+                <div className="text-[11px] text-slate-400">Codex: {Object.entries(prog).map(([k, v]) => `${k} ${v.have}/${v.total}`).join(' · ')}</div>
+                {ACHIEVEMENTS_CATALOG.map((a) => {
+                  const p = Math.min(a.targetValue, progressOf(character, a.id));
+                  const done = character.achievements.includes(a.id);
+                  return <div key={a.id} className={row}><span className={done ? 'text-emerald-400' : 'text-slate-200'}>{a.id.replace('ach_', '').replace(/_/g, ' ')}</span><span className="text-slate-400 tabular-nums">{done ? 'done' : `${p} / ${a.targetValue}`}</span></div>;
+                })}
+              </>
+            );
+          })()}
 
           {tab === 'market' && (
             <>

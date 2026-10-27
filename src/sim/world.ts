@@ -23,7 +23,7 @@ export function resolveMapNumericId(mapId: string | number): number {
 }
 
 export function createWorld(mapId: string | number = 'green_valley', seed = 42): World {
-  return createSharedWorld({ map: getMapById(resolveMapNumericId(mapId)), seed });
+  return createSharedWorld({ map: getMapById(resolveMapNumericId(mapId)), seed, clockOffset: Math.floor(Date.now() / 1000) });
 }
 
 export function spawnDebugTargetEnemies(world: World, playerPos: Vec2) {

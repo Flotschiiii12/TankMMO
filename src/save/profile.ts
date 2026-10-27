@@ -1,7 +1,7 @@
 import { AmmoType } from '../sim/types.ts';
 import { migrateVehicleId, STARTER_VEHICLE_ID } from '../data/vehicles.ts';
 import { SimRNG } from '../../shared/prng.ts';
-import { CharacterState, createCharacter, createItem, equipItem, GarageVehicle } from '../../shared/rules/character.ts';
+import { CharacterState, createCharacter, normalizeCharacter, createItem, equipItem, GarageVehicle } from '../../shared/rules/character.ts';
 
 /** Saves from before the simulation merge used lowercase ammo ids. */
 const LEGACY_AMMO: Record<string, AmmoType> = { standard: 'STANDARD', ap: 'ARMOR_PIERCING', he: 'EXPLOSIVE' };
@@ -104,6 +104,7 @@ export class LocalStorageProfileStore implements ProfileStore {
         return {
           ...base,
           ...parsed,
+          character: normalizeCharacter(parsed.character, parsed.playerName || 'Commander'),
           ammoInventory: { ...base.ammoInventory, ...migrateAmmo(parsed.ammoInventory || {}) },
           settings: { ...base.settings, ...(parsed.settings || {}) },
         };

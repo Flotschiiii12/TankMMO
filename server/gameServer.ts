@@ -23,6 +23,9 @@ import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
 import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
 import { SqliteArenaRepo, SqliteWarRepo } from './db.ts';
 import { AntiCheat } from './anticheat.ts';
+import { bump, checkAchievements, codexAdd } from '../shared/rules/achievements.ts';
+import { DUNGEONS, getDungeon, DUNGEON_FREE_KEYS_PER_DAY } from '../shared/data/dungeons.ts';
+import { createDungeonWorld, dungeonEntryPoint } from '../shared/sim/dungeon.ts';
 import { auctionTax, AUCTION_MAX_LISTINGS, DAILY_TRADE_VOLUME_CAP, MarketRepo, PremiumWallet, rejectingValidator, ReceiptValidator, SHOP_CATALOG, INVENTORY_FREE } from './market.ts';
 import { FLAGS } from '../shared/flags.ts';
 import { MAP_CONNECTIONS } from '../shared/data/maps.ts';
@@ -85,6 +88,7 @@ interface Session {
   streak: number;
   bounty: number;
   arenaFree?: boolean;
+  returnMap?: number;
   lastHonorAt: Map<number, number>;
   partyId?: number;
   clanId?: number;
@@ -126,6 +130,8 @@ export class GameServer {
   readonly metrics = { ticks: 0, maxTickMs: 0, avgTickMs: 0, bytesOut: 0, msgsIn: 0 };
   private instanceCounter = 0;
   private arenaInstances = new Set<Instance>();
+  private dungeonInstances = new Set<Instance>();
+  private dungeonCounter = 0;
   private arenaQueue: AR.QueueEntry[] = [];
   private arenaBans = new Map<string, number>(); // accountId -> until (ms)
   private arenaSeq = 0;
@@ -176,7 +182,7 @@ export class GameServer {
   stepAll(): void {
     const t0 = performance.now();
     this.tick++;
-    const all: Instance[] = [...[...this.instances.values()].flat(), ...this.arenaInstances];
+    const all: Instance[] = [...[...this.instances.values()].flat(), ...this.arenaInstances, ...this.dungeonInstances];
     {
       for (const inst of all) {
         if (inst.sessions.size === 0) continue;
@@ -192,7 +198,7 @@ export class GameServer {
         if (this.tick % SNAPSHOT_EVERY_TICKS === 0) this.sendSnapshots(inst);
       }
     }
-    if (this.tick % TICK_HZ === 0) this.runMatchmaking();
+    if (this.tick % TICK_HZ === 0) { this.runMatchmaking(); this.checkSecrets(); }
     if (this.tick % (TICK_HZ * 30) === 0) this.flushWarScores();
     if (this.tick % (TICK_HZ * 60) === 0) { this.sweepAuctions(); this.runScheduler(); }
     if (this.tick % (TICK_HZ * AUTOSAVE_SECONDS) === 0) for (const s of this.sessions.values()) if (s.dirty) this.save(s);
@@ -277,6 +283,7 @@ export class GameServer {
     s.instance = inst;
     s.entityId = ent.id;
     if (!inst.arena && !s.character.visitedMaps.includes(mapId)) s.character.visitedMaps.push(mapId);
+    if (!inst.arena && !inst.world.dungeon) codexAdd(s.character, 'map', String(mapId));
     s.encoder.reset();
     s.pending = [];
     inst.sessions.add(s);
@@ -628,6 +635,7 @@ export class GameServer {
         if (req.kind === 'honor') return reply({ ok: true, data: this.deps.profiles.topByLevel(20) });
         return reply({ ok: true, data: req.kind === 'clans' ? social.clanRanking(20) : this.deps.profiles.topByLevel(20) });
       case 'arena_queue': return reply(this.arenaQueueJoin(s, req.mode));
+      case 'dungeon_list': case 'dungeon_enter': case 'dungeon_leave': return reply(this.handleDungeon(s, req as any));
       case 'ah_sell': case 'ah_search': case 'ah_mine': case 'ah_buy': case 'ah_cancel': case 'mail_list': case 'mail_claim':
       case 'trade_open': case 'trade_set': case 'trade_confirm': case 'trade_cancel': case 'trade_info':
       case 'fast_travel': case 'shop_list': case 'shop_buy': case 'shop_receipt':
@@ -726,9 +734,26 @@ export class GameServer {
           if (s) this.rewardLoot(s, ev.crateType, ev.amount);
           break;
         }
+        case 'boss_rewards': {
+          const tierMult = { gold: 1, silver: 0.5, bronze: 0.2 } as const;
+          const boss = world.entities.get(ev.bossId);
+          for (const r of ev.rewards) {
+            const s = byEntity.get(r.entityId);
+            if (!s || !boss) continue;
+            const m = tierMult[r.tier];
+            const scrap = Math.round((2000 + boss.level * 400) * m);
+            s.character.wallet.scrap += scrap; bump(s.character, 'scrap_earned', scrap);
+            if (r.tier !== 'bronze') { const loot = rollLoot(s.rng, boss.level, 1, true, true, s.character.pityCounter); if (loot.itemId && loot.rarity) C.createItem(s.character, loot.itemId, loot.rarity, s.rng); }
+            this.send(s, { type: 's_chat', message: { id: `br${r.entityId}`, sender: 'SYSTEM', channel: 'S', text: `World boss reward (${r.tier}): ${scrap} scrap`, timestamp: this.clock.nowMs() } });
+            s.dirty = true; this.sendCharacter(s);
+          }
+          break;
+        }
+        case 'dungeon_cleared': { this.finishDungeon(inst, true); break; }
+        case 'dungeon_failed': { this.finishDungeon(inst, false); break; }
         case 'player_died': {
           const s = byEntity.get(ev.entityId);
-          if (s && !inst.arena) { s.character.wallet.scrap = Math.floor(s.character.wallet.scrap * 0.9); s.respawnAt = world.time + RESPAWN_SECONDS; s.dirty = true; this.sendCharacter(s); }
+          if (s && !inst.arena && !world.dungeon) { s.character.wallet.scrap = Math.floor(s.character.wallet.scrap * 0.9); s.respawnAt = world.time + RESPAWN_SECONDS; s.dirty = true; this.sendCharacter(s); }
           break;
         }
         case 'gate_used': {
@@ -757,6 +782,7 @@ export class GameServer {
       victim.character.wallet.honor = Math.max(0, victim.character.wallet.honor - HONOR_LOSS_ON_DEATH);
     }
     killer.streak++;
+    bump(killer.character, 'pvp_kills');
     if (hadBounty > 0) {
       killer.character.wallet.scrap += hadBounty;
       killer.character.wallet.honor += 25;
@@ -799,8 +825,12 @@ export class GameServer {
     }
     const loot = rollLoot(s.rng, victim.level, 1, !!victim.isElite, isBoss, ch.pityCounter);
     ch.pityCounter = loot.newPityCounter;
-    if (loot.itemId && loot.rarity) C.createItem(ch, loot.itemId, loot.rarity, s.rng);
+    if (loot.itemId && loot.rarity) { if (C.createItem(ch, loot.itemId, loot.rarity, s.rng).ok) codexAdd(ch, 'item', loot.itemId); }
     if (loot.keys > 0) ch.wallet.gateKeys += loot.keys;
+    bump(ch, 'kills');
+    if (isBoss) bump(ch, 'bosses');
+    if (victim.isWorldBoss) bump(ch, 'world_bosses');
+    codexAdd(ch, 'enemy', victim.archetypeId || victim.kind);
     if (s.clanId) this.deps.social.addClanProgress(s.clanId, 'clan_hunt', 1);
     if (group.length <= 1) Q.onQuestEvent(ch, { type: 'kill', kind: victim.kind, level: victim.level, isElite: !!victim.isElite, isBoss });
     if (isBoss) Q.onQuestEvent(ch, { type: 'defeat_boss', bossId: victim.archetypeId || 'boss' });
@@ -817,9 +847,9 @@ export class GameServer {
   private rewardLoot(s: Session, crateType: string, amount: number): void {
     const [kind, sub] = crateType.split(':');
     const w = s.character.wallet;
-    if (kind === 'scrap') w.scrap += amount;
+    if (kind === 'scrap') { w.scrap += amount; bump(s.character, 'scrap_earned', amount); bump(s.character, 'crates'); }
     else if (kind === 'parts') w.fragments += amount;
-    else if (kind === 'ore' && sub) { if (s.clanId) this.deps.social.addClanProgress(s.clanId, 'clan_mine', amount); w.ore[sub as C.OreType] += amount; Q.onQuestEvent(s.character, { type: 'collect_ore', ore: sub, amount }); }
+    else if (kind === 'ore' && sub) { bump(s.character, 'mining_nodes'); if (s.clanId) this.deps.social.addClanProgress(s.clanId, 'clan_mine', amount); w.ore[sub as C.OreType] += amount; Q.onQuestEvent(s.character, { type: 'collect_ore', ore: sub, amount }); }
     else if (kind === 'ore') { w.ore.iron += amount; Q.onQuestEvent(s.character, { type: 'collect_ore', ore: 'iron', amount }); }
     else if (kind === 'ammo' && sub) {
       s.ammo[sub] = (s.ammo[sub] ?? 0) + amount;
@@ -836,6 +866,7 @@ export class GameServer {
     if (!gate || !target) return;
     if (s.character.level < (gate.minLevel ?? 1)) return;
     this.leave(s);
+    bump(s.character, 'portal_jumps');
     Q.onQuestEvent(s.character, { type: 'use_portal', mapId: targetMapId });
     Q.onQuestEvent(s.character, { type: 'reach_map', mapId: targetMapId });
     Q.onQuestEvent(s.character, { type: 'tutorial', step: 'portal' });
@@ -849,7 +880,7 @@ export class GameServer {
       if (s.respawnAt === undefined || inst.world.time < s.respawnAt) continue;
       const e = inst.world.entities.get(s.entityId);
       if (!e) continue;
-      const sp = this.spawnPos(inst);
+      const sp = inst.world.dungeon ? dungeonEntryPoint() : this.spawnPos(inst);
       e.pos = { ...sp }; e.vel = { x: 0, y: 0 };
       e.hull = e.maxHull; e.armor = e.maxArmor;
       e.invulnerableTime = 5; e.isWreck = false; e.wreckTimer = undefined; e.targetId = undefined; e.statusEffects = [];
@@ -920,6 +951,7 @@ export class GameServer {
         ch.wallet.scrap -= l.price;
         this.givePurchased(s, l.item);
         market.addVolume(s.accountId, l.price); market.addVolume(l.seller, l.price);
+        { const ss = this.sessions.get(l.seller); if (ss) bump(ss.character, 'market_sales'); }
         this.mailTo(l.seller, 'scrap', l.price - tax, `Sold an item for ${l.price} scrap (tax ${tax})`);
         s.dirty = true; this.sendCharacter(s); this.save(s);
         return reply({ ok: true, data: { tax } });
@@ -1078,6 +1110,88 @@ export class GameServer {
     return { ok: true };
   }
 
+  // ---------------------------------------------------------------- dungeons (gates)
+
+  private freeKeysUsedToday(s: Session): number { return s.character.stats[`dungeon_free_${Q.dayKey(Math.floor(this.clock.nowMs() / 1000))}`] ?? 0; }
+
+  private handleDungeon(s: Session, req: { op: string; dungeonId?: string }): { ok: boolean; error?: string; data?: any } {
+    if (req.op === 'dungeon_list') {
+      return { ok: true, data: { freeKeysLeft: Math.max(0, DUNGEON_FREE_KEYS_PER_DAY - this.freeKeysUsedToday(s)), gateKeys: s.character.wallet.gateKeys,
+        dungeons: DUNGEONS.map((d) => ({ id: d.id, name: d.name, minLevel: d.minLevel, recommendedLevel: d.recommendedLevel, waves: d.waves.length, cleared: (s.character.stats[`cleared_${d.id}`] ?? 0) > 0 })) } };
+    }
+    if (req.op === 'dungeon_leave') {
+      if (!s.instance.world.dungeon) return { ok: false, error: 'not_in_dungeon' };
+      this.returnFromDungeon(s);
+      return { ok: true };
+    }
+    const def = getDungeon(String(req.dungeonId));
+    if (!def) return { ok: false, error: 'unknown_dungeon' };
+    if (s.instance.world.dungeon || s.instance.arena) return { ok: false, error: 'busy' };
+    const party = s.partyId ? this.parties.get(s.partyId) : undefined;
+    if (party && party.leader !== s.accountId) return { ok: false, error: 'not_leader' };
+    const candidates: Session[] = [s];
+    if (party) for (const id of party.members) { const o = this.sessions.get(id); if (o && o !== s && o.instance === s.instance && this.inSafeZone(o)) candidates.push(o); }
+    if (!this.inSafeZone(s)) return { ok: false, error: 'safe_zone_only' };
+    const entering: Session[] = [];
+    for (const m of candidates) {
+      if (m.character.level < def.minLevel) { if (m === s) return { ok: false, error: 'level_too_low' }; continue; }
+      if (this.freeKeysUsedToday(m) < DUNGEON_FREE_KEYS_PER_DAY) m.character.stats[`dungeon_free_${Q.dayKey(Math.floor(this.clock.nowMs() / 1000))}`] = this.freeKeysUsedToday(m) + 1;
+      else if (m.character.wallet.gateKeys > 0) m.character.wallet.gateKeys--;
+      else { if (m === s) return { ok: false, error: 'no_keys' }; continue; }
+      entering.push(m);
+    }
+    const map = getMapById(def.unlockMapId) as MapDef;
+    const world = createDungeonWorld(def, entering.length, 5000 + ++this.dungeonCounter);
+    const inst: Instance = { id: `d${this.dungeonCounter}`, mapId: def.unlockMapId, map, world, sessions: new Set(), chatSent: 0 };
+    this.dungeonInstances.add(inst);
+    entering.forEach((m, i) => {
+      m.returnMap = m.instance.mapId;
+      this.leave(m);
+      const p = dungeonEntryPoint();
+      this.enterInstance(m, inst, { x: p.x + (i - entering.length / 2) * 70, y: p.y });
+      this.send(m, { type: 's_social_event', kind: 'dungeon', data: { started: def.id, party: entering.length } });
+    });
+    return { ok: true, data: { entered: entering.map((m) => m.name) } };
+  }
+
+  private returnFromDungeon(s: Session): void {
+    const back = s.returnMap ?? C.HOME_MAP_BY_FACTION[s.character.faction];
+    s.returnMap = undefined;
+    this.leave(s);
+    this.enter(s, back);
+    const e = s.instance.world.entities.get(s.entityId);
+    if (e) e.invulnerableTime = 5;
+    this.save(s);
+  }
+
+  private finishDungeon(inst: Instance, cleared: boolean): void {
+    const st = inst.world.dungeon!;
+    const def = st.def;
+    const players = [...inst.sessions];
+    const boss = st.bossId !== undefined ? inst.world.entities.get(st.bossId) : undefined;
+    for (const s of players) {
+      const ch = s.character;
+      if (cleared) {
+        const first = (ch.stats[`cleared_${def.id}`] ?? 0) === 0;
+        const r = def.rewards;
+        const scrap = r.scrap + (first ? def.firstClearBonus.scrap : 0);
+        ch.wallet.scrap += scrap; bump(ch, 'scrap_earned', scrap);
+        ch.wallet.ore[r.oreType] += r.oreAmount;
+        if (first) ch.wallet.gateKeys += def.firstClearBonus.keys;
+        C.grantXP(ch, r.xp + (first ? def.firstClearBonus.xp : 0));
+        for (let i = 0; i < r.rareDrops; i++) { const loot = rollLoot(s.rng, def.recommendedLevel, 1, true, true, ch.pityCounter); if (loot.itemId && loot.rarity) C.createItem(ch, loot.itemId, loot.rarity, s.rng); }
+        ch.stats[`cleared_${def.id}`] = (ch.stats[`cleared_${def.id}`] ?? 0) + 1;
+        bump(ch, 'gates_cleared');
+        Q.onQuestEvent(ch, { type: 'clear_gate', dungeonId: def.id });
+        const e = inst.world.entities.get(s.entityId); if (e) refreshPlayerStats(e, ch);
+      }
+      this.send(s, { type: 's_social_event', kind: 'dungeon', data: { result: cleared ? 'cleared' : 'failed', dungeon: def.id, first: cleared && (ch.stats[`cleared_${def.id}`] ?? 0) === 1, bossDamage: boss?.damageBy?.[s.entityId] ?? 0 } });
+      s.dirty = true;
+      this.returnFromDungeon(s);
+    }
+    this.dungeonInstances.delete(inst);
+  }
+
   // ---------------------------------------------------------------- arena
 
   private arenaQueueJoin(s: Session, mode: AR.ArenaMode): C.Result {
@@ -1089,6 +1203,7 @@ export class GameServer {
     const stats = C.computeLoadoutStats(s.character);
     if (!stats) return { ok: false, error: 'no_vehicle' };
     const power = AR.arenaPower(stats.dps, stats.maxHull, stats.maxArmor, stats.flatReduction);
+    s.character.stats['best_arena_power'] = Math.max(s.character.stats['best_arena_power'] ?? 0, power);
     this.arenaQueue.push({ id: s.accountId, mode, power, rating: this.deps.arena.get(s.accountId, mode).rating, queuedAt: this.clock.nowMs() / 1000 });
     return { ok: true };
   }
@@ -1171,7 +1286,7 @@ export class GameServer {
       const rating = this.deps.arena.record(s.accountId, a.mode, delta, won, season);
       s.character.wallet.seasonMarks += won ? 5 : 1;
       s.character.wallet.scrap += won ? 400 : 100;
-      if (won) Q.onQuestEvent(s.character, { type: 'win_arena' });
+      if (won) { Q.onQuestEvent(s.character, { type: 'win_arena' }); bump(s.character, 'arena_wins'); }
       s.dirty = true;
       this.send(s, { type: 's_social_event', kind: 'arena_result', data: { won, ratingDelta: delta, rating, wins: a.state.wins } });
     }));
@@ -1266,7 +1381,34 @@ export class GameServer {
     }
   }
 
+  /** Explorer quests/achievements: standing within 120 units of a map secret discovers it once. */
+  private checkSecrets(): void {
+    for (const s of this.sessions.values()) {
+      if (s.instance.arena || s.instance.world.dungeon) continue;
+      const e = s.instance.world.entities.get(s.entityId);
+      if (!e || e.hull <= 0) continue;
+      for (const sec of s.instance.map.secrets ?? []) {
+        const key = `${s.instance.mapId}:${sec.id}`;
+        if ((e.pos.x - sec.x) ** 2 + (e.pos.y - sec.y) ** 2 > 120 ** 2) continue;
+        const seen = (s.character.codex.secret ??= []);
+        if (seen.includes(key)) continue;
+        seen.push(key);
+        bump(s.character, 'landmarks');
+        Q.onQuestEvent(s.character, { type: 'explore', mapId: s.instance.mapId, spotId: sec.id });
+        s.dirty = true;
+        this.sendCharacter(s);
+      }
+    }
+  }
+
+  /** Evaluates achievements after progress; new ones are reported to the client. */
+  private progress(s: Session): void {
+    const done = checkAchievements(s.character);
+    if (done.length) for (const id of done) this.send(s, { type: 's_social_event', kind: 'achievement', data: { id } });
+  }
+
   private sendCharacter(s: Session): void {
+    this.progress(s);
     const ent = s.instance.world.entities.get(s.entityId);
     const ammo: Record<string, number> = { ...s.ammo, STANDARD: -1 };
     if (ent) for (const k of Object.keys(ent.ammoInventory)) ammo[k] = ent.ammoInventory[k as AmmoType];

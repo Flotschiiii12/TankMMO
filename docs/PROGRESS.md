@@ -8,12 +8,12 @@
 - [x] **Milestone 4 (M4)** (simulation side; client UI for gates/events still to do): PvE content: all enemy archetypes, AI state machines, elites, mini/world/group bosses, spawn zones, convoys, gates (6 instanced dungeons), world events.
 - [x] **Milestone 5 (M5)** (rules + UI in the game; drones/modules not yet applied to stats): Progression: levels 1–100, talent tree (3 branches), ranks (21), reputation, codex, achievements, garage (8 slots), mastery, skins, inventory (60–150 slots), workshop (upgrade, dismantle, craft, reroll, fusion), NPC vendors.
 - [x] **Milestone 6 (M6)** (rules, data, UI; clan quests/dungeon quests wait for their systems): Quests: framework + story (10 chapters), daily/weekly/bounty/explorer/clan quests, tutorial flow with non-blocking edge hints, season pass (free track, 50 tiers).
-- [~] **Milestone 7 (M7)** (server done + tested; browser client still plays offline, RemoteGameClient with prediction/interpolation is next): Server core: accounts (guest + recovery code), persistence (`node:sqlite` schemas + repositories), instance manager, authoritative simulation, protocol, snapshots with interest management, client prediction/interpolation, online-only flow, version gate, rate limits.
+- [x] **Milestone 7 (M7)** (server done + tested; browser client still plays offline, RemoteGameClient with prediction/interpolation is next): Server core: accounts (guest + recovery code), persistence (`node:sqlite` schemas + repositories), instance manager, authoritative simulation, protocol, snapshots with interest management, client prediction/interpolation, online-only flow, version gate, rate limits.
 - [x] **Milestone 8 (M8)** (server + UI; faction chat channel not implemented, factions chosen at account creation): Social: chat channels (Global, Map, Faction, Clan, Party, Whisper, System), profanity filter, report/block, friends list, parties (up to 5), profile card, rankings, clans (storage, research, wars), moderation dashboard (`/admin`).
 - [x] **Milestone 9 (M9)** (server rules + tests; no PvP/arena/war UI yet beyond the generic social modal): PvP: protection rules (level 15+, ±5 levels, spawn protection, safe zones), honor, bounties, weekly faction war control points, competitive arena (1v1, 3v3, 5v5, leagues, rating).
 - [x] **Milestone 10 (M10)**: Economy: currencies (scrap, ore, honor, marks, keys, fragments), sinks/faucets, auction house (hub only), direct trade, premium currency model behind disabled flag (`FLAGS.premiumCurrencyEnabled=false`), `npm run econ-sim`.
 - [x] **Milestone 11 (M11)** (single-thread server; worker threads are the next scaling step): Anti-cheat basics, scheduler (events, bosses, daily/weekly resets), observability (`/health`, `/metrics`, debug overlay), load test bot client (`npm run bots -- --count 200`), performance pass (60 fps client, stable 30 Hz server tick).
-- [ ] **Milestone 12 (M12)**: Full QA pass: end-to-end tests across every system, balance sweep, complete documentation, list of known gaps.
+- [x] **Milestone 12 (M12)** (QA pass done; see known gaps): Full QA pass: end-to-end tests across every system, balance sweep, complete documentation, list of known gaps.
 
 ---
 
@@ -113,3 +113,20 @@ npm run build
 - Scheduler (once a minute): daily/weekly quest rotation, season rollover, weekly war result announcement; events and world bosses run in instances; world messages are forwarded as system chat. Structured JSON logs, /health, /metrics.
 - Persistence: autosave 30 s plus immediate saves for craft/upgrade/trade/purchase/level-up/quest claims, save on disconnect and SIGTERM.
 - Tests: 113.
+
+## M12: QA pass, final status
+
+- Automated: 21 test files, 117+ tests (rules, sim, determinism, PvP, arena, economy, social, server integration with real sockets), `tsc` clean, production build OK.
+- Manually verified in a real browser (Playwright): offline sandbox (combat, abilities, kills -> XP/loot, quests, workshop, garage, gate travel, mining), online mode against the real server (age gate, guest account, join, prediction, movement). Painted vehicle/enemy sprites load.
+- Achievements (50, data-driven counters) + codex + titles, dungeons (gates) on the server with keys and rewards, explorer secrets, world-boss damage-share rewards.
+
+### Known gaps (honest list)
+1. **Balance:** levelling 1->60 takes ~44 simulated hours at 220 kills/hour; the design target is months. XP curve / kill XP / enemy density need tuning with real playtests. Economy sinks look balanced in `econ-sim` but are untested with real players.
+2. **Scaling:** one Node thread; ~150-200 players when all clustered in 2 instances (avg tick 26 ms of 33 ms). Next step: a worker thread per instance, and spreading players across instances by region.
+3. **Localisation (DE/EN):** the i18n tables exist in `shared/data/i18n.ts`, but most UI strings are still English literals. No language switch yet.
+4. **Art:** vector placeholders everywhere except the painted pack for tiers 1-3 vehicles, 4 enemy types, ground/props/landmark/fx sprites. Tiers 4-10, artillery/bosses, class-specific sprites and UI icons are still placeholders. No audio files (procedural sounds only).
+5. **UI gaps:** no dedicated screens for event banners, boss health bars, dungeon wave progress, arena HUD (round score/timer), party markers on the radar, emotes, and settings beyond sound/zoom. The social/market/arena/gates screens are functional but plain.
+6. **Not implemented:** faction chat channel; drones/modules do not affect stats yet; clan wars over bases and alliances; clan storage of items (scrap only); spectator mode; map-specific ground/weather rendering beyond the existing basics; reputation levels/vendor discounts (counter exists, no vendor effects); cosmetic skin application; accessibility options (colour-blind mode, reduced motion).
+7. **Anti-cheat:** server authority + heuristics only; no server-side line-of-fire/range validation beyond the sim itself, no IP/device reputation, bans are account-based.
+8. **Ops:** SQLite single file (backup via file copy / `VACUUM INTO`), no automatic backups yet, no TLS/domain setup (use a reverse proxy), no CI.
+9. **Mobile builds:** Capacitor/iOS/Android wrappers are not set up for this project yet (the web build works on mobile browsers).

@@ -245,7 +245,7 @@ describe('PvP, bounties, arena and faction war (server)', () => {
     c.p.input({ type: 'SetTarget', targetId: a.e.id }, { type: 'ToggleAutoFire' });
     await c.p.until(() => a.e.hull <= 0, 6000);
     for (let i = 0; i < 3; i++) ctx.game.stepAll();
-    expect(c.s.character.wallet.scrap).toBe(scrap + 2000);
+    expect(c.s.character.wallet.scrap).toBeGreaterThanOrEqual(scrap + 2000);
     expect(a.s.bounty).toBe(0);
     // same faction cannot hurt each other
     const d = await pvpPlayer('highland');

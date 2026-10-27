@@ -93,6 +93,9 @@ export type SocialOp =
   | { op: 'trade_cancel' }
   | { op: 'trade_info' }
   | { op: 'fast_travel'; mapId: number }
+  | { op: 'dungeon_enter'; dungeonId: string }
+  | { op: 'dungeon_leave' }
+  | { op: 'dungeon_list' }
   | { op: 'shop_list' }
   | { op: 'shop_buy'; productId: string }
   | { op: 'shop_receipt'; platform: 'apple' | 'google'; receipt: string };
@@ -113,7 +116,7 @@ export interface ServerSocialResultPacket {
 
 export interface ServerSocialEventPacket {
   type: 's_social_event';
-  kind: 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_result' | 'war_result' | 'trade_update' | 'mail';
+  kind: 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_result' | 'war_result' | 'trade_update' | 'mail' | 'achievement' | 'dungeon';
   data: any;
 }
 

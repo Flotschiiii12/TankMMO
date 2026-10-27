@@ -89,7 +89,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       if (online.character) adopt(online.character, online.ammo);
       online.onCharacter(adopt);
       online.onSocialEvent((kind, d) => {
-        const text = kind === 'friend_request' ? `${d.from} sent you a friend request` : kind === 'friend_accepted' ? `${d.from} is now your friend` : kind === 'party_invite' ? `${d.from} invited you to a party` : kind === 'clan_invite' ? `${d.from} invited you to ${d.clan}` : kind === 'announcement' ? `Announcement: ${d.text}` : '';
+        const text = kind === 'friend_request' ? `${d.from} sent you a friend request` : kind === 'friend_accepted' ? `${d.from} is now your friend` : kind === 'party_invite' ? `${d.from} invited you to a party` : kind === 'clan_invite' ? `${d.from} invited you to ${d.clan}` : kind === 'announcement' ? `Announcement: ${d.text}` : kind === 'achievement' ? `Achievement unlocked: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `Gate ${d.result}` : kind === 'arena_result' ? `Arena ${d.won ? 'won' : 'lost'} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
         if (text) setNotices((n) => [...n.slice(-4), text]);
       });
     }

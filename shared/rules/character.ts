@@ -57,6 +57,8 @@ export interface Wallet {
   factionMarks: number;
   seasonMarks: number;
   gateKeys: number;
+  /** Premium currency ("Cells"). Model only: earning/buying is disabled while FLAGS.premiumCurrencyEnabled is false. */
+  cells: number;
 }
 
 export interface GarageVehicle {
@@ -84,6 +86,8 @@ export interface CharacterState {
   /** faction/general reputation points by faction key */
   reputation: Record<string, number>;
   faction: PlayerFaction;
+  /** maps whose safe zones the player has reached (fast travel targets) */
+  visitedMaps: number[];
   /** server seconds of the last change (0 = never changed after the free first choice) */
   factionChangedAt: number;
 }
@@ -97,7 +101,7 @@ export function createCharacter(name: string): CharacterState {
     level: 1,
     xp: 0,
     talentRanks: {},
-    wallet: { scrap: 0, ore: { iron: 0, copper: 0, titanium: 0, crystal: 0 }, fragments: 0, honor: 0, factionMarks: 0, seasonMarks: 0, gateKeys: 0 },
+    wallet: { scrap: 0, ore: { iron: 0, copper: 0, titanium: 0, crystal: 0 }, fragments: 0, honor: 0, factionMarks: 0, seasonMarks: 0, gateKeys: 0, cells: 0 },
     inventory: [],
     inventoryExpansions: 0,
     garage: [{ vehicleId: 'veh_medium_t1', masteryXp: 0, loadout: {} }],
@@ -109,6 +113,7 @@ export function createCharacter(name: string): CharacterState {
     season: createSeasonState(),
     reputation: {},
     faction: 'coastal',
+    visitedMaps: [1],
     factionChangedAt: 0,
   };
 }
@@ -536,3 +541,28 @@ export function changeFaction(ch: CharacterState, faction: PlayerFaction, nowSec
   ch.factionChangedAt = nowSeconds;
   return { ok: true };
 }
+
+/** Fills fields added after a character was saved (old saves keep working). */
+export function normalizeCharacter(raw: any, name: string): CharacterState {
+  const base = createCharacter(name);
+  return { ...base, ...raw, wallet: { ...base.wallet, ...(raw?.wallet ?? {}), ore: { ...base.wallet.ore, ...(raw?.wallet?.ore ?? {}) } }, quests: { ...base.quests, ...(raw?.quests ?? {}) }, season: { ...base.season, ...(raw?.season ?? {}) } };
+}
+
+/** NPC vendors buy gear for a fraction of its base value (a scrap sink compared to the auction house). */
+export const NPC_SELL_RATE = 0.35;
+export function npcSellValue(item: ItemInstance): number {
+  const def = ITEM_BY_ID.get(item.defId)!;
+  return Math.max(1, Math.round(def.scrapValue * NPC_SELL_RATE * RARITY_CONFIGS[item.rarity].multiplier * (1 + item.upgrade * 0.1)));
+}
+export function sellItemToNpc(ch: CharacterState, uid: string): Result<{ scrap: number }> {
+  const item = findItem(ch, uid);
+  if (!item) return fail('item_not_found');
+  if (isEquipped(ch, uid)) return fail('item_equipped');
+  const scrap = npcSellValue(item);
+  ch.inventory = ch.inventory.filter((i) => i.uid !== uid);
+  ch.wallet.scrap += scrap;
+  return { ok: true, scrap };
+}
+
+/** Portal hops between two maps (BFS over the world graph); fast-travel cost grows with distance. */
+export function fastTravelCost(hops: number): number { return 150 * hops; }

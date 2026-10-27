@@ -3,7 +3,7 @@
  * PostgreSQL implementation of the same interfaces can replace it later.
  */
 import { DatabaseSync } from 'node:sqlite';
-import type { CharacterState } from '../shared/rules/character.ts';
+import { normalizeCharacter, type CharacterState } from '../shared/rules/character.ts';
 
 export interface AccountRow {
   id: string;
@@ -152,6 +152,41 @@ CREATE TABLE IF NOT EXISTS war_scores (
   score INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (week, faction)
 );
+CREATE TABLE IF NOT EXISTS auctions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  seller TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  item_json TEXT NOT NULL,
+  def_id TEXT NOT NULL,
+  price INTEGER NOT NULL,
+  listed_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' -- active | sold | expired | cancelled
+);
+CREATE INDEX IF NOT EXISTS idx_auctions_active ON auctions(status, expires_at);
+CREATE TABLE IF NOT EXISTS mail (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL, -- item | scrap
+  payload TEXT NOT NULL,
+  note TEXT NOT NULL,
+  ts INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS trade_volume (
+  account_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  scrap INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, day)
+);
+CREATE TABLE IF NOT EXISTS wallet_tx (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  ref TEXT,
+  ts INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_tx_ref ON wallet_tx(account_id, currency, ref) WHERE ref IS NOT NULL;
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ts INTEGER NOT NULL,
@@ -195,7 +230,7 @@ export class SqliteProfileRepo implements ProfileRepo {
   constructor(private db: DatabaseSync) {}
   get(accountId: string): ProfileRow | undefined {
     const r: any = this.db.prepare('SELECT * FROM profiles WHERE account_id = ?').get(accountId);
-    return r ? { accountId, character: JSON.parse(r.character_json), ammo: JSON.parse(r.ammo_json), mapId: r.map_id, updatedAt: r.updated_at } : undefined;
+    return r ? { accountId, character: normalizeCharacter(JSON.parse(r.character_json), ''), ammo: JSON.parse(r.ammo_json), mapId: r.map_id, updatedAt: r.updated_at } : undefined;
   }
   save(row: ProfileRow): void {
     this.db.prepare(

@@ -3,6 +3,7 @@ import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { AccountService } from './accounts.ts';
 import { SocialRepo } from './social.ts';
+import { MarketRepo, PremiumWallet } from './market.ts';
 import { openDatabase, SqliteArenaRepo, SqliteWarRepo, SqliteAccountRepo, SqliteChatRepo, SqliteProfileRepo } from './db.ts';
 import { GameServer } from './gameServer.ts';
 
@@ -32,10 +33,12 @@ export function createApp(opts: AppOptions = {}) {
   const social = new SocialRepo(db);
   const arena = new SqliteArenaRepo(db);
   const war = new SqliteWarRepo(db);
+  const market = new MarketRepo(db);
+  const premium = new PremiumWallet(db);
   const app = express();
   app.use(express.json({ limit: '8kb' }));
   const server = http.createServer(app);
-  const game = new GameServer({ accounts, profiles, chat, service, social, arena, war, adminToken: opts.adminToken }, server);
+  const game = new GameServer({ accounts, profiles, chat, service, social, arena, war, market, premium, adminToken: opts.adminToken }, server);
 
   app.get('/health', (_req, res) => res.json({ ok: true, players: game.playerCount(), instances: game.instanceInfo().length }));
   app.get('/metrics', (_req, res) => {
@@ -146,7 +149,7 @@ export function createApp(opts: AppOptions = {}) {
 
   if (opts.staticDir) app.use(express.static(opts.staticDir));
 
-  return { app, server, game, db, accounts, profiles, chat, service, social, arena, war };
+  return { app, server, game, db, accounts, profiles, chat, service, social, arena, war, market, premium };
 }
 
 const ADMIN_HTML = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Treadfront admin</title>

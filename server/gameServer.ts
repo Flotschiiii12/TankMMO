@@ -22,6 +22,10 @@ import { AccountService } from './accounts.ts';
 import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
 import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
 import { SqliteArenaRepo, SqliteWarRepo } from './db.ts';
+import { auctionTax, AUCTION_MAX_LISTINGS, DAILY_TRADE_VOLUME_CAP, MarketRepo, PremiumWallet, rejectingValidator, ReceiptValidator, SHOP_CATALOG, INVENTORY_FREE } from './market.ts';
+import { FLAGS } from '../shared/flags.ts';
+import { MAP_CONNECTIONS } from '../shared/data/maps.ts';
+import { WAR_WINNER_MARKET_DISCOUNT } from '../shared/sim/war.ts';
 import * as AR from '../shared/rules/arena.ts';
 import { createStarterCharacterForServer, DEFAULT_AMMO } from './starter.ts';
 
@@ -94,7 +98,12 @@ export interface ServerDeps {
   social: SocialRepo;
   arena: SqliteArenaRepo;
   war: SqliteWarRepo;
+  market: MarketRepo;
+  premium: PremiumWallet;
+  receipts?: ReceiptValidator;
 }
+
+interface TradeSession { a: string; b: string; offers: Record<string, { items: string[]; scrap: number }>; confirmed: Set<string> }
 
 export class GameServer {
   readonly http: http.Server;
@@ -112,6 +121,7 @@ export class GameServer {
   private arenaQueue: AR.QueueEntry[] = [];
   private arenaBans = new Map<string, number>(); // accountId -> until (ms)
   private arenaSeq = 0;
+  private trades = new Map<string, TradeSession>(); // by accountId (both sides point to the same session)
   private parties = new Map<number, Party>();
   private partyCounter = 0;
   private partyInvites = new Map<string, { from: string; party: number; exp: number }>();
@@ -173,6 +183,7 @@ export class GameServer {
     }
     if (this.tick % TICK_HZ === 0) this.runMatchmaking();
     if (this.tick % (TICK_HZ * 30) === 0) this.flushWarScores();
+    if (this.tick % (TICK_HZ * 60) === 0) this.sweepAuctions();
     if (this.tick % (TICK_HZ * AUTOSAVE_SECONDS) === 0) for (const s of this.sessions.values()) if (s.dirty) this.save(s);
     const ms = performance.now() - t0;
     this.metrics.ticks++;
@@ -253,6 +264,7 @@ export class GameServer {
     const ent = spawnPlayerFromCharacter(inst.world, s.character, pos, s.ammo);
     s.instance = inst;
     s.entityId = ent.id;
+    if (!inst.arena && !s.character.visitedMaps.includes(mapId)) s.character.visitedMaps.push(mapId);
     s.encoder.reset();
     s.pending = [];
     inst.sessions.add(s);
@@ -291,6 +303,8 @@ export class GameServer {
       clearTimeout(joinTimeout);
       if (session && this.sessions.get(session.accountId) === session) {
         this.leaveParty(session);
+        const tr = this.trades.get(session.accountId); if (tr) this.endTrade(tr, 'partner_left');
+        this.arenaQueue = this.arenaQueue.filter((e) => e.id !== session!.accountId);
         this.leave(session);
         this.save(session);
         this.sessions.delete(session.accountId);
@@ -599,6 +613,10 @@ export class GameServer {
         if (req.kind === 'honor') return reply({ ok: true, data: this.deps.profiles.topByLevel(20) });
         return reply({ ok: true, data: req.kind === 'clans' ? social.clanRanking(20) : this.deps.profiles.topByLevel(20) });
       case 'arena_queue': return reply(this.arenaQueueJoin(s, req.mode));
+      case 'ah_sell': case 'ah_search': case 'ah_mine': case 'ah_buy': case 'ah_cancel': case 'mail_list': case 'mail_claim':
+      case 'trade_open': case 'trade_set': case 'trade_confirm': case 'trade_cancel': case 'trade_info':
+      case 'fast_travel': case 'shop_list': case 'shop_buy': case 'shop_receipt':
+        return this.handleMarket(s, req as any, reply);
       case 'arena_leave': this.arenaQueue = this.arenaQueue.filter((e) => e.id !== s.accountId); return reply({ ok: true });
       case 'arena_status': {
         const ratings = Object.fromEntries((Object.keys(AR.ARENA_MODES) as AR.ArenaMode[]).map((m) => [m, this.deps.arena.get(s.accountId, m)]));
@@ -817,6 +835,227 @@ export class GameServer {
     }
   }
 
+  // ---------------------------------------------------------------- economy: auction house, mail, trade, fast travel, premium shop
+
+  private inHub(s: Session): boolean { return s.instance.mapId === 13 && this.inSafeZone(s); }
+
+  private warDiscount(s: Session): number {
+    return this.lastWeekWinner() === s.character.faction ? WAR_WINNER_MARKET_DISCOUNT : 0;
+  }
+
+  private givePurchased(s: Session, item: C.ItemInstance): void {
+    s.character.inventory.push({ ...item, uid: `i${s.character.nextUid++}` });
+  }
+
+  private mailTo(accountId: string, kind: 'item' | 'scrap', payload: any, note: string): void {
+    const o = this.sessions.get(accountId);
+    if (o && kind === 'scrap') { o.character.wallet.scrap += payload; o.dirty = true; this.sendCharacter(o); this.send(o, { type: 's_social_event', kind: 'mail', data: { note } }); return; }
+    if (kind === 'item') this.deps.market.sendItem(accountId, payload, note); else this.deps.market.sendScrap(accountId, payload, note);
+    if (o) this.send(o, { type: 's_social_event', kind: 'mail', data: { note } });
+  }
+
+  private handleMarket(s: Session, req: any, reply: (r: { ok: boolean; error?: string; data?: any }) => void): void {
+    const ch = s.character;
+    const market = this.deps.market;
+    const nowMs = this.clock.nowMs();
+    if (req.op.startsWith('ah_') && !FLAGS.auctionEnabled) return reply({ ok: false, error: 'disabled' });
+
+    switch (req.op) {
+      case 'ah_search': return reply({ ok: true, data: market.search({ defId: req.defId, slot: req.slot, maxPrice: req.maxPrice }) });
+      case 'ah_mine': return reply({ ok: true, data: market.mine(s.accountId) });
+      case 'ah_sell': {
+        if (!this.inHub(s)) return reply({ ok: false, error: 'hub_only' });
+        const item = C.findItem(ch, req.uid);
+        if (!item) return reply({ ok: false, error: 'item_not_found' });
+        if (C.isEquipped(ch, item.uid)) return reply({ ok: false, error: 'item_equipped' });
+        const acct = this.deps.accounts.get(s.accountId)!;
+        const r = market.list(s.accountId, acct.createdAt, item, Number(req.price), Number(req.hours));
+        if (!r.ok) return reply(r);
+        ch.inventory = ch.inventory.filter((i) => i.uid !== item.uid);
+        s.dirty = true; this.sendCharacter(s);
+        return reply({ ok: true, data: { id: r.id } });
+      }
+      case 'ah_cancel': {
+        const l = market.get(Number(req.id));
+        if (!l || l.seller !== s.accountId || l.status !== 'active') return reply({ ok: false, error: 'not_found' });
+        if (!market.close(l.id, 'cancelled')) return reply({ ok: false, error: 'not_found' });
+        this.mailTo(s.accountId, 'item', l.item, 'Listing cancelled: item returned');
+        return reply({ ok: true });
+      }
+      case 'ah_buy': {
+        if (!this.inHub(s)) return reply({ ok: false, error: 'hub_only' });
+        const l = market.get(Number(req.id));
+        if (!l || l.status !== 'active' || l.expiresAt <= nowMs) return reply({ ok: false, error: 'not_found' });
+        if (l.seller === s.accountId) return reply({ ok: false, error: 'own_listing' });
+        if (ch.wallet.scrap < l.price) return reply({ ok: false, error: 'not_enough_scrap' });
+        if (INVENTORY_FREE(ch) <= 0) return reply({ ok: false, error: 'inventory_full' });
+        if (market.volumeToday(s.accountId) + l.price > DAILY_TRADE_VOLUME_CAP) return reply({ ok: false, error: 'daily_trade_cap' });
+        if (market.volumeToday(l.seller) + l.price > DAILY_TRADE_VOLUME_CAP) return reply({ ok: false, error: 'seller_trade_cap' });
+        if (!market.close(l.id, 'sold')) return reply({ ok: false, error: 'not_found' }); // someone else was faster
+        const sellerSession = this.sessions.get(l.seller);
+        const taxChar = sellerSession?.character ?? this.deps.profiles.get(l.seller)?.character ?? ch;
+        const tax = auctionTax(l.price, taxChar, sellerSession ? this.warDiscount(sellerSession) : 0);
+        ch.wallet.scrap -= l.price;
+        this.givePurchased(s, l.item);
+        market.addVolume(s.accountId, l.price); market.addVolume(l.seller, l.price);
+        this.mailTo(l.seller, 'scrap', l.price - tax, `Sold an item for ${l.price} scrap (tax ${tax})`);
+        s.dirty = true; this.sendCharacter(s);
+        return reply({ ok: true, data: { tax } });
+      }
+      case 'mail_list': return reply({ ok: true, data: market.mail(s.accountId) });
+      case 'mail_claim': {
+        const m = market.mail(s.accountId).find((x) => x.id === Number(req.id));
+        if (!m) return reply({ ok: false, error: 'not_found' });
+        if (m.kind === 'item') {
+          if (INVENTORY_FREE(ch) <= 0) return reply({ ok: false, error: 'inventory_full' });
+          this.givePurchased(s, JSON.parse(m.payload));
+        } else ch.wallet.scrap += Number(m.payload);
+        market.deleteMail(m.id);
+        s.dirty = true; this.sendCharacter(s);
+        return reply({ ok: true });
+      }
+
+      case 'trade_open': {
+        const other = this.online(req.name);
+        if (!other || other === s) return reply({ ok: false, error: 'player_offline' });
+        const ok = this.deps.social.areFriends(s.accountId, other.accountId) || (s.clanId !== undefined && s.clanId === other.clanId);
+        if (!ok) return reply({ ok: false, error: 'friends_or_clan_only' });
+        if (this.trades.has(s.accountId) || this.trades.has(other.accountId)) return reply({ ok: false, error: 'already_trading' });
+        if (this.deps.social.isBlocked(other.accountId, s.accountId)) return reply({ ok: false, error: 'blocked' });
+        const t: TradeSession = { a: s.accountId, b: other.accountId, offers: { [s.accountId]: { items: [], scrap: 0 }, [other.accountId]: { items: [], scrap: 0 } }, confirmed: new Set() };
+        this.trades.set(s.accountId, t); this.trades.set(other.accountId, t);
+        this.send(other, { type: 's_social_event', kind: 'trade_update', data: this.tradeView(t, other.accountId) });
+        return reply({ ok: true, data: this.tradeView(t, s.accountId) });
+      }
+      case 'trade_info': { const t = this.trades.get(s.accountId); return reply({ ok: true, data: t ? this.tradeView(t, s.accountId) : null }); }
+      case 'trade_cancel': { const t = this.trades.get(s.accountId); if (t) this.endTrade(t, 'cancelled'); return reply({ ok: true }); }
+      case 'trade_set': {
+        const t = this.trades.get(s.accountId);
+        if (!t) return reply({ ok: false, error: 'no_trade' });
+        const items: string[] = Array.isArray(req.items) ? req.items.slice(0, 20).map(String) : [];
+        const scrap = Math.max(0, Math.floor(Number(req.scrap) || 0));
+        for (const uid of items) {
+          const it = C.findItem(ch, uid);
+          if (!it) return reply({ ok: false, error: 'item_not_found' });
+          if (it.bound) return reply({ ok: false, error: 'item_bound' });
+          if (C.isEquipped(ch, uid)) return reply({ ok: false, error: 'item_equipped' });
+        }
+        if (new Set(items).size !== items.length) return reply({ ok: false, error: 'duplicate_item' });
+        if (scrap > ch.wallet.scrap) return reply({ ok: false, error: 'not_enough_scrap' });
+        t.offers[s.accountId] = { items, scrap };
+        t.confirmed.clear(); // any change resets both confirmations
+        const other = this.sessions.get(t.a === s.accountId ? t.b : t.a);
+        if (other) this.send(other, { type: 's_social_event', kind: 'trade_update', data: this.tradeView(t, other.accountId) });
+        return reply({ ok: true, data: this.tradeView(t, s.accountId) });
+      }
+      case 'trade_confirm': {
+        const t = this.trades.get(s.accountId);
+        if (!t) return reply({ ok: false, error: 'no_trade' });
+        t.confirmed.add(s.accountId);
+        const sa = this.sessions.get(t.a); const sb = this.sessions.get(t.b);
+        if (t.confirmed.size === 2 && sa && sb) {
+          const res = this.executeTrade(t, sa, sb);
+          this.endTrade(t, res.ok ? 'completed' : res.error);
+          return reply(res);
+        }
+        const other = t.a === s.accountId ? sb : sa;
+        if (other) this.send(other, { type: 's_social_event', kind: 'trade_update', data: this.tradeView(t, other.accountId) });
+        return reply({ ok: true, data: this.tradeView(t, s.accountId) });
+      }
+
+      case 'fast_travel': {
+        if (!this.inSafeZone(s)) return reply({ ok: false, error: 'safe_zone_only' });
+        const target = Number(req.mapId);
+        if (!ch.visitedMaps.includes(target)) return reply({ ok: false, error: 'not_visited' });
+        if (target === s.instance.mapId) return reply({ ok: false, error: 'already_there' });
+        const hops = this.mapDistance(s.instance.mapId, target);
+        if (hops === undefined) return reply({ ok: false, error: 'unreachable' });
+        const cost = C.fastTravelCost(hops);
+        if (ch.wallet.scrap < cost) return reply({ ok: false, error: 'not_enough_scrap' });
+        const map = getMapById(target) as MapDef;
+        if (ch.level < (map.levelRange?.[0] ?? 1) - 5) return reply({ ok: false, error: 'level_too_low' });
+        ch.wallet.scrap -= cost;
+        this.leaveParty(s);
+        this.leave(s);
+        this.enter(s, target);
+        s.dirty = true; this.sendCharacter(s);
+        return reply({ ok: true, data: { cost } });
+      }
+
+      case 'shop_list': return reply(FLAGS.premiumCurrencyEnabled ? { ok: true, data: SHOP_CATALOG } : { ok: false, error: 'disabled' });
+      case 'shop_buy': {
+        const r = this.deps.premium.purchase(ch, s.accountId, String(req.productId));
+        if (!r.ok) return reply(r);
+        this.applyProduct(s, r.product.id);
+        s.dirty = true; this.sendCharacter(s);
+        return reply({ ok: true, data: { balance: r.balance } });
+      }
+      case 'shop_receipt': {
+        if (!FLAGS.premiumCurrencyEnabled) return reply({ ok: false, error: 'disabled' });
+        void (this.deps.receipts ?? rejectingValidator).validate(req.platform, String(req.receipt)).then((v) => {
+          if (!v.ok || !v.cells || !v.transactionId) return reply({ ok: false, error: 'invalid_receipt' });
+          const r = this.deps.premium.credit(ch, s.accountId, v.cells, 'iap', `${req.platform}:${v.transactionId}`);
+          if (r.ok) { s.dirty = true; this.sendCharacter(s); }
+          reply(r.ok ? { ok: true, data: { balance: r.balance, duplicate: !!r.duplicate } } : r);
+        });
+        return;
+      }
+    }
+  }
+
+  private applyProduct(s: Session, productId: string): void {
+    const ch = s.character;
+    if (productId === 'inv_slots_10') ch.inventoryExpansions++;
+    else if (productId === 'gate_key_pack') ch.wallet.gateKeys += 3;
+    else if (productId.startsWith('skin_')) ch.season.skins.push(productId);
+  }
+
+  private mapDistance(from: number, to: number): number | undefined {
+    const adj = new Map<number, number[]>();
+    for (const e of MAP_CONNECTIONS as any[]) { const a = e.from ?? e[0], b = e.to ?? e[1]; adj.set(a, [...(adj.get(a) ?? []), b]); adj.set(b, [...(adj.get(b) ?? []), a]); }
+    const dist = new Map<number, number>([[from, 0]]);
+    const q = [from];
+    while (q.length) { const x = q.shift()!; for (const y of adj.get(x) ?? []) if (!dist.has(y)) { dist.set(y, dist.get(x)! + 1); q.push(y); } }
+    return dist.get(to);
+  }
+
+  private tradeView(t: TradeSession, me: string): any {
+    const other = t.a === me ? t.b : t.a;
+    const nm = (id: string) => this.deps.accounts.get(id)?.name;
+    const items = (id: string) => (t.offers[id].items.map((uid) => this.sessions.get(id)?.character.inventory.find((i) => i.uid === uid)).filter(Boolean));
+    return { with: nm(other), mine: { ...t.offers[me], items: items(me) }, theirs: { ...t.offers[other], items: items(other) }, iConfirmed: t.confirmed.has(me), theyConfirmed: t.confirmed.has(other) };
+  }
+
+  private endTrade(t: TradeSession, why: string): void {
+    this.trades.delete(t.a); this.trades.delete(t.b);
+    for (const id of [t.a, t.b]) { const o = this.sessions.get(id); if (o) this.send(o, { type: 's_social_event', kind: 'trade_update', data: { ended: why } }); }
+  }
+
+  /** Both sides confirmed an unchanged offer: re-validate everything and swap atomically (all or nothing). */
+  private executeTrade(t: TradeSession, sa: Session, sb: Session): C.Result {
+    const oa = t.offers[t.a]; const ob = t.offers[t.b];
+    const check = (from: Session, offer: { items: string[]; scrap: number }) => {
+      if (from.character.wallet.scrap < offer.scrap) return 'not_enough_scrap';
+      for (const uid of offer.items) { const it = C.findItem(from.character, uid); if (!it || it.bound || C.isEquipped(from.character, uid)) return 'item_invalid'; }
+      return undefined;
+    };
+    const e = check(sa, oa) ?? check(sb, ob);
+    if (e) return { ok: false, error: e };
+    if (INVENTORY_FREE(sa.character) + oa.items.length < ob.items.length || INVENTORY_FREE(sb.character) + ob.items.length < oa.items.length) return { ok: false, error: 'inventory_full' };
+    const volume = oa.scrap + ob.scrap;
+    if (this.deps.market.volumeToday(sa.accountId) + volume > DAILY_TRADE_VOLUME_CAP || this.deps.market.volumeToday(sb.accountId) + volume > DAILY_TRADE_VOLUME_CAP) return { ok: false, error: 'daily_trade_cap' };
+    const move = (from: Session, to: Session, offer: { items: string[]; scrap: number }) => {
+      const taken = from.character.inventory.filter((i) => offer.items.includes(i.uid));
+      from.character.inventory = from.character.inventory.filter((i) => !offer.items.includes(i.uid));
+      for (const it of taken) this.givePurchased(to, it);
+      from.character.wallet.scrap -= offer.scrap; to.character.wallet.scrap += offer.scrap;
+    };
+    move(sa, sb, oa); move(sb, sa, ob);
+    this.deps.market.addVolume(sa.accountId, volume); this.deps.market.addVolume(sb.accountId, volume);
+    for (const s of [sa, sb]) { s.dirty = true; this.sendCharacter(s); }
+    return { ok: true };
+  }
+
   // ---------------------------------------------------------------- arena
 
   private arenaQueueJoin(s: Session, mode: AR.ArenaMode): C.Result {
@@ -926,6 +1165,11 @@ export class GameServer {
       this.save(s);
     }
     this.arenaInstances.delete(inst);
+  }
+
+  /** Expired listings go back to the seller by mail. */
+  sweepAuctions(): void {
+    for (const e of this.deps.market.sweepExpired()) this.mailTo(e.seller, 'item', e.item, 'Listing expired: item returned');
   }
 
   // ---------------------------------------------------------------- faction war

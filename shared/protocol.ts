@@ -79,7 +79,23 @@ export type SocialOp =
   | { op: 'arena_queue'; mode: '1v1' | '3v3' | '5v5' }
   | { op: 'arena_leave' }
   | { op: 'arena_status' }
-  | { op: 'war_status' };
+  | { op: 'war_status' }
+  | { op: 'ah_sell'; uid: string; price: number; hours: number }
+  | { op: 'ah_search'; defId?: string; slot?: string; maxPrice?: number }
+  | { op: 'ah_mine' }
+  | { op: 'ah_buy'; id: number }
+  | { op: 'ah_cancel'; id: number }
+  | { op: 'mail_list' }
+  | { op: 'mail_claim'; id: number }
+  | { op: 'trade_open'; name: string }
+  | { op: 'trade_set'; items: string[]; scrap: number }
+  | { op: 'trade_confirm' }
+  | { op: 'trade_cancel' }
+  | { op: 'trade_info' }
+  | { op: 'fast_travel'; mapId: number }
+  | { op: 'shop_list' }
+  | { op: 'shop_buy'; productId: string }
+  | { op: 'shop_receipt'; platform: 'apple' | 'google'; receipt: string };
 
 export interface ClientSocialPacket {
   type: 'c_social';
@@ -97,7 +113,7 @@ export interface ServerSocialResultPacket {
 
 export interface ServerSocialEventPacket {
   type: 's_social_event';
-  kind: 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_result' | 'war_result';
+  kind: 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_result' | 'war_result' | 'trade_update' | 'mail';
   data: any;
 }
 

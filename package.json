@@ -12,7 +12,8 @@
     "lint": "tsc --noEmit",
     "server": "tsx server/index.ts",
     "dev:server": "tsx watch server/index.ts",
-    "bots": "tsx scripts/bots.ts"
+    "bots": "tsx scripts/bots.ts",
+    "econ-sim": "tsx scripts/econ-sim.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

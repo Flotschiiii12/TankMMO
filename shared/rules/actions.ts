@@ -26,7 +26,8 @@ export type ClientAction =
   | { kind: 'claim_season_tier'; tier: number }
   | { kind: 'buy_ammo'; ammo: AmmoType; packs: number }
   | { kind: 'tutorial'; step: string }
-  | { kind: 'change_faction'; faction: C.PlayerFaction };
+  | { kind: 'change_faction'; faction: C.PlayerFaction }
+  | { kind: 'sell_item'; uid: string };
 
 export interface ActionContext {
   inSafeZone: boolean;
@@ -34,7 +35,7 @@ export interface ActionContext {
   buyAmmo: (ammo: AmmoType, packs: number) => C.Result;
 }
 
-const SAFE_ONLY = new Set(['change_faction', 'equip', 'unequip', 'upgrade', 'dismantle', 'craft', 'reroll', 'fuse', 'buy_vehicle', 'set_vehicle']);
+const SAFE_ONLY = new Set(['sell_item', 'change_faction', 'equip', 'unequip', 'upgrade', 'dismantle', 'craft', 'reroll', 'fuse', 'buy_vehicle', 'set_vehicle']);
 
 export const AMMO_PRICES: Record<string, { pack: number; cost: number }> = {
   REINFORCED: { pack: 20, cost: 45 }, ARMOR_PIERCING: { pack: 20, cost: 65 }, SHAPED_CHARGE: { pack: 10, cost: 120 }, EXPLOSIVE: { pack: 20, cost: 75 },
@@ -64,6 +65,7 @@ export function executeAction(ch: C.CharacterState, a: ClientAction, rng: SimRNG
     case 'claim_season_tier': return Q.claimSeasonTier(ch, a.tier, ctx.nowSeconds);
     case 'buy_ammo': return ctx.buyAmmo(a.ammo, a.packs);
     case 'change_faction': return C.changeFaction(ch, a.faction, ctx.nowSeconds);
+    case 'sell_item': return C.sellItemToNpc(ch, a.uid);
     case 'tutorial': Q.onQuestEvent(ch, { type: 'tutorial', step: a.step }); return { ok: true };
     default: return { ok: false, error: 'unknown_action' };
   }

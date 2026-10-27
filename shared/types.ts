@@ -331,7 +331,7 @@ export type WeatherType =
   | 'snowstorm'
   | 'ashfall';
 
-export type TimeOfDay = 'dawn' | 'noon' | 'sunset' | 'night';
+export type TimeOfDay = 'dawn' | 'noon' | 'sunset' | 'dusk' | 'night';
 
 export type OreType = 'iron' | 'copper' | 'titanium' | 'crystal';
 

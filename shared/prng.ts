@@ -66,6 +66,13 @@ export class SimRNG {
   }
 
   /**
+   * Alias of range(): float in [min, max) (the map generator uses this name)
+   */
+  rangeFloat(min: number, max: number): number {
+    return this.range(min, max);
+  }
+
+  /**
    * Generates an integer in [min, max] inclusive
    */
   rangeInt(min: number, max: number): number {

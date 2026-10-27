@@ -1,0 +1,504 @@
+/**
+ * Character progression and the workshop (design doc sections 4 and 5), as pure rules over a plain-data
+ * CharacterState. Randomness comes from the SimRNG you pass in; nothing here touches time or the DOM.
+ * All mutating functions return `{ ok: true, ... }` or `{ ok: false, error }` and leave the state untouched on failure.
+ */
+import { AFFIX_POOL, AFFIX_ROLL_BIAS } from '../data/affixes.ts';
+import {
+  CRAFTING_RECIPES,
+  ITEM_BY_ID,
+  ItemAffix,
+  ItemRarity,
+  ItemSlotType,
+  RARITY_CONFIGS,
+  UPGRADE_LEVEL_STATS,
+} from '../data/items.ts';
+import { TALENT_BY_ID, TALENTS_CATALOG } from '../data/talents.ts';
+import { VEHICLE_CATALOG } from '../data/vehicles.ts';
+import { SimRNG } from '../prng.ts';
+import { getEarnedTalentPoints, getGarageCapacity, getXPForLevel, MAX_PLAYER_LEVEL } from './progression.ts';
+
+export type OreType = 'iron' | 'copper' | 'titanium' | 'crystal';
+export const RARITIES: ItemRarity[] = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
+
+export const BASE_INVENTORY_SLOTS = 60;
+export const MAX_INVENTORY_SLOTS = 150;
+export const INVENTORY_EXPANSION_STEP = 10;
+export const MAX_REROLLS = 3;
+export const MAX_UPGRADE = 15;
+export const SAFE_MODE_COST_MULT = 2.5;
+export const FUSION_INPUT_COUNT = 3;
+export const MASTERY_MAX = 10;
+export const MASTERY_BONUS_PER_LEVEL = 0.01;
+
+export interface ItemInstance {
+  uid: string;
+  defId: string;
+  rarity: ItemRarity;
+  upgrade: number;
+  affixes: ItemAffix[];
+  rerolls: number;
+  bound: boolean;
+}
+
+export interface Wallet {
+  scrap: number;
+  ore: Record<OreType, number>;
+  fragments: number;
+  honor: number;
+  factionMarks: number;
+  seasonMarks: number;
+  gateKeys: number;
+}
+
+export interface GarageVehicle {
+  vehicleId: string;
+  masteryXp: number;
+  /** slot key -> item uid. Keys: main0, main1, secondary0, armor0, engine0, module0..3, drone0..1 */
+  loadout: Record<string, string>;
+}
+
+export interface CharacterState {
+  name: string;
+  level: number;
+  xp: number; // xp into the current level
+  talentRanks: Record<string, number>;
+  wallet: Wallet;
+  inventory: ItemInstance[];
+  inventoryExpansions: number;
+  garage: GarageVehicle[];
+  activeVehicle: string;
+  pityCounter: number;
+  nextUid: number;
+  respecs: number;
+}
+
+export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
+const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
+
+export function createCharacter(name: string): CharacterState {
+  return {
+    name,
+    level: 1,
+    xp: 0,
+    talentRanks: {},
+    wallet: { scrap: 0, ore: { iron: 0, copper: 0, titanium: 0, crystal: 0 }, fragments: 0, honor: 0, factionMarks: 0, seasonMarks: 0, gateKeys: 0 },
+    inventory: [],
+    inventoryExpansions: 0,
+    garage: [{ vehicleId: 'veh_medium_t1', masteryXp: 0, loadout: {} }],
+    activeVehicle: 'veh_medium_t1',
+    pityCounter: 0,
+    nextUid: 1,
+    respecs: 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// XP and levels
+// ---------------------------------------------------------------------------
+
+export function grantXP(ch: CharacterState, amount: number): { levelsGained: number } {
+  if (amount <= 0 || ch.level >= MAX_PLAYER_LEVEL) return { levelsGained: 0 };
+  ch.xp += Math.round(amount);
+  let gained = 0;
+  while (ch.level < MAX_PLAYER_LEVEL && ch.xp >= getXPForLevel(ch.level + 1)) {
+    ch.xp -= getXPForLevel(ch.level + 1);
+    ch.level++;
+    gained++;
+  }
+  if (ch.level >= MAX_PLAYER_LEVEL) ch.xp = 0;
+  return { levelsGained: gained };
+}
+
+// ---------------------------------------------------------------------------
+// Talents
+// ---------------------------------------------------------------------------
+
+export function talentPointsSpent(ch: CharacterState): number {
+  return Object.values(ch.talentRanks).reduce((a, b) => a + b, 0);
+}
+
+export function talentPointsAvailable(ch: CharacterState): number {
+  return getEarnedTalentPoints(ch.level) - talentPointsSpent(ch);
+}
+
+export function rankUpTalent(ch: CharacterState, id: string): Result<{ rank: number }> {
+  const def = TALENT_BY_ID.get(id);
+  if (!def) return fail('unknown_talent');
+  const rank = ch.talentRanks[id] ?? 0;
+  if (rank >= def.maxRank) return fail('max_rank');
+  if (ch.level < def.minLevel) return fail('level_too_low');
+  if (talentPointsAvailable(ch) <= 0) return fail('no_points');
+  for (const pre of def.prerequisites ?? []) if ((ch.talentRanks[pre] ?? 0) < 1) return fail('prerequisite_missing');
+  ch.talentRanks[id] = rank + 1;
+  return { ok: true, rank: rank + 1 };
+}
+
+export function respecCost(ch: CharacterState): number {
+  return Math.round(200 * ch.level * (1 + Math.min(ch.respecs, 5) * 0.25));
+}
+
+export function respecTalents(ch: CharacterState): Result<{ refundedPoints: number; cost: number }> {
+  const cost = respecCost(ch);
+  const spent = talentPointsSpent(ch);
+  if (spent === 0) return fail('nothing_to_reset');
+  if (ch.wallet.scrap < cost) return fail('not_enough_scrap');
+  ch.wallet.scrap -= cost;
+  ch.talentRanks = {};
+  ch.respecs++;
+  return { ok: true, refundedPoints: spent, cost };
+}
+
+/** Sum of talent effects per stat key (percent stats as fractions, e.g. 0.15 = +15 %). */
+export function talentTotals(ch: CharacterState): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const t of TALENTS_CATALOG) {
+    const rank = ch.talentRanks[t.id] ?? 0;
+    if (rank > 0) out[t.effectPerRank.stat] = (out[t.effectPerRank.stat] ?? 0) + t.effectPerRank.valuePerRank * rank;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Inventory
+// ---------------------------------------------------------------------------
+
+export function inventoryCapacity(ch: CharacterState): number {
+  const talentSlots = Math.round(talentTotals(ch)['inventory_slots'] ?? 0);
+  return Math.min(MAX_INVENTORY_SLOTS, BASE_INVENTORY_SLOTS + ch.inventoryExpansions * INVENTORY_EXPANSION_STEP + talentSlots);
+}
+
+export function expansionCost(ch: CharacterState): number {
+  return 2000 * (ch.inventoryExpansions + 1) ** 2;
+}
+
+export function expandInventory(ch: CharacterState): Result<{ capacity: number }> {
+  if (inventoryCapacity(ch) >= MAX_INVENTORY_SLOTS) return fail('max_capacity');
+  const cost = expansionCost(ch);
+  if (ch.wallet.scrap < cost) return fail('not_enough_scrap');
+  ch.wallet.scrap -= cost;
+  ch.inventoryExpansions++;
+  return { ok: true, capacity: inventoryCapacity(ch) };
+}
+
+export function rollAffixes(rng: SimRNG, rarity: ItemRarity, exclude: ItemAffix['stat'][] = []): ItemAffix[] {
+  const count = RARITY_CONFIGS[rarity].affixCount;
+  const pool = AFFIX_POOL.filter((a) => !exclude.includes(a.stat));
+  const out: ItemAffix[] = [];
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const idx = rng.rangeInt(0, pool.length - 1);
+    const a = pool.splice(idx, 1)[0];
+    const t = Math.min(1, rng.next() * (1 - AFFIX_ROLL_BIAS[rarity]) + AFFIX_ROLL_BIAS[rarity]);
+    out.push({ stat: a.stat, nameKey: a.nameKey, value: Math.round((a.min + (a.max - a.min) * t) * 10) / 10 });
+  }
+  return out;
+}
+
+export function createItem(ch: CharacterState, defId: string, rarity: ItemRarity, rng: SimRNG, bound = false): Result<{ item: ItemInstance }> {
+  if (!ITEM_BY_ID.has(defId)) return fail('unknown_item');
+  if (ch.inventory.length >= inventoryCapacity(ch)) return fail('inventory_full');
+  const item: ItemInstance = { uid: `i${ch.nextUid++}`, defId, rarity, upgrade: 0, affixes: rollAffixes(rng, rarity), rerolls: 0, bound };
+  ch.inventory.push(item);
+  return { ok: true, item };
+}
+
+export function findItem(ch: CharacterState, uid: string): ItemInstance | undefined {
+  return ch.inventory.find((i) => i.uid === uid);
+}
+
+export function isEquipped(ch: CharacterState, uid: string): boolean {
+  return ch.garage.some((g) => Object.values(g.loadout).includes(uid));
+}
+
+// ---------------------------------------------------------------------------
+// Garage and equipment
+// ---------------------------------------------------------------------------
+
+export function unlockedVehicleIds(ch: CharacterState): string[] {
+  return ch.garage.map((g) => g.vehicleId);
+}
+
+export function buyVehicle(ch: CharacterState, vehicleId: string): Result {
+  const v = VEHICLE_CATALOG.find((x) => x.id === vehicleId);
+  if (!v) return fail('unknown_vehicle');
+  if (ch.garage.some((g) => g.vehicleId === vehicleId)) return fail('already_owned');
+  if (ch.garage.length >= getGarageCapacity(ch.level)) return fail('garage_full');
+  if (ch.level < v.minLevel) return fail('level_too_low');
+  if (ch.wallet.scrap < v.costScrap) return fail('not_enough_scrap');
+  const ore = Object.keys(ch.wallet.ore) as OreType[];
+  const have = ore.reduce((a, k) => a + ch.wallet.ore[k], 0);
+  if (have < v.costOre) return fail('not_enough_ore');
+  ch.wallet.scrap -= v.costScrap;
+  // Ore is paid cheapest-first (iron, copper, titanium, crystal)
+  let due = v.costOre;
+  for (const k of ore) {
+    const take = Math.min(due, ch.wallet.ore[k]);
+    ch.wallet.ore[k] -= take;
+    due -= take;
+  }
+  ch.garage.push({ vehicleId, masteryXp: 0, loadout: {} });
+  return { ok: true };
+}
+
+export function slotKeysFor(vehicleId: string): Array<{ key: string; type: ItemSlotType }> {
+  const v = VEHICLE_CATALOG.find((x) => x.id === vehicleId);
+  if (!v) return [];
+  const keys: Array<{ key: string; type: ItemSlotType }> = [];
+  for (let i = 0; i < v.mainSlots; i++) keys.push({ key: `main${i}`, type: 'main' });
+  for (let i = 0; i < v.secondarySlots; i++) keys.push({ key: `secondary${i}`, type: 'secondary' });
+  for (let i = 0; i < v.armorSlots; i++) keys.push({ key: `armor${i}`, type: 'armor' });
+  for (let i = 0; i < v.engineSlots; i++) keys.push({ key: `engine${i}`, type: 'engine' });
+  for (let i = 0; i < v.moduleSlots; i++) keys.push({ key: `module${i}`, type: 'module' });
+  for (let i = 0; i < v.droneSlots; i++) keys.push({ key: `drone${i}`, type: 'drone' });
+  return keys;
+}
+
+export function equipItem(ch: CharacterState, vehicleId: string, slotKey: string, uid: string): Result {
+  const g = ch.garage.find((x) => x.vehicleId === vehicleId);
+  if (!g) return fail('vehicle_not_owned');
+  const slot = slotKeysFor(vehicleId).find((s) => s.key === slotKey);
+  if (!slot) return fail('no_such_slot');
+  const item = findItem(ch, uid);
+  if (!item) return fail('item_not_found');
+  const def = ITEM_BY_ID.get(item.defId)!;
+  if (def.slotType !== slot.type) return fail('wrong_slot_type');
+  if (ch.level < def.minLevel) return fail('level_too_low');
+  if (isEquipped(ch, uid)) return fail('already_equipped');
+  g.loadout[slotKey] = uid;
+  return { ok: true };
+}
+
+export function unequipItem(ch: CharacterState, vehicleId: string, slotKey: string): Result {
+  const g = ch.garage.find((x) => x.vehicleId === vehicleId);
+  if (!g || !g.loadout[slotKey]) return fail('nothing_equipped');
+  delete g.loadout[slotKey];
+  return { ok: true };
+}
+
+export function addMasteryXp(ch: CharacterState, vehicleId: string, xp: number): void {
+  const g = ch.garage.find((x) => x.vehicleId === vehicleId);
+  if (g) g.masteryXp += Math.max(0, Math.round(xp));
+}
+
+/** Mastery level 0..10: 400 * n^1.6 xp per level. */
+export function masteryLevel(masteryXp: number): number {
+  let lvl = 0;
+  let need = 0;
+  while (lvl < MASTERY_MAX) {
+    need += Math.round(400 * (lvl + 1) ** 1.6);
+    if (masteryXp < need) break;
+    lvl++;
+  }
+  return lvl;
+}
+
+// ---------------------------------------------------------------------------
+// Workshop: upgrade, dismantle, craft, reroll, fusion
+// ---------------------------------------------------------------------------
+
+function canPay(w: Wallet, scrap: number, ore: number, fragments: number): boolean {
+  return w.scrap >= scrap && totalOre(w) >= ore && w.fragments >= fragments;
+}
+function totalOre(w: Wallet): number {
+  return w.ore.iron + w.ore.copper + w.ore.titanium + w.ore.crystal;
+}
+function payOre(w: Wallet, amount: number, prefer?: OreType): void {
+  const order: OreType[] = prefer ? [prefer, ...(['iron', 'copper', 'titanium', 'crystal'] as OreType[]).filter((k) => k !== prefer)] : ['iron', 'copper', 'titanium', 'crystal'];
+  let due = amount;
+  for (const k of order) {
+    const take = Math.min(due, w.ore[k]);
+    w.ore[k] -= take;
+    due -= take;
+  }
+}
+
+export function upgradeCost(level: number, safeMode: boolean): { scrap: number; ore: number; fragments: number } {
+  const next = UPGRADE_LEVEL_STATS[level + 1];
+  const mult = safeMode ? SAFE_MODE_COST_MULT : 1;
+  return { scrap: Math.round(next.costScrap * mult), ore: Math.round(next.costOre * mult), fragments: Math.round(next.costFragments * mult) };
+}
+
+/**
+ * +1 upgrade. Levels 1-9 always succeed. From +10 the chance is below 100 %: on failure a normal attempt
+ * drops one level (never below +9); safe mode costs more but never drops. No real-money randomness.
+ */
+export function upgradeItem(ch: CharacterState, uid: string, rng: SimRNG, safeMode = false): Result<{ success: boolean; newLevel: number }> {
+  const item = findItem(ch, uid);
+  if (!item) return fail('item_not_found');
+  if (item.upgrade >= MAX_UPGRADE) return fail('max_upgrade');
+  const cost = upgradeCost(item.upgrade, safeMode);
+  if (!canPay(ch.wallet, cost.scrap, cost.ore, cost.fragments)) return fail('not_enough_materials');
+  ch.wallet.scrap -= cost.scrap;
+  payOre(ch.wallet, cost.ore);
+  ch.wallet.fragments -= cost.fragments;
+  const next = UPGRADE_LEVEL_STATS[item.upgrade + 1];
+  const success = next.successChance >= 1 || rng.chance(next.successChance);
+  if (success) item.upgrade++;
+  else if (!safeMode && item.upgrade >= 10) item.upgrade = Math.max(9, item.upgrade - 1);
+  return { ok: true, success, newLevel: item.upgrade };
+}
+
+export function dismantleItem(ch: CharacterState, uid: string): Result<{ ore: OreType; oreAmount: number; fragments: number }> {
+  const item = findItem(ch, uid);
+  if (!item) return fail('item_not_found');
+  if (isEquipped(ch, uid)) return fail('item_equipped');
+  const def = ITEM_BY_ID.get(item.defId)!;
+  const rarityIdx = RARITIES.indexOf(item.rarity);
+  const oreAmount = Math.round(def.dismantleYield.oreAmount * (1 + rarityIdx * 0.25) * (1 + item.upgrade * 0.1));
+  const fragments = Math.round(def.dismantleYield.fragments * (1 + rarityIdx * 0.3) * (1 + item.upgrade * 0.15));
+  ch.wallet.ore[def.dismantleYield.oreType] += oreAmount;
+  ch.wallet.fragments += fragments;
+  ch.inventory = ch.inventory.filter((i) => i.uid !== uid);
+  return { ok: true, ore: def.dismantleYield.oreType, oreAmount, fragments };
+}
+
+export function craftItem(ch: CharacterState, recipeId: string, rng: SimRNG): Result<{ item: ItemInstance }> {
+  const recipe = CRAFTING_RECIPES.find((r) => r.id === recipeId);
+  if (!recipe) return fail('unknown_recipe');
+  if (ch.level < recipe.minLevel) return fail('level_too_low');
+  const reduction = Math.min(0.5, talentTotals(ch)['crafting_cost_reduction'] ?? 0);
+  const scrap = Math.round(recipe.costScrap * (1 - reduction));
+  const frag = Math.round(recipe.costFragments * (1 - reduction));
+  const oreCosts = Object.entries(recipe.costOre) as Array<[OreType, number]>;
+  const oreOk = oreCosts.every(([k, n]) => ch.wallet.ore[k] >= Math.round(n * (1 - reduction)));
+  if (ch.wallet.scrap < scrap || ch.wallet.fragments < frag || !oreOk) return fail('not_enough_materials');
+  if (ch.inventory.length >= inventoryCapacity(ch)) return fail('inventory_full');
+  ch.wallet.scrap -= scrap;
+  ch.wallet.fragments -= frag;
+  for (const [k, n] of oreCosts) ch.wallet.ore[k] -= Math.round(n * (1 - reduction));
+  const def = ITEM_BY_ID.get(recipe.outputItemId)!;
+  const made = createItem(ch, def.id, def.baseRarity, rng);
+  if (!made.ok) return made;
+  return { ok: true, item: made.item };
+}
+
+export function rerollCost(item: ItemInstance): { scrap: number; fragments: number } {
+  const def = ITEM_BY_ID.get(item.defId)!;
+  const n = item.rerolls + 1;
+  return { scrap: Math.round(def.scrapValue * 2 * n * n), fragments: 10 * n * def.tier };
+}
+
+/** Rerolls ONE affix (index). Max 3 rerolls per item, cost grows quadratically. */
+export function rerollAffix(ch: CharacterState, uid: string, affixIndex: number, rng: SimRNG): Result<{ affix: ItemAffix }> {
+  const item = findItem(ch, uid);
+  if (!item) return fail('item_not_found');
+  if (item.affixes.length === 0) return fail('no_affixes');
+  if (affixIndex < 0 || affixIndex >= item.affixes.length) return fail('bad_affix_index');
+  if (item.rerolls >= MAX_REROLLS) return fail('max_rerolls');
+  const cost = rerollCost(item);
+  if (ch.wallet.scrap < cost.scrap || ch.wallet.fragments < cost.fragments) return fail('not_enough_materials');
+  ch.wallet.scrap -= cost.scrap;
+  ch.wallet.fragments -= cost.fragments;
+  const keep = item.affixes.filter((_, i) => i !== affixIndex).map((a) => a.stat);
+  const rolled = rollAffixes(rng, item.rarity, keep)[0];
+  if (rolled) item.affixes[affixIndex] = rolled;
+  item.rerolls++;
+  return { ok: true, affix: item.affixes[affixIndex] };
+}
+
+export const FUSION_UPGRADE_CHANCE: Record<ItemRarity, number> = { Common: 0.30, Uncommon: 0.22, Rare: 0.15, Epic: 0.08, Legendary: 0 };
+
+/** 3 identical items (same definition and rarity) -> 1 item with a chance of the next rarity up. */
+export function fuseItems(ch: CharacterState, uids: string[], rng: SimRNG): Result<{ item: ItemInstance; upgraded: boolean }> {
+  if (uids.length !== FUSION_INPUT_COUNT || new Set(uids).size !== FUSION_INPUT_COUNT) return fail('need_three_distinct');
+  const items = uids.map((u) => findItem(ch, u));
+  if (items.some((i) => !i)) return fail('item_not_found');
+  const [a, b, c] = items as ItemInstance[];
+  if (a.defId !== b.defId || a.defId !== c.defId || a.rarity !== b.rarity || a.rarity !== c.rarity) return fail('not_identical');
+  if (uids.some((u) => isEquipped(ch, u))) return fail('item_equipped');
+  const upgraded = rng.chance(FUSION_UPGRADE_CHANCE[a.rarity]);
+  const rarity = upgraded ? RARITIES[Math.min(RARITIES.length - 1, RARITIES.indexOf(a.rarity) + 1)] : a.rarity;
+  ch.inventory = ch.inventory.filter((i) => !uids.includes(i.uid));
+  const made = createItem(ch, a.defId, rarity, rng, a.bound || b.bound || c.bound);
+  if (!made.ok) return made;
+  return { ok: true, item: made.item, upgraded };
+}
+
+// ---------------------------------------------------------------------------
+// Stats: vehicle + level + gear + talents + mastery
+// ---------------------------------------------------------------------------
+
+export interface LoadoutStats {
+  vehicleId: string;
+  vehicleClass: string;
+  tier: number;
+  maxHull: number;
+  maxArmor: number;
+  maxSpeed: number;
+  turnRate: number;
+  turretTurnRate: number;
+  mainDamage: number;
+  mainReloadTime: number;
+  mainRange: number;
+  mgDamage: number;
+  mgRange: number;
+  critChance: number;
+  critDamage: number;
+  flatReduction: number;
+  dps: number;
+}
+
+export function itemStatMultiplier(item: ItemInstance): number {
+  return RARITY_CONFIGS[item.rarity].multiplier * UPGRADE_LEVEL_STATS[item.upgrade].statMult;
+}
+
+export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVehicle): LoadoutStats | undefined {
+  const v = VEHICLE_CATALOG.find((x) => x.id === vehicleId);
+  const g = ch.garage.find((x) => x.vehicleId === vehicleId);
+  if (!v || !g) return undefined;
+  const tal = talentTotals(ch);
+  const mastery = 1 + masteryLevel(g.masteryXp) * MASTERY_BONUS_PER_LEVEL;
+  const levelMult = 1 + (ch.level - 1) * 0.02;
+
+  let hullBonus = 0, armorBonus = 0, speedBonus = 0, flat = 0, dmgAdd = 0, mgAdd = 0, range = v.range, mgRange = 300;
+  let affDps = 0, affHull = 0, affArmor = 0, affSpeed = 0, affCrit = 0, affFlat = 0, affReload = 0, affRange = 0;
+  for (const uid of Object.values(g.loadout)) {
+    const item = findItem(ch, uid);
+    if (!item) continue;
+    const def = ITEM_BY_ID.get(item.defId)!;
+    const m = itemStatMultiplier(item);
+    if (def.slotType === 'main') { dmgAdd += (def.baseDPS ?? 0) * m * 0.5; range = Math.max(range, def.baseRange ?? range); }
+    if (def.slotType === 'secondary') { mgAdd += (def.baseDPS ?? 0) * m * 0.15; mgRange = Math.max(mgRange, def.baseRange ?? mgRange); }
+    hullBonus += (def.baseHullBonus ?? 0) * m;
+    armorBonus += (def.baseArmorBonus ?? 0) * m;
+    speedBonus += (def.baseSpeedBonus ?? 0) * m;
+    flat += (def.baseFlatReduction ?? 0) * m;
+    for (const a of item.affixes) {
+      if (a.stat === 'dps') affDps += a.value / 100;
+      else if (a.stat === 'hull') affHull += a.value / 100;
+      else if (a.stat === 'armor') affArmor += a.value / 100;
+      else if (a.stat === 'speed') affSpeed += a.value / 100;
+      else if (a.stat === 'crit_chance') affCrit += a.value / 100;
+      else if (a.stat === 'flat_reduction') affFlat += a.value;
+      else if (a.stat === 'reload_speed') affReload += a.value / 100;
+      else if (a.stat === 'range') affRange += a.value / 100;
+    }
+  }
+
+  const maxHull = Math.round((v.baseHull * levelMult + hullBonus) * (1 + (tal['hull_max'] ?? 0) + affHull) * mastery);
+  const maxArmor = Math.round((v.baseArmor * levelMult + armorBonus) * (1 + (tal['armor_max'] ?? 0) + affArmor) * mastery);
+  const maxSpeed = Math.round((v.baseSpeed + speedBonus) * (1 + (tal['max_speed'] ?? 0) + affSpeed));
+  const mainDamage = Math.round((v.baseDamage * levelMult + dmgAdd) * (1 + (tal['main_damage'] ?? 0) + affDps) * mastery);
+  const reload = v.reloadTime / (1 + (tal['reload_speed'] ?? 0) + affReload);
+  const crit = Math.min(0.75, 0.05 + (tal['crit_chance'] ?? 0) + affCrit);
+  const flatReduction = Math.round(flat + (tal['flat_damage_reduction'] ?? 0) + affFlat);
+  return {
+    vehicleId,
+    vehicleClass: v.vehicleClass,
+    tier: v.tier,
+    maxHull,
+    maxArmor,
+    maxSpeed,
+    turnRate: v.turnRate * (1 + (tal['chassis_turn_rate'] ?? 0)),
+    turretTurnRate: v.turretTurnRate,
+    mainDamage,
+    mainReloadTime: Math.round(reload * 100) / 100,
+    mainRange: Math.round(range * (1 + (tal['main_range'] ?? 0) + affRange)),
+    mgDamage: Math.round(18 + mgAdd),
+    mgRange,
+    critChance: crit,
+    critDamage: 1.5 + (tal['crit_damage'] ?? 0),
+    flatReduction,
+    dps: Math.round(mainDamage / reload),
+  };
+}

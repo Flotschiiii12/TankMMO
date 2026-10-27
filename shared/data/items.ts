@@ -107,7 +107,7 @@ export const UPGRADE_LEVEL_STATS = [
   { level: 10, statMult: 1.90, costScrap: 13500, costOre: 480, costFragments: 160, successChance: 0.85 },
   { level: 11, statMult: 2.07, costScrap: 21000, costOre: 680, costFragments: 230, successChance: 0.70 },
   { level: 12, statMult: 2.26, costScrap: 32000, costOre: 950, costFragments: 320, successChance: 0.55 },
-  { level: 13, statMult: 2.48, costScrap: 4800, costOre: 1300, costFragments: 450, successChance: 0.40 },
+  { level: 13, statMult: 2.48, costScrap: 48000, costOre: 1300, costFragments: 450, successChance: 0.40 },
   { level: 14, statMult: 2.73, costScrap: 72000, costOre: 1800, costFragments: 620, successChance: 0.30 },
   { level: 15, statMult: 3.00, costScrap: 110000, costOre: 2500, costFragments: 850, successChance: 0.20 },
 ];

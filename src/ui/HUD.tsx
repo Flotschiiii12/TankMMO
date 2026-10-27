@@ -1,10 +1,11 @@
 import React from 'react';
 import { ChatMessage, SimEntity } from '../sim/types.ts';
+import { QUEST_BY_ID } from '../../shared/data/quests.ts';
 import { UserProfile } from '../save/profile.ts';
 import { Radar } from './Radar.tsx';
 import { ChatLog } from './ChatLog.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
-import { Volume2, VolumeX, Wrench, Package, Map as MapIcon, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
+import { Volume2, VolumeX, Wrench, Package, ScrollText, Map as MapIcon, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
 
 interface HUDProps {
   player: SimEntity | null;
@@ -18,6 +19,7 @@ interface HUDProps {
   soundMuted: boolean;
   onToggleMute: () => void;
   onOpenGarage: () => void;
+  onOpenQuests: () => void;
   onOpenInventory: () => void;
   onOpenWorldMap: () => void;
   onOpenSettings: () => void;
@@ -37,6 +39,7 @@ export const HUD: React.FC<HUDProps> = ({
   soundMuted,
   onToggleMute,
   onOpenGarage,
+  onOpenQuests,
   onOpenInventory,
   onOpenWorldMap,
   onOpenSettings,
@@ -75,9 +78,23 @@ export const HUD: React.FC<HUDProps> = ({
 
           {/* Active Ammo Stack */}
           <div className="text-[11px] text-slate-300 tabular-nums">
-            Ammo: <span className="font-semibold text-orange-400">{player?.selectedAmmo.toUpperCase()}</span> (
-            {player ? profile.ammoInventory[player.selectedAmmo] ?? '∞' : '∞'})
+            Ammo: <span className="font-semibold text-orange-400">{player?.selectedAmmo.replace('_', ' ')}</span> (
+            {player ? (player.ammoInventory[player.selectedAmmo] < 0 ? '∞' : player.ammoInventory[player.selectedAmmo]) : '∞'})
           </div>
+
+          {/* Quest tracker */}
+          {Object.values(profile.character.quests.active).slice(0, 3).map((aq) => {
+            const def = QUEST_BY_ID.get(aq.id);
+            if (!def) return null;
+            const done = aq.progress.reduce((a, b) => a + b, 0);
+            const total = aq.targets.reduce((a, b) => a + b, 0);
+            return (
+              <div key={aq.id} className="text-[10px] flex justify-between gap-2 text-slate-400 border-t border-slate-800/60 pt-0.5">
+                <span className={`truncate ${aq.ready ? 'text-emerald-400' : ''}`}>{def.name}</span>
+                <span className="tabular-nums shrink-0">{aq.ready ? 'ready' : `${done}/${total}`}</span>
+              </div>
+            );
+          })}
         </div>
 
         {/* Top-Right: Clean Vertical Stack of Radar, with Icons Below (Zero Overlap) */}
@@ -106,6 +123,18 @@ export const HUD: React.FC<HUDProps> = ({
               }`}
             >
               <Wrench size={18} />
+            </button>
+
+            {/* Quests button */}
+            <button
+              onClick={() => {
+                soundEngine.playUIClick();
+                onOpenQuests();
+              }}
+              title="Quests (J)"
+              className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-emerald-400 flex items-center justify-center hover:text-white active:scale-95"
+            >
+              <ScrollText size={18} />
             </button>
 
             {/* Inventory button */}

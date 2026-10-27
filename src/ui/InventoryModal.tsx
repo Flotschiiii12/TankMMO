@@ -5,17 +5,19 @@ import { soundEngine } from '../audio/soundEngine.ts';
 import { describeItem, errorText, itemName, mutateCharacter } from '../game/actions.ts';
 import { ITEM_BY_ID, CRAFTING_RECIPES, UPGRADE_LEVEL_STATS } from '../../shared/data/items.ts';
 import * as C from '../../shared/rules/character.ts';
+import type { QuestEvent } from '../../shared/rules/quests.ts';
 
 interface InventoryModalProps {
   profile: UserProfile;
   isOpen: boolean;
   onClose: () => void;
   onChange: (profile: UserProfile) => void;
+  onQuestEvent?: (ev: QuestEvent) => void;
 }
 
 const SLOT_FILTERS = ['all', 'main', 'secondary', 'armor', 'engine', 'module', 'drone'] as const;
 
-export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen, onClose, onChange }) => {
+export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen, onClose, onChange, onQuestEvent }) => {
   const [tab, setTab] = useState<'gear' | 'craft'>('gear');
   const [filter, setFilter] = useState<(typeof SLOT_FILTERS)[number]>('all');
   const [selected, setSelected] = useState<string | null>(null);
@@ -32,6 +34,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
     if (result.ok) {
       onChange(next);
       setMsg(ok || '');
+      if (ok === 'Crafted') onQuestEvent?.({ type: 'craft' });
+      if (ok === 'Upgrade attempted' || ok === 'Safe upgrade attempted') onQuestEvent?.({ type: 'upgrade' });
+      if (ok === 'Equipped') onQuestEvent?.({ type: 'tutorial', step: 'equip' });
     } else setMsg(errorText(result.error));
     return result;
   };

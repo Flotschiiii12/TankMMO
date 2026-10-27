@@ -6,8 +6,8 @@
 - [x] **Milestone 2 (M2)**: Complete data tables: 50 vehicles (5 classes $\times$ 10 tiers), 188 equipment items across all families/tiers/rarities, upgrade stats (+0..+15), crafting recipes, enemy archetypes & bosses, loot tables with pity counter (threshold 10), 36 talents across 3 branches, 21 military honor ranks, 50+ achievements, i18n localization dictionary (en/de), stat/power formulas, progression rules (XP curve, kill XP scaling, garage capacity), and `/docs/BALANCE.md` updates. Vitest suite: 9 test files, 41 unit tests passing.
 - [x] **Milestone 3 (M3)**: Procedural map generator + 30 map definitions + portal graph + safe zones + weather/time-of-day + resource nodes; world map screen; single-player roaming of all 30 maps.
 - [x] **Milestone 4 (M4)** (simulation side; client UI for gates/events still to do): PvE content: all enemy archetypes, AI state machines, elites, mini/world/group bosses, spawn zones, convoys, gates (6 instanced dungeons), world events.
-- [ ] **Milestone 5 (M5)**: Progression: levels 1–100, talent tree (3 branches), ranks (21), reputation, codex, achievements, garage (8 slots), mastery, skins, inventory (60–150 slots), workshop (upgrade, dismantle, craft, reroll, fusion), NPC vendors.
-- [ ] **Milestone 6 (M6)**: Quests: framework + story (10 chapters), daily/weekly/bounty/explorer/clan quests, tutorial flow with non-blocking edge hints, season pass (free track, 50 tiers).
+- [x] **Milestone 5 (M5)** (rules + UI in the game; drones/modules not yet applied to stats): Progression: levels 1–100, talent tree (3 branches), ranks (21), reputation, codex, achievements, garage (8 slots), mastery, skins, inventory (60–150 slots), workshop (upgrade, dismantle, craft, reroll, fusion), NPC vendors.
+- [x] **Milestone 6 (M6)** (rules, data, UI; clan quests/dungeon quests wait for their systems): Quests: framework + story (10 chapters), daily/weekly/bounty/explorer/clan quests, tutorial flow with non-blocking edge hints, season pass (free track, 50 tiers).
 - [ ] **Milestone 7 (M7)**: Server core: accounts (guest + recovery code), persistence (`node:sqlite` schemas + repositories), instance manager, authoritative simulation, protocol, snapshots with interest management, client prediction/interpolation, online-only flow, version gate, rate limits.
 - [ ] **Milestone 8 (M8)**: Social: chat channels (Global, Map, Faction, Clan, Party, Whisper, System), profanity filter, report/block, friends list, parties (up to 5), profile card, rankings, clans (storage, research, wars), moderation dashboard (`/admin`).
 - [ ] **Milestone 9 (M9)**: PvP: protection rules (level 15+, ±5 levels, spawn protection, safe zones), honor, bounties, weekly faction war control points, competitive arena (1v1, 3v3, 5v5, leagues, rating).
@@ -84,3 +84,6 @@ npm run build
 - 50 vehicles are in the garage (class tabs); old saves migrate (ids and ammo keys).
 - Not yet wired in the client: dungeon entry UI, event banners, world boss UI, the 188 items/inventory/workshop (M5).
 - Tests: 58 (npm test), tsc clean.
+- M5: shared/rules/character.ts (XP, talents, respec, garage, mastery, inventory, upgrade/dismantle/craft/reroll/fusion, loadout stats). In game: Loadout & Workshop modal, talents tab, kill XP + loot.
+- M6: shared/data/quests.ts (tutorial 8 steps, story 10 chapters x 10, daily pool 40, weekly pool 9, bounty, explorer, faction, clan), shared/rules/quests.ts (framework, rotation, rewards, season pass free track 50 tiers). In game: Quest modal, HUD tracker, auto tutorial.
+- Tests: 77, tsc clean.

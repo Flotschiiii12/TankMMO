@@ -9,6 +9,9 @@ import { calculateKillXP } from '../../shared/rules/progression.ts';
 import { rollLoot } from '../../shared/data/loot.ts';
 import * as C from '../../shared/rules/character.ts';
 import { describeItem } from '../game/actions.ts';
+import { applyQuestEvent, rotateQuests, questName } from '../game/questBridge.ts';
+import type { QuestEvent } from '../../shared/rules/quests.ts';
+import { QuestModal } from './QuestModal.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts';
 import { HUD } from './HUD.tsx';
@@ -38,6 +41,7 @@ export const GameShell: React.FC = () => {
   // Game UI States
   const [gameState, setGameState] = useState<'TITLE' | 'PLAYING'>('TITLE');
   const [garageOpen, setGarageOpen] = useState(false);
+  const [questOpen, setQuestOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [worldMapOpen, setWorldMapOpen] = useState(false);
@@ -132,6 +136,32 @@ export const GameShell: React.FC = () => {
     }
   }, []);
 
+  // Feed a game event to the quest log (auto-completion detection happens in the shared rules)
+  const questEvent = useCallback((ev: QuestEvent) => {
+    setProfile((prev) => {
+      const { profile: next, ready } = applyQuestEvent(prev, ev);
+      for (const id of ready) {
+        const me = clientRef.current?.getPredictedPlayer();
+        if (me) particlesRef.current.emitDamageText({ x: me.pos.x, y: me.pos.y - 50 }, `Quest ready: ${questName(id)}`, '#34d399');
+      }
+      if (next !== prev) profileStoreRef.current.save(next);
+      return next;
+    });
+  }, []);
+
+  // Rotate daily/weekly quests on start and when the level changes (more quests become eligible)
+  useEffect(() => {
+    setProfile((prev) => {
+      const next = rotateQuests(prev);
+      if (next !== prev) profileStoreRef.current.save(next);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (profile.character.level > 1) questEvent({ type: 'tutorial', step: 'levelup' });
+  }, [profile.character.level]);
+
   // Handle Simulation Events
   const handleSimEvent = useCallback(
     (event: SimEvent) => {
@@ -146,6 +176,7 @@ export const GameShell: React.FC = () => {
             soundEngine.playCannonShot(isPlayer);
           }
           // Tutorial auto-advance: Player fired cannon!
+          if (isPlayer && !event.isSecondary) questEvent({ type: 'tutorial', step: 'fire' });
           if (isPlayer && !event.isSecondary && profile.tutorialStep === 2) {
             saveProfile({ ...profile, tutorialStep: 3 });
           }
@@ -184,6 +215,8 @@ export const GameShell: React.FC = () => {
           const victim = clientRef.current.getEntity(event.victimId);
           if (!victim || !victim.isHostile) break;
           const isBoss = victim.kind === 'boss';
+          questEvent({ type: 'kill', kind: victim.archetypeId ? victim.kind : victim.kind, level: victim.level, isElite: !!victim.isElite, isBoss });
+          if (isBoss) questEvent({ type: 'defeat_boss', bossId: victim.archetypeId || 'boss' });
           setProfile((prev) => {
             const next = structuredClone(prev);
             const ch = next.character;
@@ -224,8 +257,10 @@ export const GameShell: React.FC = () => {
         case 'loot_collected': {
           if (!clientRef.current || event.collectorId !== clientRef.current.playerId) break;
           soundEngine.playPickup();
+          questEvent({ type: 'tutorial', step: 'loot' });
           const [kind, sub] = event.crateType.split(':');
           if (kind === 'ore') {
+            questEvent({ type: 'collect_ore', ore: sub || 'iron', amount: event.amount });
             particles.emitDamageText(event.pos, `+${event.amount} ${String(sub || 'ore').toUpperCase()}`, '#38bdf8');
           } else if (kind === 'scrap') {
             particles.emitDamageText(event.pos, `+${event.amount} Scrap`, '#eab308');
@@ -257,6 +292,9 @@ export const GameShell: React.FC = () => {
           soundEngine.playGateHum();
           camera.addShake(7);
           clientRef.current.switchMap(event.targetMapId, event.gateId);
+          questEvent({ type: 'use_portal', mapId: Number(event.targetMapId) });
+          questEvent({ type: 'reach_map', mapId: Number(event.targetMapId) });
+          questEvent({ type: 'tutorial', step: 'portal' });
           setProfile((prev) => {
             const updated = { ...prev, currentMapId: event.targetMapId };
             profileStoreRef.current.save(updated);
@@ -503,10 +541,12 @@ export const GameShell: React.FC = () => {
 
   // Commands helper
   const handleCommand = useCallback((cmd: SimCommand) => {
+    if (cmd.type === 'Drive' && (Math.abs(cmd.x) > 0.2 || Math.abs(cmd.y) > 0.2)) questEvent({ type: 'tutorial', step: 'drive' });
+    if (cmd.type === 'SetTarget' && cmd.targetId !== null && cmd.targetId !== undefined) questEvent({ type: 'tutorial', step: 'lock' });
     if (clientRef.current) {
       clientRef.current.sendCommand(cmd);
     }
-  }, []);
+  }, [questEvent]);
 
   const handleLockNearest = useCallback(() => {
     if (!clientRef.current) return;
@@ -648,7 +688,8 @@ export const GameShell: React.FC = () => {
                 settings: { ...profile.settings, soundEnabled: !next },
               });
             }}
-            onOpenGarage={() => setGarageOpen(true)}
+            onOpenGarage={() => { setGarageOpen(true); questEvent({ type: 'tutorial', step: 'garage' }); }}
+            onOpenQuests={() => setQuestOpen(true)}
             onOpenInventory={() => setInventoryOpen(true)}
             onOpenWorldMap={() => setWorldMapOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
@@ -693,8 +734,16 @@ export const GameShell: React.FC = () => {
         onChange={saveProfile}
       />
 
+      <QuestModal
+        profile={profile}
+        isOpen={questOpen}
+        onClose={() => setQuestOpen(false)}
+        onChange={saveProfile}
+      />
+
       <InventoryModal
         profile={profile}
+        onQuestEvent={questEvent}
         isOpen={inventoryOpen}
         onClose={() => setInventoryOpen(false)}
         onChange={saveProfile}

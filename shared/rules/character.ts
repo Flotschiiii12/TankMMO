@@ -16,6 +16,8 @@ import {
 import { TALENT_BY_ID, TALENTS_CATALOG } from '../data/talents.ts';
 import { VEHICLE_CATALOG } from '../data/vehicles.ts';
 import { SimRNG } from '../prng.ts';
+import type { QuestLog, SeasonState } from './quests.ts';
+import { createQuestLog, createSeasonState } from './quests.ts';
 import { getEarnedTalentPoints, getGarageCapacity, getXPForLevel, MAX_PLAYER_LEVEL } from './progression.ts';
 
 export type OreType = 'iron' | 'copper' | 'titanium' | 'crystal';
@@ -71,6 +73,10 @@ export interface CharacterState {
   pityCounter: number;
   nextUid: number;
   respecs: number;
+  quests: QuestLog;
+  season: SeasonState;
+  /** faction/general reputation points by faction key */
+  reputation: Record<string, number>;
 }
 
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -90,6 +96,9 @@ export function createCharacter(name: string): CharacterState {
     pityCounter: 0,
     nextUid: 1,
     respecs: 0,
+    quests: createQuestLog(),
+    season: createSeasonState(),
+    reputation: {},
   };
 }
 

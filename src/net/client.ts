@@ -3,13 +3,13 @@ import { Realm } from '../sim/realm.ts';
 import { angleDiff, ChatMessage, clamp, dist, lerp, SimCommand, SimEntity, SimEvent, vec2 } from '../sim/types.ts';
 import { SIM_TIMESTEP } from '../sim/world.ts';
 import { UserProfile } from '../save/profile.ts';
-import { getPartById } from '../data/parts.ts';
 import { WebSocketTransport } from './transport.ts';
 
 export interface GameClient {
   readonly playerId: number;
   sendCommand(command: SimCommand): void;
   getSnapshot(): WorldSnapshot | null;
+  getEntity(id: number): SimEntity | undefined;
   getPredictedPlayer(): SimEntity | null;
   onEvent(handler: (event: SimEvent) => void): () => void;
   switchMap(targetMapId: string, gateId: string): void;
@@ -62,14 +62,10 @@ export class LocalGameClient implements GameClient {
     this.realm = new Realm();
     this.currentMapId = profile.currentMapId || 'green_valley';
 
-    const bonus = this.computeEquippedBonus(profile);
-    this.playerEntity = this.realm.createPlayerEntity(
-      this.playerId,
-      profile.playerName,
-      profile.currentVehicleId,
-      profile.level,
-      bonus
-    );
+    this.playerEntity = this.realm.createPlayerEntity(this.playerId, profile.playerName, profile.character);
+    for (const k of Object.keys(profile.ammoInventory) as Array<keyof typeof profile.ammoInventory>) {
+      if (k !== 'STANDARD') this.playerEntity.ammoInventory[k] = profile.ammoInventory[k] ?? 0;
+    }
 
     // Insert player into initial map instance
     const initialInstance = this.realm.getInstance(this.currentMapId);
@@ -94,26 +90,6 @@ export class LocalGameClient implements GameClient {
 
     // Start fixed 30Hz simulation loop
     this.startSimLoop();
-  }
-
-  private computeEquippedBonus(profile: UserProfile) {
-    let dpsBonus = 0;
-    let hullBonus = 0;
-    let armorBonus = 0;
-    let speedBonus = 0;
-
-    const cannon = getPartById(profile.equippedParts.cannon);
-    if (cannon) dpsBonus += cannon.dpsBonus;
-    const armor = getPartById(profile.equippedParts.armor);
-    if (armor) {
-      hullBonus += armor.hullBonus;
-      armorBonus += armor.armorBonus;
-      speedBonus += armor.speedBonus;
-    }
-    const engine = getPartById(profile.equippedParts.engine);
-    if (engine) speedBonus += engine.speedBonus;
-
-    return { dpsBonus, hullBonus, armorBonus, speedBonus };
   }
 
   private startSimLoop() {
@@ -268,6 +244,11 @@ export class LocalGameClient implements GameClient {
     return this.latestAuthoritativeSnapshot;
   }
 
+  /** Looks an entity up in the authoritative world (the victim of a kill event is still there as a wreck). */
+  getEntity(id: number): SimEntity | undefined {
+    return this.realm.getInstance(this.currentMapId).world.entities.get(id);
+  }
+
   getPredictedPlayer(): SimEntity | null {
     return this.predictedPlayer;
   }
@@ -339,27 +320,41 @@ export class LocalGameClient implements GameClient {
   }
 
   updateProfile(profile: UserProfile) {
-
-    const bonus = this.computeEquippedBonus(profile);
-    const stats = this.realm.createPlayerEntity(
-      this.playerId,
-      profile.playerName,
-      profile.currentVehicleId,
-      profile.level,
-      bonus
-    );
-
+    const stats = this.realm.createPlayerEntity(this.playerId, profile.playerName, profile.character);
     const inst = this.realm.getInstance(this.currentMapId);
     const p = inst.getPlayer(this.playerId);
-    if (p) {
-      p.maxHull = stats.maxHull;
-      p.maxArmor = stats.maxArmor;
-      p.maxSpeed = stats.maxSpeed;
-      p.turnRate = stats.turnRate;
-      p.turretTurnRate = stats.turretTurnRate;
-      p.mainReloadTime = stats.mainReloadTime;
-      p.level = profile.level;
+    if (!p) return;
+    const hullRatio = p.maxHull > 0 ? p.hull / p.maxHull : 1;
+    const armorRatio = p.maxArmor > 0 ? p.armor / p.maxArmor : 1;
+    Object.assign(p, {
+      maxHull: stats.maxHull,
+      maxArmor: stats.maxArmor,
+      maxSpeed: stats.maxSpeed,
+      turnRate: stats.turnRate,
+      turretTurnRate: stats.turretTurnRate,
+      mainReloadTime: stats.mainReloadTime,
+      mainDamage: stats.mainDamage,
+      mainRange: stats.mainRange,
+      mgDamage: stats.mgDamage,
+      mgRange: stats.mgRange,
+      critChance: stats.critChance,
+      flatArmorReduction: stats.flatArmorReduction,
+      level: profile.character.level,
+      vehicleClass: stats.vehicleClass,
+      tier: stats.tier,
+      radius: stats.radius,
+    });
+    if (p.hull > 0) {
+      p.hull = Math.round(p.maxHull * hullRatio);
+      p.armor = Math.round(p.maxArmor * armorRatio);
     }
+    // Purchases raise the stack; ammo spent in combat is not refunded.
+    for (const k of Object.keys(profile.ammoInventory) as Array<keyof typeof profile.ammoInventory>) {
+      if (k === 'STANDARD') continue;
+      p.ammoInventory[k] = Math.max(p.ammoInventory[k] ?? 0, profile.ammoInventory[k] ?? 0);
+    }
+    this.predictedPlayer.maxHull = p.maxHull;
+    this.predictedPlayer.maxArmor = p.maxArmor;
   }
 
   disconnect(): void {
@@ -419,6 +414,10 @@ export class RemoteGameClient implements GameClient {
 
   getPredictedPlayer(): SimEntity | null {
     return null;
+  }
+
+  getEntity(): SimEntity | undefined {
+    return undefined;
   }
 
   onEvent(handler: (event: SimEvent) => void): () => void {

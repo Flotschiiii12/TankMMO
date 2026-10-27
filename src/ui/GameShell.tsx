@@ -3,7 +3,12 @@ import { Camera } from '../render/camera.ts';
 import { ParticleSystem } from '../render/particles.ts';
 import { WorldRenderer } from '../render/worldRenderer.ts';
 import { LocalGameClient } from '../net/client.ts';
-import { LocalStorageProfileStore, UserProfile, XP_FOR_LEVEL } from '../save/profile.ts';
+import { LocalStorageProfileStore, UserProfile } from '../save/profile.ts';
+import { SimRNG } from '../../shared/prng.ts';
+import { calculateKillXP } from '../../shared/rules/progression.ts';
+import { rollLoot } from '../../shared/data/loot.ts';
+import * as C from '../../shared/rules/character.ts';
+import { describeItem } from '../game/actions.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts';
 import { HUD } from './HUD.tsx';
@@ -17,7 +22,6 @@ import { TitleScreen } from './TitleScreen.tsx';
 import { PortraitWarning } from './PortraitWarning.tsx';
 import { WorldMapModal } from './WorldMapModal.tsx';
 import { isInSafeZone, spawnDebugTargetEnemies } from '../sim/world.ts';
-import { VEHICLE_TIERS } from '../data/vehicles.ts';
 
 function isInClientSafeZone(def: { safeZones?: Array<{ x: number; y: number; radius: number }>; safeZone?: { x: number; y: number; radius: number } }, pos: { x: number; y: number }): boolean {
   const zones = def.safeZones && def.safeZones.length > 0 ? def.safeZones : def.safeZone ? [def.safeZone] : [];
@@ -83,12 +87,13 @@ export const GameShell: React.FC = () => {
       (window as any).__tf = { client };
       setShowDebug(true);
       setProfile((prev) => {
-        const bonusScrap = Math.max(prev.scrap, 50000);
-        const bonusParts = Math.max(prev.parts, 5000);
+        const character = structuredClone(prev.character);
+        character.wallet.scrap = Math.max(character.wallet.scrap, 50000);
+        character.wallet.fragments = Math.max(character.wallet.fragments, 5000);
+        for (const k of ['iron', 'copper', 'titanium', 'crystal'] as const) character.wallet.ore[k] = Math.max(character.wallet.ore[k], 5000);
         const updated = {
           ...prev,
-          scrap: bonusScrap,
-          parts: bonusParts,
+          character,
           settings: { ...prev.settings, showDebug: true },
         };
         profileStoreRef.current.save(updated);
@@ -175,6 +180,34 @@ export const GameShell: React.FC = () => {
           particles.emitExplosion(event.pos, true);
           soundEngine.playExplosion(true);
           camera.addShake(10);
+          if (!clientRef.current || event.killerId !== clientRef.current.playerId) break;
+          const victim = clientRef.current.getEntity(event.victimId);
+          if (!victim || !victim.isHostile) break;
+          const isBoss = victim.kind === 'boss';
+          setProfile((prev) => {
+            const next = structuredClone(prev);
+            const ch = next.character;
+            const rng = new SimRNG((Date.now() ^ (event.victimId * 2654435761)) >>> 0);
+            const xp = calculateKillXP(ch.level, victim.level, !!victim.isElite, isBoss);
+            const before = ch.level;
+            const { levelsGained } = C.grantXP(ch, xp);
+            C.addMasteryXp(ch, ch.activeVehicle, Math.round(xp / 4));
+            if (xp > 0) particles.emitDamageText(event.pos, `+${xp} XP`, '#a78bfa');
+            if (levelsGained > 0) particles.emitDamageText(event.pos, `LEVEL UP! [Lv.${ch.level}]`, '#10b981');
+            const loot = rollLoot(rng, victim.level, 1, !!victim.isElite, isBoss, ch.pityCounter);
+            ch.pityCounter = loot.newPityCounter;
+            if (loot.itemId && loot.rarity) {
+              const made = C.createItem(ch, loot.itemId, loot.rarity, rng);
+              if (made.ok) {
+                const info = describeItem(made.item);
+                particles.emitDamageText({ x: event.pos.x, y: event.pos.y - 30 }, info.name, info.color);
+              }
+            }
+            if (loot.keys > 0) ch.wallet.gateKeys += loot.keys;
+            profileStoreRef.current.save(next);
+            if (clientRef.current && (levelsGained > 0 || before !== ch.level)) clientRef.current.updateProfile(next);
+            return next;
+          });
           break;
         }
 
@@ -206,33 +239,15 @@ export const GameShell: React.FC = () => {
 
           // Update user profile currencies
           setProfile((prev) => {
-            let nextScrap = prev.scrap;
-            let nextParts = prev.parts;
-            let nextXp = prev.xp;
-            let nextLevel = prev.level;
-            const nextAmmo = { ...prev.ammoInventory };
-
-            if (kind === 'scrap') {
-              nextScrap += event.amount;
-              nextXp += Math.round(event.amount * 0.8);
-              while (nextLevel < 30 && nextXp >= XP_FOR_LEVEL(nextLevel)) {
-                nextXp -= XP_FOR_LEVEL(nextLevel);
-                nextLevel++;
-                particles.emitDamageText(event.pos, `LEVEL UP! [Lv.${nextLevel}]`, '#10b981');
-              }
-            } else if (kind === 'parts') {
-              nextParts += event.amount;
-            } else if (kind === 'ammo' && sub) {
-              const key = sub as AmmoType;
-              nextAmmo[key] = (nextAmmo[key] || 0) + event.amount;
-            } else {
-              return prev;
-            }
-
-            const updated: UserProfile = { ...prev, scrap: nextScrap, parts: nextParts, xp: nextXp, level: nextLevel, ammoInventory: nextAmmo };
-            profileStoreRef.current.save(updated);
-            if (clientRef.current) clientRef.current.updateProfile(updated);
-            return updated;
+            const next = structuredClone(prev);
+            const w = next.character.wallet;
+            if (kind === 'scrap') w.scrap += event.amount;
+            else if (kind === 'parts') w.fragments += event.amount;
+            else if (kind === 'ore' && sub) w.ore[sub as 'iron'] += event.amount;
+            else if (kind === 'ammo' && sub) next.ammoInventory[sub as AmmoType] = (next.ammoInventory[sub as AmmoType] || 0) + event.amount;
+            else return prev;
+            profileStoreRef.current.save(next);
+            return next;
           });
           break;
         }
@@ -254,8 +269,8 @@ export const GameShell: React.FC = () => {
           if (!clientRef.current || event.entityId !== clientRef.current.playerId) break;
           // Drop 10% scrap on death (keep 90%)
           setProfile((prev) => {
-            const retainedScrap = Math.floor(prev.scrap * 0.9);
-            const updated = { ...prev, scrap: retainedScrap };
+            const updated = structuredClone(prev);
+            updated.character.wallet.scrap = Math.floor(updated.character.wallet.scrap * 0.9);
             profileStoreRef.current.save(updated);
             return updated;
           });
@@ -553,52 +568,6 @@ export const GameShell: React.FC = () => {
   }, []);
 
   // Garage Handlers
-  const handleBuyVehicle = (vehicleId: string) => {
-    const v = VEHICLE_TIERS.find((item) => item.id === vehicleId);
-    if (!v) return;
-    if (profile.scrap >= v.costScrap && profile.parts >= v.costParts) {
-      const updated: UserProfile = {
-        ...profile,
-        scrap: profile.scrap - v.costScrap,
-        parts: profile.parts - v.costParts,
-        unlockedVehicles: [...profile.unlockedVehicles, v.id],
-        currentVehicleId: v.id,
-      };
-      saveProfile(updated);
-    }
-  };
-
-  const handleEquipVehicle = (vehicleId: string) => {
-    const updated: UserProfile = { ...profile, currentVehicleId: vehicleId };
-    saveProfile(updated);
-  };
-
-  const handleBuyAndEquipPart = (partId: string, type: 'cannon' | 'armor' | 'engine') => {
-    const updated: UserProfile = {
-      ...profile,
-      equippedParts: {
-        ...profile.equippedParts,
-        [type]: partId,
-      },
-    };
-    saveProfile(updated);
-  };
-
-  const handleBuyAmmo = (type: AmmoType, count: number, cost: number) => {
-    if (profile.scrap >= cost) {
-      const currentCount = profile.ammoInventory[type] || 0;
-      const updated: UserProfile = {
-        ...profile,
-        scrap: profile.scrap - cost,
-        ammoInventory: {
-          ...profile.ammoInventory,
-          [type]: currentCount + count,
-        },
-      };
-      saveProfile(updated);
-    }
-  };
-
   const handleResetProgress = () => {
     const resetProf = profileStoreRef.current.reset();
     setProfile(resetProf);
@@ -653,7 +622,7 @@ export const GameShell: React.FC = () => {
       {gameState === 'TITLE' && (
         <TitleScreen
           onStart={() => setGameState('PLAYING')}
-          playerLevel={profile.level}
+          playerLevel={profile.character.level}
         />
       )}
 
@@ -721,16 +690,14 @@ export const GameShell: React.FC = () => {
         profile={profile}
         isOpen={garageOpen}
         onClose={() => setGarageOpen(false)}
-        onBuyVehicle={handleBuyVehicle}
-        onEquipVehicle={handleEquipVehicle}
-        onBuyAndEquipPart={handleBuyAndEquipPart}
-        onBuyAmmo={handleBuyAmmo}
+        onChange={saveProfile}
       />
 
       <InventoryModal
         profile={profile}
         isOpen={inventoryOpen}
         onClose={() => setInventoryOpen(false)}
+        onChange={saveProfile}
       />
 
       <SettingsModal

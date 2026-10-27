@@ -1,5 +1,7 @@
 import { AmmoType } from '../sim/types.ts';
 import { migrateVehicleId, STARTER_VEHICLE_ID } from '../data/vehicles.ts';
+import { SimRNG } from '../../shared/prng.ts';
+import { CharacterState, createCharacter, createItem, equipItem, GarageVehicle } from '../../shared/rules/character.ts';
 
 /** Saves from before the simulation merge used lowercase ammo ids. */
 const LEGACY_AMMO: Record<string, AmmoType> = { standard: 'STANDARD', ap: 'ARMOR_PIERCING', he: 'EXPLOSIVE' };
@@ -12,17 +14,8 @@ export function migrateAmmo(raw: Record<string, number>): Partial<Record<AmmoTyp
 export interface UserProfile {
   version: number;
   playerName: string;
-  level: number; // 1-30
-  xp: number;
-  scrap: number;
-  parts: number;
-  unlockedVehicles: string[];
-  currentVehicleId: string;
-  equippedParts: {
-    cannon: string;
-    armor: string;
-    engine: string;
-  };
+  /** Level, XP, wallet, talents, garage, inventory: all in the shared rules model. */
+  character: CharacterState;
   ammoInventory: Record<AmmoType, number>;
   currentMapId: string;
   tutorialStep: number; // 0 = drive, 1 = lock target, 2 = fire main, 3 = finished
@@ -34,40 +27,63 @@ export interface UserProfile {
   };
 }
 
-export const XP_FOR_LEVEL = (level: number): number => {
-  if (level <= 1) return 100;
-  return Math.floor(100 * Math.pow(1.18, level - 1));
+export const PROFILE_VERSION = 2;
+
+/** New characters start with a common cannon, armor plating and engine already fitted. */
+export function createStarterCharacter(name: string): CharacterState {
+  const ch = createCharacter(name);
+  ch.wallet.scrap = 400;
+  const rng = new SimRNG(1);
+  for (const [defId, slot] of [['wpn_cannon_t1', 'main0'], ['arm_reactive_armor_t1', 'armor0'], ['eng_speed_engine_t1', 'engine0']] as const) {
+    const made = createItem(ch, defId, 'Common', rng);
+    if (made.ok) equipItem(ch, STARTER_VEHICLE_ID, slot, made.item.uid);
+  }
+  return ch;
+}
+
+export const DEFAULT_AMMO: Record<AmmoType, number> = {
+  STANDARD: 99999,
+  REINFORCED: 0,
+  ARMOR_PIERCING: 20,
+  SHAPED_CHARGE: 0,
+  EXPLOSIVE: 10,
 };
 
-export const DEFAULT_PROFILE: UserProfile = {
-  version: 1,
-  playerName: 'Commander',
-  level: 1,
-  xp: 0,
-  scrap: 400,
-  parts: 25,
-  unlockedVehicles: [STARTER_VEHICLE_ID],
-  currentVehicleId: STARTER_VEHICLE_ID,
-  equippedParts: {
-    cannon: 'cannon_t1',
-    armor: 'armor_t1',
-    engine: 'engine_t1',
-  },
-  ammoInventory: {
-    STANDARD: 99999,
-    REINFORCED: 0,
-    ARMOR_PIERCING: 20,
-    SHAPED_CHARGE: 0,
-    EXPLOSIVE: 10,
-  },
-  currentMapId: 'green_valley',
-  tutorialStep: 0,
-  settings: {
-    soundEnabled: true,
-    masterVolume: 0.7,
-    showDebug: false,
-  },
-};
+export function createDefaultProfile(): UserProfile {
+  return {
+    version: PROFILE_VERSION,
+    playerName: 'Commander',
+    character: createStarterCharacter('Commander'),
+    ammoInventory: { ...DEFAULT_AMMO },
+    currentMapId: 'green_valley',
+    tutorialStep: 0,
+    settings: { soundEnabled: true, masterVolume: 0.7, showDebug: false },
+  };
+}
+
+/** Version 1 saves kept level/scrap/parts/vehicles at the top level. */
+export function migrateV1(parsed: any): UserProfile {
+  const base = createDefaultProfile();
+  const ch = base.character;
+  ch.name = parsed.playerName || ch.name;
+  ch.level = Math.max(1, Math.min(100, Number(parsed.level) || 1));
+  ch.wallet.scrap = Number(parsed.scrap) || 0;
+  ch.wallet.fragments = Number(parsed.parts) || 0;
+  const owned: string[] = Array.from(new Set<string>((parsed.unlockedVehicles || [STARTER_VEHICLE_ID]).map(migrateVehicleId)));
+  const keep = ch.garage[0];
+  ch.garage = owned.map((id): GarageVehicle => (id === keep.vehicleId ? keep : { vehicleId: id, masteryXp: 0, loadout: {} }));
+  if (!ch.garage.some((g) => g.vehicleId === keep.vehicleId)) ch.garage.unshift(keep);
+  ch.activeVehicle = migrateVehicleId(parsed.currentVehicleId || STARTER_VEHICLE_ID);
+  if (!ch.garage.some((g) => g.vehicleId === ch.activeVehicle)) ch.activeVehicle = STARTER_VEHICLE_ID;
+  return {
+    ...base,
+    playerName: ch.name,
+    ammoInventory: { ...base.ammoInventory, ...migrateAmmo(parsed.ammoInventory || {}) },
+    currentMapId: parsed.currentMapId || base.currentMapId,
+    tutorialStep: parsed.tutorialStep ?? base.tutorialStep,
+    settings: { ...base.settings, ...(parsed.settings || {}) },
+  };
+}
 
 const STORAGE_KEY = 'treadfront_save_v1';
 
@@ -81,23 +97,22 @@ export class LocalStorageProfileStore implements ProfileStore {
   load(): UserProfile {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return { ...DEFAULT_PROFILE };
+      if (!raw) return createDefaultProfile();
       const parsed = JSON.parse(raw);
-      if (parsed.version === DEFAULT_PROFILE.version) {
+      if (parsed.version === PROFILE_VERSION && parsed.character) {
+        const base = createDefaultProfile();
         return {
-          ...DEFAULT_PROFILE,
+          ...base,
           ...parsed,
-          unlockedVehicles: Array.from(new Set<string>((parsed.unlockedVehicles || [STARTER_VEHICLE_ID]).map(migrateVehicleId))),
-          currentVehicleId: migrateVehicleId(parsed.currentVehicleId || STARTER_VEHICLE_ID),
-          ammoInventory: { ...DEFAULT_PROFILE.ammoInventory, ...migrateAmmo(parsed.ammoInventory || {}) },
-          equippedParts: { ...DEFAULT_PROFILE.equippedParts, ...(parsed.equippedParts || {}) },
-          settings: { ...DEFAULT_PROFILE.settings, ...(parsed.settings || {}) },
+          ammoInventory: { ...base.ammoInventory, ...migrateAmmo(parsed.ammoInventory || {}) },
+          settings: { ...base.settings, ...(parsed.settings || {}) },
         };
       }
+      if (parsed.version === 1) return migrateV1(parsed);
     } catch (e) {
       console.warn('Failed to parse saved profile, falling back to default:', e);
     }
-    return { ...DEFAULT_PROFILE };
+    return createDefaultProfile();
   }
 
   save(profile: UserProfile): void {
@@ -114,6 +129,6 @@ export class LocalStorageProfileStore implements ProfileStore {
     } catch (e) {
       console.warn('Failed to reset profile:', e);
     }
-    return { ...DEFAULT_PROFILE };
+    return createDefaultProfile();
   }
 }

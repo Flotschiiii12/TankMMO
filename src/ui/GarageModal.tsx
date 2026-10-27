@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { VEHICLE_TIERS } from '../data/vehicles.ts';
 import { createWorld as createSharedWorld, spawnVehicle } from '../../shared/sim/world.ts';
-import { AMMO_TYPES, AMMO_SIM_ID, ARMORS, CANNONS, ENGINES } from '../data/parts.ts';
+import { AMMO_TYPES, AMMO_SIM_ID } from '../data/parts.ts';
+import { VEHICLE_CATALOG } from '../../shared/data/vehicles.ts';
+import { TALENTS_CATALOG } from '../../shared/data/talents.ts';
+import * as C from '../../shared/rules/character.ts';
+import { errorText, mutateCharacter } from '../game/actions.ts';
 import { UserProfile } from '../save/profile.ts';
 import { AmmoType, VehicleStats } from '../sim/types.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
@@ -13,10 +17,13 @@ interface GarageModalProps {
   profile: UserProfile;
   isOpen: boolean;
   onClose: () => void;
-  onBuyVehicle: (vehicleId: string) => void;
-  onEquipVehicle: (vehicleId: string) => void;
-  onBuyAndEquipPart: (partId: string, type: 'cannon' | 'armor' | 'engine') => void;
-  onBuyAmmo: (type: AmmoType, count: number, cost: number) => void;
+  onChange: (profile: UserProfile) => void;
+}
+
+const VEHICLE_ORE_COST: Record<string, number> = Object.fromEntries(VEHICLE_CATALOG.map((v) => [v.id, v.costOre]));
+
+function talentLabel(id: string): string {
+  return id.replace(/^(off|def|log)_/, '').split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
 }
 
 const PREVIEW_WORLD = createSharedWorld({ populate: false });
@@ -25,14 +32,22 @@ export const GarageModal: React.FC<GarageModalProps> = ({
   profile,
   isOpen,
   onClose,
-  onBuyVehicle,
-  onEquipVehicle,
-  onBuyAndEquipPart,
-  onBuyAmmo,
+  onChange,
 }) => {
+  const ch = profile.character;
+  const [msg, setMsg] = useState('');
+  const run = (fn: (c: C.CharacterState, rng: any) => C.Result<any>) => {
+    soundEngine.playUIClick();
+    const { profile: next, result } = mutateCharacter(profile, fn);
+    if (result.ok) {
+      onChange(next);
+      setMsg('');
+    } else setMsg(errorText(result.error));
+    return result;
+  };
   const [activeTab, setActiveTab] = useState<'vehicles' | 'parts' | 'ammo'>('vehicles');
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleStats>(() => {
-    return VEHICLE_TIERS.find((v) => v.id === profile.currentVehicleId) || VEHICLE_TIERS[0];
+    return VEHICLE_TIERS.find((v) => v.id === profile.character.activeVehicle) || VEHICLE_TIERS[0];
   });
 
   const [classFilter, setClassFilter] = useState<VehicleStats['vehicleClass']>(selectedVehicle.vehicleClass);
@@ -75,7 +90,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
       }
 
       // Draw Vehicle with gentle idle turret scan
-      const mockEntity = spawnVehicle(PREVIEW_WORLD, 'player', selectedVehicle.name, profile.level, { x: 0, y: 0 }, {
+      const mockEntity = spawnVehicle(PREVIEW_WORLD, 'player', selectedVehicle.name, profile.character.level, { x: 0, y: 0 }, {
         tier: selectedVehicle.tier,
         maxHull: selectedVehicle.baseHull,
         maxArmor: selectedVehicle.baseArmor,
@@ -96,16 +111,24 @@ export const GarageModal: React.FC<GarageModalProps> = ({
     renderPreview();
 
     return () => cancelAnimationFrame(animId);
-  }, [isOpen, activeTab, selectedVehicle, profile.level]);
+  }, [isOpen, activeTab, selectedVehicle, profile.character.level]);
 
   if (!isOpen) return null;
 
-  const isUnlocked = profile.unlockedVehicles.includes(selectedVehicle.id);
-  const isEquipped = profile.currentVehicleId === selectedVehicle.id;
-  const canAfford =
-    profile.scrap >= selectedVehicle.costScrap &&
-    profile.parts >= selectedVehicle.costParts &&
-    profile.level >= selectedVehicle.minLevel;
+  const owned = ch.garage.some((g) => g.vehicleId === selectedVehicle.id);
+  const isUnlocked = owned;
+  const isEquipped = ch.activeVehicle === selectedVehicle.id;
+  const oreNeeded = Math.round(VEHICLE_ORE_COST[selectedVehicle.id] ?? 0);
+  const oreHave = ch.wallet.ore.iron + ch.wallet.ore.copper + ch.wallet.ore.titanium + ch.wallet.ore.crystal;
+  const canAfford = ch.wallet.scrap >= selectedVehicle.costScrap && oreHave >= oreNeeded && ch.level >= selectedVehicle.minLevel;
+  const buyAmmo = (type: AmmoType, count: number, cost: number) => {
+    if (ch.wallet.scrap < cost) return setMsg('Not enough scrap');
+    soundEngine.playUIClick();
+    const next = structuredClone(profile);
+    next.character.wallet.scrap -= cost;
+    next.ammoInventory[type] = (next.ammoInventory[type] || 0) + count;
+    onChange(next);
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col p-4 md:p-6 text-slate-200 select-none overflow-hidden">
@@ -121,13 +144,13 @@ export const GarageModal: React.FC<GarageModalProps> = ({
         {/* Currency Strip */}
         <div className="flex items-center gap-5 text-xs">
           <span className="tabular-nums">
-            Scrap: <span className="font-semibold text-white">{profile.scrap.toLocaleString()}</span>
+            Scrap: <span className="font-semibold text-white">{ch.wallet.scrap.toLocaleString()}</span>
           </span>
           <span className="tabular-nums">
-            Parts: <span className="font-semibold text-white">{profile.parts.toLocaleString()}</span>
+            Ore: <span className="font-semibold text-white">{oreHave.toLocaleString()}</span>
           </span>
           <span className="tabular-nums">
-            Level: <span className="font-semibold text-orange-400">{profile.level}</span>
+            Level: <span className="font-semibold text-orange-400">{ch.level}</span>
           </span>
           <button
             onClick={() => {
@@ -154,7 +177,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Vehicle Tiers (1–6)
+          Vehicles
         </button>
         <button
           onClick={() => {
@@ -167,7 +190,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Parts Workshop
+          Talents
         </button>
         <button
           onClick={() => {
@@ -208,9 +231,9 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                 ))}
               </div>
               {VEHICLE_TIERS.filter((v) => v.vehicleClass === classFilter).map((v) => {
-                const unlocked = profile.unlockedVehicles.includes(v.id);
+                const unlocked = ch.garage.some((g) => g.vehicleId === v.id);
                 const active = selectedVehicle.id === v.id;
-                const equipped = profile.currentVehicleId === v.id;
+                const equipped = ch.activeVehicle === v.id;
 
                 return (
                   <button
@@ -276,7 +299,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                     <button
                       onClick={() => {
                         soundEngine.playUIClick();
-                        onEquipVehicle(selectedVehicle.id);
+                        run((c) => { if (!c.garage.some((g) => g.vehicleId === selectedVehicle.id)) return { ok: false, error: 'vehicle_not_owned' }; c.activeVehicle = selectedVehicle.id; return { ok: true }; });
                       }}
                       className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium transition-colors"
                     >
@@ -286,7 +309,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                     <button
                       onClick={() => {
                         soundEngine.playUIClick();
-                        onBuyVehicle(selectedVehicle.id);
+                        run((c) => C.buyVehicle(c, selectedVehicle.id));
                       }}
                       disabled={!canAfford}
                       className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
@@ -295,7 +318,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                           : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       }`}
                     >
-                      Unlock ({selectedVehicle.costScrap} Scrap · {selectedVehicle.costParts} Parts)
+                      Unlock ({selectedVehicle.costScrap.toLocaleString()} Scrap · {oreNeeded.toLocaleString()} Ore)
                     </button>
                   )}
                 </div>
@@ -361,205 +384,40 @@ export const GarageModal: React.FC<GarageModalProps> = ({
           </div>
         )}
 
-        {/* TAB 2: PARTS WORKSHOP */}
+        {/* TAB 2: TALENTS */}
         {activeTab === 'parts' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Cannons */}
-            <div className="flex flex-col gap-3">
-              <h4 className="text-xs font-semibold text-orange-400 tracking-wider">
-                MAIN CANNONS
-              </h4>
-              {CANNONS.map((p) => {
-                const isEquipped = profile.equippedParts.cannon === p.id;
-                const canBuy =
-                  profile.scrap >= p.costScrap &&
-                  profile.parts >= p.costParts &&
-                  profile.level >= p.minLevel;
-
-                return (
-                  <div
-                    key={p.id}
-                    className={`p-3.5 rounded-lg border text-xs flex flex-col justify-between gap-2 ${
-                      isEquipped
-                        ? 'border-orange-500/70 bg-orange-500/10'
-                        : 'border-slate-800 bg-slate-900/40'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-white">{p.name}</span>
-                        <span className="text-[10px] text-slate-400">T{p.tier}</span>
-                      </div>
-                      <p className="text-slate-400 mt-1 leading-snug">{p.description}</p>
-                      {p.dpsBonus > 0 && (
-                        <div className="text-emerald-400 font-medium mt-1">
-                          +{p.dpsBonus} Damage
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
-                      <span className="text-slate-400 tabular-nums">
-                        {p.costScrap > 0
-                          ? `${p.costScrap} Scrap · ${p.costParts} Parts`
-                          : 'Starter Tech'}
-                      </span>
-                      {isEquipped ? (
-                        <span className="text-emerald-400 font-medium flex items-center gap-1">
-                          <Check size={12} /> Equipped
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            soundEngine.playUIClick();
-                            onBuyAndEquipPart(p.id, 'cannon');
-                          }}
-                          disabled={!canBuy}
-                          className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                            canBuy
-                              ? 'bg-slate-800 hover:bg-slate-700 text-white'
-                              : 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
-                          }`}
-                        >
-                          Equip
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+          <div className="mt-3 overflow-y-auto">
+            <div className="flex items-center justify-between text-xs mb-3">
+              <span className="text-slate-300">Talent points available: <b className="text-orange-400">{C.talentPointsAvailable(ch)}</b> (from level 5, one per level)</span>
+              <button
+                onClick={() => run((c) => C.respecTalents(c))}
+                className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
+              >
+                Reset talents ({C.respecCost(ch).toLocaleString()} scrap)
+              </button>
             </div>
-
-            {/* Armors */}
-            <div className="flex flex-col gap-3">
-              <h4 className="text-xs font-semibold text-blue-400 tracking-wider">
-                ARMOR SKIRTS & PLATES
-              </h4>
-              {ARMORS.map((p) => {
-                const isEquipped = profile.equippedParts.armor === p.id;
-                const canBuy =
-                  profile.scrap >= p.costScrap &&
-                  profile.parts >= p.costParts &&
-                  profile.level >= p.minLevel;
-
-                return (
-                  <div
-                    key={p.id}
-                    className={`p-3.5 rounded-lg border text-xs flex flex-col justify-between gap-2 ${
-                      isEquipped
-                        ? 'border-blue-500/70 bg-blue-500/10'
-                        : 'border-slate-800 bg-slate-900/40'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-white">{p.name}</span>
-                        <span className="text-[10px] text-slate-400">T{p.tier}</span>
-                      </div>
-                      <p className="text-slate-400 mt-1 leading-snug">{p.description}</p>
-                      {(p.hullBonus > 0 || p.armorBonus > 0) && (
-                        <div className="text-blue-400 font-medium mt-1">
-                          +{p.hullBonus} Hull · +{p.armorBonus} Armor
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
-                      <span className="text-slate-400 tabular-nums">
-                        {p.costScrap > 0
-                          ? `${p.costScrap} Scrap · ${p.costParts} Parts`
-                          : 'Starter Tech'}
-                      </span>
-                      {isEquipped ? (
-                        <span className="text-blue-400 font-medium flex items-center gap-1">
-                          <Check size={12} /> Equipped
-                        </span>
-                      ) : (
+            {msg && <div className="text-xs text-orange-300 mb-2">{msg}</div>}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {(['offense', 'defense', 'logistics'] as const).map((branch) => (
+                <div key={branch} className="rounded-lg border border-slate-800 bg-slate-900/40 p-2.5">
+                  <div className="text-[11px] uppercase tracking-wide text-orange-400 mb-1.5">{branch}</div>
+                  <div className="space-y-1">
+                    {TALENTS_CATALOG.filter((t) => t.branch === branch).sort((x, y) => x.tier - y.tier).map((t) => {
+                      const rank = ch.talentRanks[t.id] ?? 0;
+                      return (
                         <button
-                          onClick={() => {
-                            soundEngine.playUIClick();
-                            onBuyAndEquipPart(p.id, 'armor');
-                          }}
-                          disabled={!canBuy}
-                          className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                            canBuy
-                              ? 'bg-slate-800 hover:bg-slate-700 text-white'
-                              : 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
-                          }`}
+                          key={t.id}
+                          onClick={() => run((c) => C.rankUpTalent(c, t.id))}
+                          className="w-full flex items-center justify-between p-1.5 rounded border border-slate-800 hover:border-slate-600 text-left text-xs"
                         >
-                          Equip
+                          <span className="text-slate-200">{talentLabel(t.id)} <span className="text-[10px] text-slate-500">{t.effectPerRank.isPercent ? `+${Math.round(t.effectPerRank.valuePerRank * 1000) / 10}%` : `+${t.effectPerRank.valuePerRank}`}/rank · Lv {t.minLevel}</span></span>
+                          <span className={`tabular-nums ${rank === t.maxRank ? 'text-emerald-400' : 'text-slate-400'}`}>{rank}/{t.maxRank}</span>
                         </button>
-                      )}
-                    </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-
-            {/* Engines */}
-            <div className="flex flex-col gap-3">
-              <h4 className="text-xs font-semibold text-emerald-400 tracking-wider">
-                ENGINES & TURBINES
-              </h4>
-              {ENGINES.map((p) => {
-                const isEquipped = profile.equippedParts.engine === p.id;
-                const canBuy =
-                  profile.scrap >= p.costScrap &&
-                  profile.parts >= p.costParts &&
-                  profile.level >= p.minLevel;
-
-                return (
-                  <div
-                    key={p.id}
-                    className={`p-3.5 rounded-lg border text-xs flex flex-col justify-between gap-2 ${
-                      isEquipped
-                        ? 'border-emerald-500/70 bg-emerald-500/10'
-                        : 'border-slate-800 bg-slate-900/40'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-white">{p.name}</span>
-                        <span className="text-[10px] text-slate-400">T{p.tier}</span>
-                      </div>
-                      <p className="text-slate-400 mt-1 leading-snug">{p.description}</p>
-                      {p.speedBonus > 0 && (
-                        <div className="text-emerald-400 font-medium mt-1">
-                          +{p.speedBonus} Top Speed
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
-                      <span className="text-slate-400 tabular-nums">
-                        {p.costScrap > 0
-                          ? `${p.costScrap} Scrap · ${p.costParts} Parts`
-                          : 'Starter Tech'}
-                      </span>
-                      {isEquipped ? (
-                        <span className="text-emerald-400 font-medium flex items-center gap-1">
-                          <Check size={12} /> Equipped
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            soundEngine.playUIClick();
-                            onBuyAndEquipPart(p.id, 'engine');
-                          }}
-                          disabled={!canBuy}
-                          className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                            canBuy
-                              ? 'bg-slate-800 hover:bg-slate-700 text-white'
-                              : 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
-                          }`}
-                        >
-                          Equip
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -569,7 +427,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto pt-4">
             {Object.values(AMMO_TYPES).map((ammo) => {
               const currentStock = profile.ammoInventory[AMMO_SIM_ID[ammo.id]] ?? 0;
-              const canAfford = profile.scrap >= ammo.costScrapPerPack;
+              const canAfford = ch.wallet.scrap >= ammo.costScrapPerPack;
 
               return (
                 <div
@@ -620,7 +478,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                     <button
                       onClick={() => {
                         soundEngine.playUIClick();
-                        onBuyAmmo(AMMO_SIM_ID[ammo.id], ammo.packSize, ammo.costScrapPerPack);
+                        buyAmmo(AMMO_SIM_ID[ammo.id], ammo.packSize, ammo.costScrapPerPack);
                       }}
                       disabled={!canAfford}
                       className={`w-full py-2 rounded-lg text-xs font-semibold transition-colors ${

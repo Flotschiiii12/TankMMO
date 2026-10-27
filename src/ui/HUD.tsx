@@ -51,7 +51,7 @@ export const HUD: React.FC<HUDProps> = ({
         <div className="flex flex-col gap-1 pointer-events-auto bg-slate-950/60 rounded-lg p-2 border border-slate-800/60 shadow-sm max-w-[280px]">
           {/* Header Row: Level + Map Name + Safe Zone Status */}
           <div className="flex items-center gap-2 text-xs text-slate-300">
-            <span className="font-semibold text-orange-400">Lv. {profile.level}</span>
+            <span className="font-semibold text-orange-400">Lv. {profile.character.level}</span>
             <span>·</span>
             <span className="font-medium text-slate-100 truncate">{mapName}</span>
             {isSafeZone && (
@@ -65,11 +65,11 @@ export const HUD: React.FC<HUDProps> = ({
           {/* Currencies: Scrap & Parts */}
           <div className="flex items-center gap-2.5 text-xs text-slate-400">
             <span className="tabular-nums">
-              Scrap: <span className="font-semibold text-slate-100">{profile.scrap.toLocaleString()}</span>
+              Scrap: <span className="font-semibold text-slate-100">{profile.character.wallet.scrap.toLocaleString()}</span>
             </span>
             <span>·</span>
             <span className="tabular-nums">
-              Parts: <span className="font-semibold text-slate-100">{profile.parts.toLocaleString()}</span>
+              Frag: <span className="font-semibold text-slate-100">{profile.character.wallet.fragments.toLocaleString()}</span>
             </span>
           </div>
 

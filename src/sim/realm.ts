@@ -1,5 +1,5 @@
 import { MAP_CATALOG } from '../data/maps.ts';
-import { getVehicleById } from '../data/vehicles.ts';
+import { CharacterState, computeLoadoutStats } from '../../shared/rules/character.ts';
 import { createWorld, stepWorld, World } from './world.ts';
 import { createWorld as createScratchWorld, spawnVehicle } from '../../shared/sim/world.ts';
 import { SimCommand, SimEntity, vec2 } from './types.ts';
@@ -62,30 +62,28 @@ export class Realm {
     return inst;
   }
 
-  createPlayerEntity(
-    id: number,
-    name: string,
-    vehicleTierId: string,
-    level: number,
-    equippedBonus: { dpsBonus: number; hullBonus: number; armorBonus: number; speedBonus: number }
-  ): SimEntity {
-    const stats = getVehicleById(vehicleTierId);
-    const levelMult = 1 + (level - 1) * 0.05;
+  /** Builds the player's vehicle from the character: vehicle + level + gear + talents + mastery. */
+  createPlayerEntity(id: number, name: string, ch: CharacterState): SimEntity {
+    const stats = computeLoadoutStats(ch)!;
     const scratch = createScratchWorld({ populate: false });
-    const ent = spawnVehicle(scratch, 'player', name, level, { x: 2000, y: 2000 }, {
+    const ent = spawnVehicle(scratch, 'player', name, ch.level, { x: 2000, y: 2000 }, {
       tier: stats.tier,
-      vehicleClass: stats.vehicleClass,
-      mainDamage: Math.round(stats.damage * (1 + equippedBonus.dpsBonus / 380)),
+      vehicleClass: stats.vehicleClass as any,
       clanTag: 'CMD',
-      maxHull: Math.round((stats.baseHull + equippedBonus.hullBonus) * levelMult),
-      maxArmor: Math.round((stats.baseArmor + equippedBonus.armorBonus) * levelMult),
-      maxSpeed: stats.maxSpeed + equippedBonus.speedBonus,
+      maxHull: stats.maxHull,
+      maxArmor: stats.maxArmor,
+      maxSpeed: stats.maxSpeed,
       turnRate: stats.turnRate,
       turretTurnRate: stats.turretTurnRate,
-      mainReloadTime: stats.reloadTime,
+      mainDamage: stats.mainDamage,
+      mainReloadTime: stats.mainReloadTime,
       radius: 26 + stats.tier * 2,
     });
-    ent.mainRange = stats.range;
+    ent.mainRange = stats.mainRange;
+    ent.mgDamage = stats.mgDamage;
+    ent.mgRange = stats.mgRange;
+    ent.critChance = stats.critChance;
+    ent.flatArmorReduction = stats.flatReduction;
     ent.id = id;
     ent.invulnerableTime = 5.0;
     return ent;

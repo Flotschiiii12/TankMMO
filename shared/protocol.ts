@@ -4,8 +4,12 @@
  */
 
 import { AbilityId, AmmoType, ChatMessage, SimCommand, SimEntity, SimEvent, Vec2 } from './types.ts';
+import type { EntityPatch } from './net/delta.ts';
+import type { CharacterState } from './rules/character.ts';
 
-export const PROTOCOL_VERSION = '1.0.0';
+/** Bump on breaking changes; the server rejects clients below MIN_PROTOCOL_VERSION with s_error 'update_required'. */
+export const PROTOCOL_VERSION = '1.1.0';
+export const MIN_PROTOCOL_VERSION = '1.1.0';
 
 // ==========================================
 // Client -> Server Messages
@@ -38,7 +42,33 @@ export interface ClientPingPacket {
   timestamp: number;
 }
 
+/** Workshop, garage, talents, quests... all validated and executed server-side with the shared rules. */
+export interface ClientActionPacket {
+  type: 'c_action';
+  id: number; // echoed in the result
+  action:
+    | { kind: 'equip'; vehicleId: string; slot: string; uid: string }
+    | { kind: 'unequip'; vehicleId: string; slot: string }
+    | { kind: 'upgrade'; uid: string; safe?: boolean }
+    | { kind: 'dismantle'; uid: string }
+    | { kind: 'craft'; recipeId: string }
+    | { kind: 'reroll'; uid: string; index: number }
+    | { kind: 'fuse'; uids: string[] }
+    | { kind: 'expand_inventory' }
+    | { kind: 'buy_vehicle'; vehicleId: string }
+    | { kind: 'set_vehicle'; vehicleId: string }
+    | { kind: 'rank_talent'; talentId: string }
+    | { kind: 'respec' }
+    | { kind: 'accept_quest'; questId: string }
+    | { kind: 'claim_quest'; questId: string }
+    | { kind: 'abandon_quest'; questId: string }
+    | { kind: 'claim_season_tier'; tier: number }
+    | { kind: 'buy_ammo'; ammo: AmmoType; packs: number }
+    | { kind: 'tutorial'; step: string };
+}
+
 export type ClientMessage =
+  | ClientActionPacket
   | ClientInputPacket
   | ClientChatPacket
   | ClientJoinPacket
@@ -113,7 +143,42 @@ export interface ServerPongPacket {
   serverTimestamp: number;
 }
 
+/** Authoritative state for one client: entity patches (delta-encoded), removed ids and sim events. */
+export interface ServerStatePacket {
+  type: 's_state';
+  tick: number;
+  lastProcessedSeq: number;
+  serverTime: number;
+  patches: EntityPatch[];
+  removed: number[];
+  events: SimEvent[];
+}
+
+export interface ServerCharacterPacket {
+  type: 's_character';
+  character: CharacterState;
+  ammo: Record<AmmoType, number>;
+}
+
+export interface ServerActionResultPacket {
+  type: 's_action_result';
+  id: number;
+  ok: boolean;
+  error?: string;
+}
+
+export interface ServerMapPacket {
+  type: 's_map';
+  mapId: number;
+  instanceId: string;
+  assignedEntityId: number;
+}
+
 export type ServerMessage =
+  | ServerStatePacket
+  | ServerCharacterPacket
+  | ServerActionResultPacket
+  | ServerMapPacket
   | ServerSnapshotPacket
   | ServerDeltaPacket
   | ServerWelcomePacket

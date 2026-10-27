@@ -1,0 +1,148 @@
+/**
+ * Persistence behind interfaces (design doc section 0). SQLite via node:sqlite today; the SQL is plain so a
+ * PostgreSQL implementation of the same interfaces can replace it later.
+ */
+import { DatabaseSync } from 'node:sqlite';
+import type { CharacterState } from '../shared/rules/character.ts';
+
+export interface AccountRow {
+  id: string;
+  name: string;
+  secretHash: string;
+  recoveryHash: string | null;
+  createdAt: number;
+  bannedUntil: number;
+  mutedUntil: number;
+  ageConfirmed: boolean;
+  lastSeen: number;
+}
+
+export interface ProfileRow {
+  accountId: string;
+  character: CharacterState;
+  ammo: Record<string, number>;
+  mapId: number;
+  updatedAt: number;
+}
+
+export interface AccountRepo {
+  create(a: Pick<AccountRow, 'id' | 'name' | 'secretHash' | 'createdAt'>): void;
+  get(id: string): AccountRow | undefined;
+  getByRecoveryHash(hash: string): AccountRow | undefined;
+  getByName(name: string): AccountRow | undefined;
+  setSecretHash(id: string, hash: string): void;
+  setRecoveryHash(id: string, hash: string): void;
+  setName(id: string, name: string): void;
+  setBan(id: string, until: number): void;
+  setMute(id: string, until: number): void;
+  touch(id: string, now: number): void;
+  delete(id: string): void;
+  count(): number;
+}
+
+export interface ProfileRepo {
+  get(accountId: string): ProfileRow | undefined;
+  save(row: ProfileRow): void;
+  topByLevel(limit: number): Array<{ accountId: string; name: string; level: number }>;
+}
+
+export interface ChatRepo {
+  add(channel: string, sender: string, text: string, ts: number): void;
+  recent(channel: string, limit: number): Array<{ sender: string; text: string; ts: number }>;
+}
+
+export const SCHEMA = `
+CREATE TABLE IF NOT EXISTS accounts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  secret_hash TEXT NOT NULL,
+  recovery_hash TEXT,
+  created_at INTEGER NOT NULL,
+  banned_until INTEGER NOT NULL DEFAULT 0,
+  muted_until INTEGER NOT NULL DEFAULT 0,
+  age_confirmed INTEGER NOT NULL DEFAULT 0,
+  last_seen INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_accounts_recovery ON accounts(recovery_hash);
+CREATE TABLE IF NOT EXISTS profiles (
+  account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  character_json TEXT NOT NULL,
+  ammo_json TEXT NOT NULL,
+  map_id INTEGER NOT NULL,
+  level INTEGER NOT NULL DEFAULT 1,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_profiles_level ON profiles(level DESC);
+CREATE TABLE IF NOT EXISTS chat (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  text TEXT NOT NULL,
+  ts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_channel ON chat(channel, id DESC);
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts INTEGER NOT NULL,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  detail TEXT NOT NULL
+);
+`;
+
+export function openDatabase(path = ':memory:'): DatabaseSync {
+  const db = new DatabaseSync(path);
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  db.exec(SCHEMA);
+  return db;
+}
+
+const toAccount = (r: any): AccountRow => ({
+  id: r.id, name: r.name, secretHash: r.secret_hash, recoveryHash: r.recovery_hash, createdAt: r.created_at,
+  bannedUntil: r.banned_until, mutedUntil: r.muted_until, ageConfirmed: !!r.age_confirmed, lastSeen: r.last_seen,
+});
+
+export class SqliteAccountRepo implements AccountRepo {
+  constructor(private db: DatabaseSync) {}
+  create(a: Pick<AccountRow, 'id' | 'name' | 'secretHash' | 'createdAt'>): void {
+    this.db.prepare('INSERT INTO accounts (id, name, secret_hash, created_at) VALUES (?, ?, ?, ?)').run(a.id, a.name, a.secretHash, a.createdAt);
+  }
+  get(id: string) { const r = this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id); return r ? toAccount(r) : undefined; }
+  getByRecoveryHash(h: string) { const r = this.db.prepare('SELECT * FROM accounts WHERE recovery_hash = ?').get(h); return r ? toAccount(r) : undefined; }
+  getByName(n: string) { const r = this.db.prepare('SELECT * FROM accounts WHERE name = ? COLLATE NOCASE').get(n); return r ? toAccount(r) : undefined; }
+  setSecretHash(id: string, h: string) { this.db.prepare('UPDATE accounts SET secret_hash = ? WHERE id = ?').run(h, id); }
+  setRecoveryHash(id: string, h: string) { this.db.prepare('UPDATE accounts SET recovery_hash = ? WHERE id = ?').run(h, id); }
+  setName(id: string, n: string) { this.db.prepare('UPDATE accounts SET name = ? WHERE id = ?').run(n, id); }
+  setBan(id: string, until: number) { this.db.prepare('UPDATE accounts SET banned_until = ? WHERE id = ?').run(until, id); }
+  setMute(id: string, until: number) { this.db.prepare('UPDATE accounts SET muted_until = ? WHERE id = ?').run(until, id); }
+  touch(id: string, now: number) { this.db.prepare('UPDATE accounts SET last_seen = ? WHERE id = ?').run(now, id); }
+  delete(id: string) { this.db.prepare('DELETE FROM accounts WHERE id = ?').run(id); }
+  count() { return (this.db.prepare('SELECT COUNT(*) AS n FROM accounts').get() as any).n as number; }
+}
+
+export class SqliteProfileRepo implements ProfileRepo {
+  constructor(private db: DatabaseSync) {}
+  get(accountId: string): ProfileRow | undefined {
+    const r: any = this.db.prepare('SELECT * FROM profiles WHERE account_id = ?').get(accountId);
+    return r ? { accountId, character: JSON.parse(r.character_json), ammo: JSON.parse(r.ammo_json), mapId: r.map_id, updatedAt: r.updated_at } : undefined;
+  }
+  save(row: ProfileRow): void {
+    this.db.prepare(
+      `INSERT INTO profiles (account_id, character_json, ammo_json, map_id, level, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(account_id) DO UPDATE SET character_json = excluded.character_json, ammo_json = excluded.ammo_json,
+       map_id = excluded.map_id, level = excluded.level, updated_at = excluded.updated_at`
+    ).run(row.accountId, JSON.stringify(row.character), JSON.stringify(row.ammo), row.mapId, row.character.level, row.updatedAt);
+  }
+  topByLevel(limit: number) {
+    return (this.db.prepare('SELECT a.id AS id, a.name AS name, p.level AS level FROM profiles p JOIN accounts a ON a.id = p.account_id ORDER BY p.level DESC, p.updated_at ASC LIMIT ?').all(limit) as any[])
+      .map((r) => ({ accountId: r.id, name: r.name, level: r.level }));
+  }
+}
+
+export class SqliteChatRepo implements ChatRepo {
+  constructor(private db: DatabaseSync) {}
+  add(channel: string, sender: string, text: string, ts: number) { this.db.prepare('INSERT INTO chat (channel, sender, text, ts) VALUES (?, ?, ?, ?)').run(channel, sender, text, ts); }
+  recent(channel: string, limit: number) {
+    return (this.db.prepare('SELECT sender, text, ts FROM chat WHERE channel = ? ORDER BY id DESC LIMIT ?').all(channel, limit) as any[]).reverse();
+  }
+}

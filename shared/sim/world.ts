@@ -6,6 +6,8 @@
  */
 
 import { SimRNG } from '../prng.ts';
+import { generateProceduralMap } from './mapGenerator.ts';
+import { createPveState, isInertKind, populateWorld, PveState, stepPve } from './pve.ts';
 import {
   AMMO_CONFIGS,
   consumeAmmo,
@@ -30,11 +32,13 @@ import {
   AbilityId,
   AmmoType,
   angleDiff,
+  ChatMessage,
   clamp,
   dist,
   distSq,
   EntityKind,
   lerp,
+  MapDef,
   MapObstacle,
   SafeZone,
   SIM_TIMESTEP,
@@ -59,6 +63,10 @@ export interface World {
   height: number;
   safeZones: SafeZone[];
   obstacles: MapObstacle[];
+  map?: MapDef;
+  slowZones: NonNullable<MapDef['slowZones']>;
+  chat: ChatMessage[];
+  pve: PveState;
 }
 
 export interface WorldInitOptions {
@@ -68,25 +76,30 @@ export interface WorldInitOptions {
   height?: number;
   safeZones?: SafeZone[];
   obstacles?: MapObstacle[];
+  /** Full map definition: enables portals, resource nodes, enemy spawns and the boss. */
+  map?: MapDef;
+  /** Spawn enemies/boss/nodes/portals from `map` (default true when a map is given). */
+  populate?: boolean;
 }
 
 export function createWorld(options: WorldInitOptions = {}): World {
-  const mapId = options.mapId || 'green_valley';
+  const map = options.map;
+  const mapId = options.mapId || (map ? String(map.id) : 'green_valley');
   const seed = options.seed ?? 1337;
   const rng = new SimRNG(seed);
 
-  const width = options.width ?? 4000;
-  const height = options.height ?? 4000;
-  const safeZones = options.safeZones ?? [
+  const width = options.width ?? map?.width ?? 4000;
+  const height = options.height ?? map?.height ?? 4000;
+  const safeZones = options.safeZones ?? map?.safeZones ?? [
     { x: width / 2, y: height / 2, radius: 450, name: 'Safe Camp' },
   ];
-  const obstacles = options.obstacles ?? [
+  const obstacles = options.obstacles ?? (map ? generateProceduralMap(map).obstacles : [
     { x: width / 2 + 300, y: height / 2 + 200, radius: 40, type: 'rock' },
     { x: width / 2 - 350, y: height / 2 - 250, radius: 55, type: 'tree' },
     { x: width / 2 + 500, y: height / 2 - 400, radius: 80, type: 'building' },
-  ];
+  ]);
 
-  return {
+  const world: World = {
     id: `world_${mapId}`,
     mapId,
     tick: 0,
@@ -99,7 +112,16 @@ export function createWorld(options: WorldInitOptions = {}): World {
     height,
     safeZones,
     obstacles,
+    map,
+    slowZones: map?.slowZones ?? [],
+    chat: map
+      ? [{ id: 'msg_welcome', sender: 'HQ Commander', clanTag: 'CMD', channel: 'S', text: `Welcome to ${map.name}. Secure resources, watch your flanks, and upgrade in the safe zone.`, timestamp: 0 }]
+      : [],
+    pve: createPveState(),
   };
+
+  if (map && options.populate !== false) populateWorld(world, map);
+  return world;
 }
 
 export function getNextEntityId(world: World): number {
@@ -238,9 +260,13 @@ export function stepWorld(
 
   // 4. Update Combat & Projectiles
   updateCombat(world, dt);
+  updateSecondaryWeapons(world);
 
   // 5. Update Status Effects, Abilities, & Regen
   updateStatusAndRegen(world, dt);
+
+  // 6. PvE layer: deaths/wrecks, enemy AI, telegraphs, loot, portals, mining, respawns
+  stepPve(world, dt);
 }
 
 function applyCommand(world: World, ent: SimEntity, cmd: SimCommand): void {
@@ -399,7 +425,7 @@ function updatePhysicsAndCollisions(world: World, dt: number): void {
   const entities = Array.from(world.entities.values());
 
   for (const ent of entities) {
-    if (ent.kind === 'projectile' || ent.kind === 'gate' || ent.hull <= 0) continue;
+    if (isInertKind(ent.kind) || ent.hull <= 0) continue;
 
     // Check status effects that affect mobility
     const isStunned = ent.statusEffects.some(s => s.type === 'stunned');
@@ -416,6 +442,9 @@ function updatePhysicsAndCollisions(world: World, dt: number): void {
 
     // Calculate effective speed
     let speedMod = 1.0;
+    for (const z of world.slowZones) {
+      if (distSq(ent.pos, { x: z.x, y: z.y }) < z.radius * z.radius) speedMod = Math.min(speedMod, z.speedFactor);
+    }
     for (const st of ent.statusEffects) {
       if (st.type === 'slowed') speedMod = Math.min(speedMod, st.value ?? 0.6);
       if (st.type === 'boosted') speedMod *= 1.30;
@@ -444,11 +473,11 @@ function updatePhysicsAndCollisions(world: World, dt: number): void {
   // Vehicle-vs-vehicle soft push
   for (let i = 0; i < entities.length; i++) {
     const a = entities[i];
-    if (a.kind === 'projectile' || a.kind === 'gate' || a.hull <= 0) continue;
+    if (isInertKind(a.kind) || a.hull <= 0) continue;
 
     for (let j = i + 1; j < entities.length; j++) {
       const b = entities[j];
-      if (b.kind === 'projectile' || b.kind === 'gate' || b.hull <= 0) continue;
+      if (isInertKind(b.kind) || b.hull <= 0) continue;
 
       const push = resolveVehicleSoftPush(a.pos, a.radius, b.pos, b.radius, 0.4);
       if (push.overlapping) {
@@ -553,7 +582,7 @@ function updateCombat(world: World, dt: number): void {
   for (const ent of world.entities.values()) {
     if (ent.kind === 'projectile') {
       projectiles.push(ent);
-    } else if (ent.hull > 0 && ent.kind !== 'gate') {
+    } else if (ent.hull > 0 && !isInertKind(ent.kind)) {
       targets.push(ent);
     }
   }
@@ -581,6 +610,53 @@ function updateCombat(world: World, dt: number): void {
         world.entities.delete(proj.id);
         break;
       }
+    }
+  }
+}
+
+/** Secondary machine gun: unlimited ammo, auto-fires at the nearest enemy within mgRange (hitscan). */
+function updateSecondaryWeapons(world: World): void {
+  for (const ent of world.entities.values()) {
+    if (ent.hull <= 0 || ent.mgReloadRemaining > 0 || ent.mgDamage <= 0) continue;
+    if (!(ent.kind === 'player' || ent.kind === 'npc_driver' || ent.kind === 'boss')) continue;
+    if (isPosInSafeZone(world, ent.pos) || ent.statusEffects.some((s) => s.type === 'stunned')) continue;
+    let target: SimEntity | undefined;
+    let best = ent.mgRange;
+    for (const o of world.entities.values()) {
+      if (o.id === ent.id || o.hull <= 0 || o.isHostile === ent.isHostile || isInertKind(o.kind)) continue;
+      const d = dist(ent.pos, o.pos);
+      if (d < best) { best = d; target = o; }
+    }
+    if (!target || isPosInSafeZone(world, target.pos) || target.invulnerableTime > 0) continue;
+    ent.mgReloadRemaining = ent.mgReloadTime;
+    const res = resolveDamage({
+      rawDamage: ent.mgDamage,
+      attackerPos: ent.pos,
+      targetPos: target.pos,
+      targetChassisAngle: target.chassisAngle,
+      targetArmor: target.armor,
+      targetMaxArmor: target.maxArmor,
+      targetFlatReduction: target.flatArmorReduction,
+      isCrit: false,
+      isMarked: target.statusEffects.some((s) => s.type === 'marked'),
+      isInvulnerable: false,
+    });
+    target.armor = res.newArmor;
+    target.hull = Math.max(0, target.hull - res.hullDamage);
+    target.armorRegenTimer = 0;
+    target.lastDamagedTick = world.tick;
+    target.hitFlashTimer = 0.12;
+    world.events.push({
+      type: 'projectile_fired', shooterId: ent.id, pos: { ...ent.pos },
+      angle: Math.atan2(target.pos.y - ent.pos.y, target.pos.x - ent.pos.x), speed: 900, range: ent.mgRange, ammoType: 'STANDARD', isSecondary: true,
+    });
+    world.events.push({
+      type: 'damage_dealt', attackerId: ent.id, targetId: target.id, rawDamage: res.rawDamage, finalDamage: res.totalDamageDealt,
+      armorDamage: res.armorDamage, hullDamage: res.hullDamage, isCrit: res.isCrit, isRearHit: res.isRearHit, isFrontHit: res.isFrontHit,
+      ammoType: 'STANDARD', pos: { ...target.pos },
+    });
+    if (target.hull <= 0) {
+      world.events.push({ type: 'entity_killed', victimId: target.id, killerId: ent.id, pos: { ...target.pos }, level: target.level, scrapReward: 25 * target.level, xpReward: 80 * target.level });
     }
   }
 }
@@ -631,6 +707,8 @@ function applyHit(world: World, proj: SimEntity, primaryTarget: SimEntity, splas
     victim.armor = result.newArmor;
     victim.hull = Math.max(0, victim.hull - result.hullDamage);
     victim.armorRegenTimer = 0; // Reset out of combat regen timer
+    victim.lastDamagedTick = world.tick;
+    victim.hitFlashTimer = 0.12;
 
     // Interrupt repair kit if hit
     victim.statusEffects = victim.statusEffects.filter(s => s.type !== 'repairing');

@@ -214,6 +214,23 @@ export interface SimEntity {
   telegraphDuration?: number;
   telegraphMaxDuration?: number;
   telegraphDamage?: number;
+
+  // PvE layer (see shared/sim/pve.ts)
+  archetypeId?: string;
+  isWreck?: boolean;
+  hitFlashTimer?: number;
+  distanceDriven?: number;
+  lastDamagedTick?: number;
+  gateHoldTimer?: number;
+  miningTimer?: number;
+  bossPhase?: number;
+  bossSkillCooldown?: number;
+  sourceEntityId?: number;
+  lootScrap?: number;
+  lootParts?: number;
+  lootOre?: number;
+  lootAmmo?: { type: AmmoType; count: number };
+  lootKind?: 'scrap' | 'ore' | 'ammo' | 'repair';
 }
 
 // ==========================================
@@ -302,6 +319,7 @@ export type SimEvent =
   | ProjectileFiredEvent
   | { type: 'gate_used'; entityId: number; gateId: string; targetMapId: string }
   | { type: 'status_applied'; entityId: number; status: StatusEffectType; duration: number }
+  | { type: 'player_died'; entityId: number }
   | { type: 'level_up'; entityId: number; newLevel: number };
 
 // ==========================================

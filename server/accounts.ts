@@ -24,14 +24,14 @@ export interface Credential { accountId: string; secret: string; credential: str
 export class AccountService {
   constructor(private accounts: AccountRepo, private now: () => number = () => Date.now()) {}
 
-  createGuest(ageConfirmed: boolean): { ok: true; cred: Credential } | { ok: false; error: string } {
+  createGuest(ageConfirmed: boolean, startFaction = 'coastal'): { ok: true; cred: Credential } | { ok: false; error: string } {
     if (!ageConfirmed) return { ok: false, error: 'age_gate' };
     for (let attempt = 0; attempt < 20; attempt++) {
       const id = randomBytes(9).toString('hex');
       const name = `Driver-${String(this.accounts.count() + 1 + attempt).padStart(7, '0')}`;
       const secret = randomBytes(24).toString('hex');
       try {
-        this.accounts.create({ id, name, secretHash: sha256(secret), createdAt: this.now() });
+        this.accounts.create({ id, name, secretHash: sha256(secret), createdAt: this.now(), startFaction });
         return { ok: true, cred: { accountId: id, secret, credential: `${id}.${secret}`, name } };
       } catch { /* name collision: retry */ }
     }

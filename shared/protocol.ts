@@ -75,7 +75,11 @@ export type SocialOp =
   | { op: 'clan_donate'; amount: number }
   | { op: 'clan_research'; id: string }
   | { op: 'profile'; name: string }
-  | { op: 'ranking'; kind: 'level' | 'clans' };
+  | { op: 'ranking'; kind: 'level' | 'clans' | 'arena_1v1' | 'arena_3v3' | 'arena_5v5' | 'honor' }
+  | { op: 'arena_queue'; mode: '1v1' | '3v3' | '5v5' }
+  | { op: 'arena_leave' }
+  | { op: 'arena_status' }
+  | { op: 'war_status' };
 
 export interface ClientSocialPacket {
   type: 'c_social';
@@ -93,7 +97,7 @@ export interface ServerSocialResultPacket {
 
 export interface ServerSocialEventPacket {
   type: 's_social_event';
-  kind: 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement';
+  kind: 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_result' | 'war_result';
   data: any;
 }
 

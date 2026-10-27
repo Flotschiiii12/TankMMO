@@ -19,6 +19,7 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
   const [phase, setPhase] = useState<Phase>('probing');
   const [msg, setMsg] = useState('');
   const [age, setAge] = useState(false);
+  const [faction, setFaction] = useState('coastal');
   const [code, setCode] = useState('');
   const [client, setClient] = useState<OnlineGameClient | null>(null);
   const [lost, setLost] = useState('');
@@ -93,13 +94,19 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
     <div className={box}><div className={card}>
       <h1 className="text-xl font-bold text-white tracking-tight">Treadfront</h1>
       <p className="text-sm text-slate-400">An online tank MMO. Your progress lives on the server.</p>
+      <div className="text-xs text-slate-400">Choose your faction (your start region):</div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {[['coastal', 'Coastal Union'], ['highland', 'Highland Union'], ['steppe', 'Steppe Caravan']].map(([k, n]) => (
+          <button key={k} onClick={() => setFaction(k)} className={`py-2 rounded-lg text-[11px] border ${faction === k ? 'border-orange-500 text-orange-300' : 'border-slate-800 text-slate-400'}`}>{n}</button>
+        ))}
+      </div>
       <label className="flex items-start gap-2 text-xs text-slate-300">
         <input type="checkbox" checked={age} onChange={(e) => setAge(e.target.checked)} className="mt-0.5" />
         I am at least 13 years old.
       </label>
       {msg && <p className="text-xs text-orange-300">{msg}</p>}
       <button className={btn} disabled={!age} onClick={async () => {
-        const r = await createGuest();
+        const r = await createGuest(faction);
         if (r.ok) { setCredential(r.credential); void connect(r.credential); } else setMsg(r.error === 'network' ? 'Could not reach the server.' : 'Could not create the account.');
       }}>Play</button>
       <button className="w-full text-xs text-slate-500 underline" onClick={() => { setMsg(''); setPhase('recover'); }}>I already have an account</button>

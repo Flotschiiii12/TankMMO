@@ -15,6 +15,8 @@ import { describeItem } from '../game/actions.ts';
 import { applyQuestEvent, rotateQuests, questName } from '../game/questBridge.ts';
 import type { QuestEvent } from '../../shared/rules/quests.ts';
 import { QuestModal } from './QuestModal.tsx';
+import { SocialModal } from './SocialModal.tsx';
+import { ChatInput } from './ChatInput.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts';
 import { HUD } from './HUD.tsx';
@@ -45,6 +47,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [gameState, setGameState] = useState<'TITLE' | 'PLAYING'>('TITLE');
   const [garageOpen, setGarageOpen] = useState(false);
   const [questOpen, setQuestOpen] = useState(false);
+  const [socialOpen, setSocialOpen] = useState(false);
+  const [notices, setNotices] = useState<string[]>([]);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [worldMapOpen, setWorldMapOpen] = useState(false);
@@ -84,6 +88,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         setProfile((prev) => ({ ...prev, playerName: ch.name, character: ch, ammoInventory: { ...prev.ammoInventory, ...(ammo as any) } }));
       if (online.character) adopt(online.character, online.ammo);
       online.onCharacter(adopt);
+      online.onSocialEvent((kind, d) => {
+        const text = kind === 'friend_request' ? `${d.from} sent you a friend request` : kind === 'friend_accepted' ? `${d.from} is now your friend` : kind === 'party_invite' ? `${d.from} invited you to a party` : kind === 'clan_invite' ? `${d.from} invited you to ${d.clan}` : kind === 'announcement' ? `Announcement: ${d.text}` : '';
+        if (text) setNotices((n) => [...n.slice(-4), text]);
+      });
     }
     rendererRef.current = new WorldRenderer(cameraRef.current, particlesRef.current);
 
@@ -736,6 +744,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             }}
             onOpenGarage={() => { setGarageOpen(true); questEvent({ type: 'tutorial', step: 'garage' }); }}
             onOpenQuests={() => setQuestOpen(true)}
+            onOpenSocial={online ? () => setSocialOpen(true) : undefined}
             onOpenInventory={() => setInventoryOpen(true)}
             onOpenWorldMap={() => setWorldMapOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
@@ -779,6 +788,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         onClose={() => setGarageOpen(false)}
         onAction={performAction}
       />
+
+      {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} />}
+      {online && gameState === 'PLAYING' && <ChatInput client={online} />}
 
       <QuestModal
         profile={profile}

@@ -232,6 +232,10 @@ export interface SimEntity {
   lootAmmo?: { type: AmmoType; count: number };
   lootKind?: 'scrap' | 'ore' | 'ammo' | 'repair';
   isElite?: boolean;
+  /** PvP: faction of a player vehicle; arena team (0/1) while in a match; projectiles remember who fired them */
+  faction?: string;
+  team?: number;
+  fromPlayer?: boolean;
   /** Summoned/event spawn: never respawns. */
   temporary?: boolean;
   isWorldBoss?: boolean;

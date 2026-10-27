@@ -20,6 +20,12 @@ import type { QuestLog, SeasonState } from './quests.ts';
 import { createQuestLog, createSeasonState } from './quests.ts';
 import { getEarnedTalentPoints, getGarageCapacity, getXPForLevel, MAX_PLAYER_LEVEL } from './progression.ts';
 
+export type PlayerFaction = 'coastal' | 'highland' | 'steppe';
+export const FACTIONS: PlayerFaction[] = ['coastal', 'highland', 'steppe'];
+export const HOME_MAP_BY_FACTION: Record<PlayerFaction, number> = { coastal: 1, highland: 5, steppe: 9 };
+export const FACTION_CHANGE_COOLDOWN_SECONDS = 7 * 86400;
+export const FACTION_CHANGE_COST = 20_000;
+
 export type OreType = 'iron' | 'copper' | 'titanium' | 'crystal';
 export const RARITIES: ItemRarity[] = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
 
@@ -77,6 +83,9 @@ export interface CharacterState {
   season: SeasonState;
   /** faction/general reputation points by faction key */
   reputation: Record<string, number>;
+  faction: PlayerFaction;
+  /** server seconds of the last change (0 = never changed after the free first choice) */
+  factionChangedAt: number;
 }
 
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -99,6 +108,8 @@ export function createCharacter(name: string): CharacterState {
     quests: createQuestLog(),
     season: createSeasonState(),
     reputation: {},
+    faction: 'coastal',
+    factionChangedAt: 0,
   };
 }
 
@@ -510,4 +521,18 @@ export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVeh
     flatReduction,
     dps: Math.round(mainDamage / reload),
   };
+}
+
+/** First choice is free (right after creating the character); later changes cost scrap and have a 7-day cooldown. */
+export function changeFaction(ch: CharacterState, faction: PlayerFaction, nowSeconds: number, firstChoice = false): Result {
+  if (!FACTIONS.includes(faction)) return fail('unknown_faction');
+  if (faction === ch.faction) return fail('same_faction');
+  if (!firstChoice) {
+    if (ch.factionChangedAt > 0 && nowSeconds - ch.factionChangedAt < FACTION_CHANGE_COOLDOWN_SECONDS) return fail('faction_cooldown');
+    if (ch.wallet.scrap < FACTION_CHANGE_COST) return fail('not_enough_scrap');
+    ch.wallet.scrap -= FACTION_CHANGE_COST;
+  }
+  ch.faction = faction;
+  ch.factionChangedAt = nowSeconds;
+  return { ok: true };
 }

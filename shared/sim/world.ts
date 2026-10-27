@@ -8,6 +8,8 @@
 import { SimRNG } from '../prng.ts';
 import { generateProceduralMap } from './mapGenerator.ts';
 import type { DungeonState } from './dungeon.ts';
+import { createWarPoints, stepWar, WarPoint } from './war.ts';
+import { canEngage, isPvpMap, PvpContext } from './pvp.ts';
 import { createPveState, isInertKind, populateWorld, PveState, stepPve } from './pve.ts';
 import {
   AMMO_CONFIGS,
@@ -69,6 +71,12 @@ export interface World {
   chat: ChatMessage[];
   pve: PveState;
   dungeon?: DungeonState;
+  pvp?: PvpContext;
+  /** kill cap bookkeeping: 'killerEntity>victimEntity' -> kill times / immunity-until (world seconds) */
+  pvpKills: Map<string, number[]>;
+  pvpImmunity: Map<string, number>;
+  war?: WarPoint[];
+  warScore: Record<string, number>;
   /** Server clock (epoch seconds) at world time 0: drives the event/world-boss schedule. */
   clockOffset: number;
 }
@@ -85,6 +93,7 @@ export interface WorldInitOptions {
   /** Spawn enemies/boss/nodes/portals from `map` (default true when a map is given). */
   populate?: boolean;
   clockOffset?: number;
+  pvp?: PvpContext;
 }
 
 export function createWorld(options: WorldInitOptions = {}): World {
@@ -124,6 +133,11 @@ export function createWorld(options: WorldInitOptions = {}): World {
       : [],
     pve: createPveState(),
     clockOffset: options.clockOffset ?? 0,
+    pvp: options.pvp ?? (map && isPvpMap(Number(map.numericId ?? map.id)) ? { pvpEnabled: true, arena: false } : undefined),
+    pvpKills: new Map(),
+    pvpImmunity: new Map(),
+    war: map && options.populate !== false ? (createWarPoints(Number(map.numericId ?? map.id), width, height) || undefined) : undefined,
+    warScore: {},
   };
 
   if (map && options.populate !== false) populateWorld(world, map);
@@ -273,6 +287,7 @@ export function stepWorld(
 
   // 6. PvE layer: deaths/wrecks, enemy AI, telegraphs, loot, portals, mining, respawns
   stepPve(world, dt);
+  stepWar(world, dt);
 }
 
 function applyCommand(world: World, ent: SimEntity, cmd: SimCommand): void {
@@ -293,7 +308,7 @@ function applyCommand(world: World, ent: SimEntity, cmd: SimCommand): void {
         ent.targetId = undefined;
       } else {
         const target = world.entities.get(cmd.targetId);
-        if (target && target.hull > 0 && target.isHostile !== ent.isHostile) {
+        if (target && target.hull > 0 && canEngage(world, ent, target)) {
           ent.targetId = cmd.targetId;
         }
       }
@@ -561,6 +576,9 @@ export function fireMainCannon(world: World, ent: SimEntity): boolean {
 
   // Attach projectile custom metadata (distance traveled, source)
   (proj as any).sourceEntityId = ent.id;
+  proj.fromPlayer = ent.kind === 'player';
+  proj.faction = ent.faction;
+  proj.team = ent.team;
   (proj as any).distanceTraveled = 0;
   (proj as any).maxDistance = ent.mainRange * ammoConfig.rangeMultiplier;
   (proj as any).splashRadius = ammoConfig.splashRadius;
@@ -608,7 +626,7 @@ function updateCombat(world: World, dt: number): void {
 
     let hit = false;
     for (const target of targets) {
-      if (target.id === sourceId || target.isHostile === proj.isHostile) continue;
+      if (target.id === sourceId || !canEngage(world, proj, target)) continue;
 
       if (distSq(proj.pos, target.pos) <= (target.radius + 6) * (target.radius + 6)) {
         hit = true;
@@ -629,7 +647,7 @@ function updateSecondaryWeapons(world: World): void {
     let target: SimEntity | undefined;
     let best = ent.mgRange;
     for (const o of world.entities.values()) {
-      if (o.id === ent.id || o.hull <= 0 || o.isHostile === ent.isHostile || isInertKind(o.kind)) continue;
+      if (o.id === ent.id || o.hull <= 0 || !canEngage(world, ent, o) || isInertKind(o.kind)) continue;
       const d = dist(ent.pos, o.pos);
       if (d < best) { best = d; target = o; }
     }
@@ -680,7 +698,7 @@ function applyHit(world: World, proj: SimEntity, primaryTarget: SimEntity, splas
     ? Array.from(world.entities.values()).filter(e =>
         e.hull > 0 &&
         e.id !== sourceId &&
-        e.isHostile !== proj.isHostile &&
+        canEngage(world, proj, e) &&
         dist(proj.pos, e.pos) <= splashRadius
       )
     : [primaryTarget];

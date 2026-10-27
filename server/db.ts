@@ -15,6 +15,7 @@ export interface AccountRow {
   mutedUntil: number;
   ageConfirmed: boolean;
   lastSeen: number;
+  startFaction: string;
 }
 
 export interface ProfileRow {
@@ -26,7 +27,7 @@ export interface ProfileRow {
 }
 
 export interface AccountRepo {
-  create(a: Pick<AccountRow, 'id' | 'name' | 'secretHash' | 'createdAt'>): void;
+  create(a: Pick<AccountRow, 'id' | 'name' | 'secretHash' | 'createdAt'> & { startFaction?: string }): void;
   get(id: string): AccountRow | undefined;
   getByRecoveryHash(hash: string): AccountRow | undefined;
   getByName(name: string): AccountRow | undefined;
@@ -61,7 +62,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   banned_until INTEGER NOT NULL DEFAULT 0,
   muted_until INTEGER NOT NULL DEFAULT 0,
   age_confirmed INTEGER NOT NULL DEFAULT 0,
-  last_seen INTEGER NOT NULL DEFAULT 0
+  last_seen INTEGER NOT NULL DEFAULT 0,
+  start_faction TEXT NOT NULL DEFAULT 'coastal'
 );
 CREATE INDEX IF NOT EXISTS idx_accounts_recovery ON accounts(recovery_hash);
 CREATE TABLE IF NOT EXISTS profiles (
@@ -135,6 +137,21 @@ CREATE TABLE IF NOT EXISTS announcements (
   ts INTEGER NOT NULL,
   text TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS arena_ratings (
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  mode TEXT NOT NULL,
+  season INTEGER NOT NULL DEFAULT 1,
+  rating INTEGER NOT NULL,
+  wins INTEGER NOT NULL DEFAULT 0,
+  losses INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, mode, season)
+);
+CREATE TABLE IF NOT EXISTS war_scores (
+  week TEXT NOT NULL,
+  faction TEXT NOT NULL,
+  score INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (week, faction)
+);
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ts INTEGER NOT NULL,
@@ -153,13 +170,13 @@ export function openDatabase(path = ':memory:'): DatabaseSync {
 
 const toAccount = (r: any): AccountRow => ({
   id: r.id, name: r.name, secretHash: r.secret_hash, recoveryHash: r.recovery_hash, createdAt: r.created_at,
-  bannedUntil: r.banned_until, mutedUntil: r.muted_until, ageConfirmed: !!r.age_confirmed, lastSeen: r.last_seen,
+  bannedUntil: r.banned_until, mutedUntil: r.muted_until, ageConfirmed: !!r.age_confirmed, lastSeen: r.last_seen, startFaction: r.start_faction,
 });
 
 export class SqliteAccountRepo implements AccountRepo {
   constructor(private db: DatabaseSync) {}
-  create(a: Pick<AccountRow, 'id' | 'name' | 'secretHash' | 'createdAt'>): void {
-    this.db.prepare('INSERT INTO accounts (id, name, secret_hash, created_at) VALUES (?, ?, ?, ?)').run(a.id, a.name, a.secretHash, a.createdAt);
+  create(a: Pick<AccountRow, 'id' | 'name' | 'secretHash' | 'createdAt'> & { startFaction?: string }): void {
+    this.db.prepare('INSERT INTO accounts (id, name, secret_hash, created_at, start_faction) VALUES (?, ?, ?, ?, ?)').run(a.id, a.name, a.secretHash, a.createdAt, a.startFaction ?? 'coastal');
   }
   get(id: string) { const r = this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id); return r ? toAccount(r) : undefined; }
   getByRecoveryHash(h: string) { const r = this.db.prepare('SELECT * FROM accounts WHERE recovery_hash = ?').get(h); return r ? toAccount(r) : undefined; }
@@ -198,5 +215,39 @@ export class SqliteChatRepo implements ChatRepo {
   add(channel: string, sender: string, text: string, ts: number) { this.db.prepare('INSERT INTO chat (channel, sender, text, ts) VALUES (?, ?, ?, ?)').run(channel, sender, text, ts); }
   recent(channel: string, limit: number) {
     return (this.db.prepare('SELECT sender, text, ts FROM chat WHERE channel = ? ORDER BY id DESC LIMIT ?').all(channel, limit) as any[]).reverse();
+  }
+}
+
+export class SqliteArenaRepo {
+  constructor(private db: DatabaseSync) {}
+  get(accountId: string, mode: string, season = 1): { rating: number; wins: number; losses: number } {
+    const r: any = this.db.prepare('SELECT rating, wins, losses FROM arena_ratings WHERE account_id = ? AND mode = ? AND season = ?').get(accountId, mode, season);
+    return r ? { rating: r.rating, wins: r.wins, losses: r.losses } : { rating: 1000, wins: 0, losses: 0 };
+  }
+  record(accountId: string, mode: string, delta: number, won: boolean, season = 1): number {
+    const cur = this.get(accountId, mode, season);
+    const rating = Math.max(0, cur.rating + delta);
+    this.db.prepare(
+      `INSERT INTO arena_ratings (account_id, mode, season, rating, wins, losses) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(account_id, mode, season) DO UPDATE SET rating = excluded.rating, wins = excluded.wins, losses = excluded.losses`
+    ).run(accountId, mode, season, rating, cur.wins + (won ? 1 : 0), cur.losses + (won ? 0 : 1));
+    return rating;
+  }
+  top(mode: string, limit = 20, season = 1): Array<{ name: string; rating: number; wins: number; losses: number }> {
+    return this.db.prepare(
+      `SELECT a.name AS name, r.rating AS rating, r.wins AS wins, r.losses AS losses FROM arena_ratings r JOIN accounts a ON a.id = r.account_id WHERE r.mode = ? AND r.season = ? ORDER BY r.rating DESC LIMIT ?`
+    ).all(mode, season, limit) as any;
+  }
+}
+
+export class SqliteWarRepo {
+  constructor(private db: DatabaseSync) {}
+  add(week: string, faction: string, points: number): void {
+    this.db.prepare(`INSERT INTO war_scores (week, faction, score) VALUES (?, ?, ?) ON CONFLICT(week, faction) DO UPDATE SET score = score + excluded.score`).run(week, faction, points);
+  }
+  scores(week: string): Record<string, number> {
+    const out: Record<string, number> = { coastal: 0, highland: 0, steppe: 0 };
+    for (const r of this.db.prepare(`SELECT faction, score FROM war_scores WHERE week = ?`).all(week) as any[]) out[r.faction] = r.score;
+    return out;
   }
 }

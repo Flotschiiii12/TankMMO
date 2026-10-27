@@ -5,7 +5,7 @@ import { UserProfile } from '../save/profile.ts';
 import { Radar } from './Radar.tsx';
 import { ChatLog } from './ChatLog.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
-import { Volume2, VolumeX, Wrench, Package, ScrollText, Map as MapIcon, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
+import { Volume2, VolumeX, Wrench, Package, ScrollText, Users, Map as MapIcon, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
 
 interface HUDProps {
   player: SimEntity | null;
@@ -20,6 +20,7 @@ interface HUDProps {
   onToggleMute: () => void;
   onOpenGarage: () => void;
   onOpenQuests: () => void;
+  onOpenSocial?: () => void;
   onOpenInventory: () => void;
   onOpenWorldMap: () => void;
   onOpenSettings: () => void;
@@ -40,6 +41,7 @@ export const HUD: React.FC<HUDProps> = ({
   onToggleMute,
   onOpenGarage,
   onOpenQuests,
+  onOpenSocial,
   onOpenInventory,
   onOpenWorldMap,
   onOpenSettings,
@@ -124,6 +126,16 @@ export const HUD: React.FC<HUDProps> = ({
             >
               <Wrench size={18} />
             </button>
+
+            {onOpenSocial && (
+              <button
+                onClick={() => { soundEngine.playUIClick(); onOpenSocial(); }}
+                title="Social (friends, party, clan)"
+                className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-violet-400 flex items-center justify-center hover:text-white active:scale-95"
+              >
+                <Users size={18} />
+              </button>
+            )}
 
             {/* Quests button */}
             <button

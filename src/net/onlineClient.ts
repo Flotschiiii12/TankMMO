@@ -1,5 +1,5 @@
 import { applyPatch } from '../../shared/net/delta.ts';
-import { PROTOCOL_VERSION, ServerMessage } from '../../shared/protocol.ts';
+import { PROTOCOL_VERSION, ServerMessage, SocialOp } from '../../shared/protocol.ts';
 import type { ClientAction } from '../../shared/rules/actions.ts';
 import type { CharacterState } from '../../shared/rules/character.ts';
 import { MAP_CATALOG } from '../data/maps.ts';
@@ -50,6 +50,9 @@ export class OnlineGameClient implements GameClient {
   private driveX = 0;
   private driveY = 0;
   private mapReady?: () => void;
+  private socialId = 0;
+  private socialWaiters = new Map<number, (r: { ok: boolean; error?: string; data?: any }) => void>();
+  private socialHandlers = new Set<(kind: string, data: any) => void>();
 
   constructor(private serverUrl: string, private credential: string, profile: UserProfile) {
     this.clientWorld = { id: 'online', mapId: String(profile.currentMapId), tick: 0, time: 0, entities: this.entities, events: [], chatHistory: [], mapDef: MAP_CATALOG[profile.currentMapId] || MAP_CATALOG['green_valley'] };
@@ -136,6 +139,12 @@ export class OnlineGameClient implements GameClient {
         if (w) { this.actionWaiters.delete(m.id); w({ ok: m.ok, error: m.error }); }
         break;
       }
+      case 's_social_result': {
+        const w = this.socialWaiters.get(m.id);
+        if (w) { this.socialWaiters.delete(m.id); w({ ok: m.ok, error: m.error, data: m.data }); }
+        break;
+      }
+      case 's_social_event': for (const h of this.socialHandlers) h(m.kind, m.data); break;
       case 's_pong': this.pingMs = Date.now() - m.originalTimestamp; break;
       case 's_error': this.closeReason = m.code; break;
     }
@@ -207,7 +216,18 @@ export class OnlineGameClient implements GameClient {
     });
   }
 
-  sendChat(text: string, channel: 'G' | 'M' = 'G'): void { this.send({ type: 'c_chat', channel, text }); }
+  sendChat(text: string, channel: 'G' | 'M' | 'C' | 'P' | 'W' | 'T' = 'G', targetRecipient?: string): void { this.send({ type: 'c_chat', channel, text, targetRecipient }); }
+
+  social(req: SocialOp): Promise<{ ok: boolean; error?: string; data?: any }> {
+    const id = ++this.socialId;
+    return new Promise((resolve) => {
+      this.socialWaiters.set(id, resolve);
+      this.send({ type: 'c_social', id, req });
+      setTimeout(() => { if (this.socialWaiters.delete(id)) resolve({ ok: false, error: 'timeout' }); }, 8000);
+    });
+  }
+
+  onSocialEvent(h: (kind: string, data: any) => void): () => void { this.socialHandlers.add(h); return () => this.socialHandlers.delete(h); }
 
   getSnapshot(): WorldSnapshot | null {
     const now = performance.now();

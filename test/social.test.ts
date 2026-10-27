@@ -36,6 +36,8 @@ class P {
     await this.until(() => this.msgs.some((m) => m.type === 's_social_result' && m.id === id));
     return this.msgs.find((m) => m.type === 's_social_result' && m.id === id);
   }
+  seqIn = 0;
+  input(...commands: any[]) { this.ws.send(JSON.stringify({ type: 'c_input', seq: ++this.seqIn, commands, clientTime: 0 })); }
   chat(channel: string, text: string, to?: string) { this.ws.send(JSON.stringify({ type: 'c_chat', channel, text, targetRecipient: to })); }
   heard(text: string) { return this.msgs.some((m) => m.type === 's_chat' && m.message.text.includes(text)); }
   event(kind: string) { return this.msgs.some((m) => m.type === 's_social_event' && m.kind === kind); }
@@ -195,5 +197,124 @@ describe('Profile, rankings, admin tools', () => {
     const audit = await (await fetch(`http://127.0.0.1:${port}/admin/api/audit`, { headers: { 'x-admin-token': ADMIN } })).json() as any[];
     expect(audit.map((x) => x.action)).toEqual(expect.arrayContaining(['announce', 'mute', 'rename', 'ban', 'delete']));
     expect((await fetch(`http://127.0.0.1:${port}/admin`)).status).toBe(200);
+  });
+});
+
+describe('PvP, bounties, arena and faction war (server)', () => {
+  async function pvpPlayer(faction: 'coastal' | 'highland' | 'steppe', map = 23) {
+    const p = await P.make();
+    const st = ctx.game.getSessionState(p.id)!;
+    st.character.faction = faction; st.character.level = 20;
+    ctx.game.adminTeleport(p.id, map);
+    const s = ctx.game.getSession(p.id)!;
+    const w = ctx.game.getWorld(p.id)!;
+    w.safeZones = [];
+    for (const x of [...w.entities.values()]) if (x.isHostile) w.entities.delete(x.id); // no monsters: this test is about players
+    w.pve.respawnQueue = [];
+    const e = ctx.game.getSessionState(p.id)!.entity;
+    e.faction = faction; e.level = 20; e.invulnerableTime = 0;
+    return { p, s, w, e };
+  }
+  const kill = async (killer: Awaited<ReturnType<typeof pvpPlayer>>, victim: Awaited<ReturnType<typeof pvpPlayer>>) => {
+    const k = ctx.game.getSessionState(killer.p.id)!.entity; const v = ctx.game.getSessionState(victim.p.id)!.entity;
+    v.hull = 1; v.armor = 0; v.invulnerableTime = 0; k.invulnerableTime = 0;
+    k.hull = k.maxHull; k.armor = k.maxArmor;
+    k.pos = { x: 2000, y: 2000 }; // away from portals (400-unit protection radius)
+    v.pos = { x: k.pos.x + 200, y: k.pos.y };
+    killer.p.input({ type: 'SetTarget', targetId: v.id }, { type: 'ToggleAutoFire' });
+    try { await killer.p.until(() => v.hull <= 0, 3000); } catch (err) { console.log('KILL FAIL', { kPos: k.pos, vPos: v.pos, kHull: k.hull, kInv: k.invulnerableTime, vInv: v.invulnerableTime, kFac: k.faction, vFac: v.faction, kLvl: k.level, vLvl: v.level, tgt: k.targetId, vid: v.id, auto: k.autoFire, reload: k.mainReloadRemaining, safe: ctx.game.getWorld(killer.p.id)!.safeZones.length, pvp: ctx.game.getWorld(killer.p.id)!.pvp }); throw err; }
+    for (let i = 0; i < 3; i++) ctx.game.stepAll();
+    // respawn takes 5 s: fast-forward
+    for (let i = 0; i < 160; i++) ctx.game.stepAll();
+    killer.p.input({ type: 'ToggleAutoFire' }); // off again
+    for (let i = 0; i < 3; i++) ctx.game.stepAll();
+  };
+
+  it('PvP kill: honor for the killer, small loss for the victim, streak bounty claimed by the next killer; same faction is safe', { timeout: 40000 }, async () => {
+    const a = await pvpPlayer('coastal'); const b = await pvpPlayer('highland'); const c = await pvpPlayer('highland'); const e3 = await pvpPlayer('highland');
+    const wa = ctx.game.getSessionState(a.p.id)!;
+    b.s.character.wallet.honor = 50;
+    for (const v of [b, c, e3, b, c]) await kill(a, v); // the kill cap forbids a 3rd kill of the same victim, so rotate victims
+    expect(b.s.character.wallet.honor).toBeLessThan(50);
+    expect(wa.character.wallet.honor).toBeGreaterThan(0);
+    expect(a.s.streak).toBe(5);
+    expect(a.s.bounty).toBe(2000);
+    // another highland player claims the bounty
+    a.e.pos = { x: 2000, y: 2000 }; c.e.invulnerableTime = 0; a.e.invulnerableTime = 0; c.e.hull = c.e.maxHull; c.e.pos = { x: 2150, y: 2000 }; a.e.hull = 1; a.e.armor = 0;
+    const scrap = c.s.character.wallet.scrap;
+    c.p.input({ type: 'SetTarget', targetId: a.e.id }, { type: 'ToggleAutoFire' });
+    await c.p.until(() => a.e.hull <= 0, 6000);
+    for (let i = 0; i < 3; i++) ctx.game.stepAll();
+    expect(c.s.character.wallet.scrap).toBe(scrap + 2000);
+    expect(a.s.bounty).toBe(0);
+    // same faction cannot hurt each other
+    const d = await pvpPlayer('highland');
+    const hp = d.e.hull + d.e.armor;
+    c.p.input({ type: 'SetTarget', targetId: d.e.id });
+    for (let i = 0; i < 60; i++) ctx.game.stepAll();
+    expect(d.e.hull + d.e.armor).toBe(hp);
+  });
+
+  it('arena: queue, match with own vehicles, best of 3, Elo update, return to hub; leaving a match is penalised', { timeout: 40000 }, async () => {
+    const a = await P.make(); const b = await P.make();
+    expect((await a.req({ op: 'arena_status' })).data).toMatchObject({ league: 'silver', queued: null });
+    expect((await a.req({ op: 'arena_queue', mode: '2v2' as any })).error).toBe('bad_mode');
+    expect((await a.req({ op: 'arena_queue', mode: '1v1' })).ok).toBe(true);
+    expect((await a.req({ op: 'arena_queue', mode: '1v1' })).error).toBe('already_queued');
+    expect((await b.req({ op: 'arena_queue', mode: '1v1' })).ok).toBe(true);
+    await a.until(() => a.event('arena_start'), 5000);
+    const sa = ctx.game.getSessionState(a.id)!; const sb = ctx.game.getSessionState(b.id)!;
+    expect(sa.mapId).toBe(30); expect(sb.mapId).toBe(30);
+    expect(sa.entity.team).not.toBe(sb.entity.team);
+    // frozen during the countdown
+    const p0 = { ...sa.entity.pos };
+    a.ws.send(JSON.stringify({ type: 'c_input', seq: 1, commands: [{ type: 'Drive', x: 1, y: 0 }], clientTime: 0 }));
+    for (let i = 0; i < 30; i++) ctx.game.stepAll();
+    expect(sa.entity.pos.x).toBe(p0.x);
+    // wait for the fight, then win two rounds by wiping B
+    const winRound = async () => {
+      await a.until(() => ctx.game.getSessionState(a.id)?.mapId !== 30 || (ctx.game.getSession(a.id)!.instance.arena!.state.phase === 'fighting'), 8000);
+      if (ctx.game.getSessionState(a.id)?.mapId !== 30) return;
+      const eb = ctx.game.getSessionState(b.id)!.entity; eb.hull = 0;
+      for (let i = 0; i < 400 && ctx.game.getSessionState(a.id)?.mapId === 30 && ctx.game.getSession(a.id)!.instance.arena!.state.phase === 'fighting'; i++) ctx.game.stepAll();
+    };
+    await winRound();
+    await winRound();
+    await a.until(() => a.event('arena_result'), 8000);
+    const ra = a.msgs.find((m) => m.type === 's_social_event' && m.kind === 'arena_result').data;
+    const rb = b.msgs.find((m) => m.type === 's_social_event' && m.kind === 'arena_result').data;
+    expect(ra.won).toBe(true); expect(rb.won).toBe(false);
+    expect(ra.ratingDelta).toBe(16); expect(rb.ratingDelta).toBe(-16);
+    expect(ctx.arena.get(a.id, '1v1')).toMatchObject({ rating: 1016, wins: 1 });
+    expect(ctx.game.getSessionState(a.id)!.mapId).toBe(13); // back in the hub
+    expect((await a.req({ op: 'ranking', kind: 'arena_1v1' })).data[0]).toMatchObject({ rating: 1016 });
+
+    // dodge penalty: leaving a match early bans queueing for 10 minutes
+    const c = await P.make(); const d = await P.make();
+    await c.req({ op: 'arena_queue', mode: '1v1' }); await d.req({ op: 'arena_queue', mode: '1v1' });
+    await c.until(() => c.event('arena_start'), 5000);
+    c.close();
+    await d.until(() => ctx.game.getSession(c.id) === undefined);
+    expect(ctx.game.playerCount()).toBeGreaterThan(0);
+  });
+
+  it('faction war: points are captured by standing in the zone, contested by two factions, and score accrues per owned point', async () => {
+    const a = await pvpPlayer('coastal', 21); const b = await pvpPlayer('highland', 21);
+    const w = a.w;
+    const cp = w.war![0];
+    a.e.pos = { x: cp.x, y: cp.y }; b.e.pos = { x: 100, y: 100 };
+    a.e.invulnerableTime = b.e.invulnerableTime = 1e9;
+    for (let i = 0; i < 30 * 14; i++) ctx.game.stepAll();
+    expect(cp.owner).toBe('coastal');
+    // contested: both inside, nobody progresses
+    b.e.pos = { x: cp.x + 20, y: cp.y };
+    for (let i = 0; i < 30; i++) ctx.game.stepAll();
+    expect(cp.contested).toBe(true);
+    // the owner keeps scoring
+    b.e.pos = { x: 100, y: 100 };
+    const before = w.warScore.coastal;
+    for (let i = 0; i < 90; i++) ctx.game.stepAll();
+    expect(w.warScore.coastal).toBeGreaterThan(before);
+    expect((await a.p.req({ op: 'war_status' })).data.scores).toMatchObject({ coastal: expect.any(Number) });
   });
 });

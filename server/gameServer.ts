@@ -13,12 +13,16 @@ import * as C from '../shared/rules/character.ts';
 import { AMMO_PRICES, executeAction } from '../shared/rules/actions.ts';
 import { calculateKillXP } from '../shared/rules/progression.ts';
 import * as Q from '../shared/rules/quests.ts';
+import { canEngage, BOUNTY_SCRAP_PER_STREAK, BOUNTY_STREAK, HONOR_LOSS_ON_DEATH, honorForKill, registerPvpKill } from '../shared/sim/pvp.ts';
 import { refreshPlayerStats, spawnPlayerFromCharacter } from '../shared/sim/playerEntity.ts';
 import { createWorld, stepWorld, World } from '../shared/sim/world.ts';
+import { weeklyWinner } from '../shared/sim/war.ts';
 import { AmmoType, MapDef, SimCommand, SimEntity, SimEvent, SIM_TIMESTEP } from '../shared/types.ts';
 import { AccountService } from './accounts.ts';
 import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
 import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
+import { SqliteArenaRepo, SqliteWarRepo } from './db.ts';
+import * as AR from '../shared/rules/arena.ts';
 import { createStarterCharacterForServer, DEFAULT_AMMO } from './starter.ts';
 
 export const TICK_HZ = 30;
@@ -43,6 +47,7 @@ interface Instance {
   map: MapDef;
   world: World;
   sessions: Set<Session>;
+  arena?: { state: AR.MatchState; teams: [Session[], Session[]]; forfeits: Set<string>; mode: AR.ArenaMode; ratings: Map<string, number>; returnTo: Map<string, { mapId: number }>; };
 }
 
 interface Session {
@@ -65,6 +70,10 @@ interface Session {
   pendingEvents: SimEvent[];
   suspicious: number;
   rng: SimRNG;
+  streak: number;
+  bounty: number;
+  arenaFree?: boolean;
+  lastHonorAt: Map<number, number>;
   partyId?: number;
   clanId?: number;
   clanTag?: string;
@@ -83,6 +92,8 @@ export interface ServerDeps {
   clock?: Clock;
   adminToken?: string;
   social: SocialRepo;
+  arena: SqliteArenaRepo;
+  war: SqliteWarRepo;
 }
 
 export class GameServer {
@@ -97,6 +108,10 @@ export class GameServer {
   private clock: Clock;
   readonly metrics = { ticks: 0, maxTickMs: 0, avgTickMs: 0, bytesOut: 0, msgsIn: 0 };
   private instanceCounter = 0;
+  private arenaInstances = new Set<Instance>();
+  private arenaQueue: AR.QueueEntry[] = [];
+  private arenaBans = new Map<string, number>(); // accountId -> until (ms)
+  private arenaSeq = 0;
   private parties = new Map<number, Party>();
   private partyCounter = 0;
   private partyInvites = new Map<string, { from: string; party: number; exp: number }>();
@@ -140,8 +155,9 @@ export class GameServer {
   stepAll(): void {
     const t0 = performance.now();
     this.tick++;
-    for (const list of this.instances.values()) {
-      for (const inst of list) {
+    const all: Instance[] = [...[...this.instances.values()].flat(), ...this.arenaInstances];
+    {
+      for (const inst of all) {
         if (inst.sessions.size === 0) continue;
         const cmds = new Map<number, SimCommand[]>();
         for (const s of inst.sessions) {
@@ -151,9 +167,12 @@ export class GameServer {
         stepWorld(inst.world, cmds);
         this.processEvents(inst);
         this.handleRespawns(inst);
+        if (inst.arena) this.stepArena(inst);
         if (this.tick % SNAPSHOT_EVERY_TICKS === 0) this.sendSnapshots(inst);
       }
     }
+    if (this.tick % TICK_HZ === 0) this.runMatchmaking();
+    if (this.tick % (TICK_HZ * 30) === 0) this.flushWarScores();
     if (this.tick % (TICK_HZ * AUTOSAVE_SECONDS) === 0) for (const s of this.sessions.values()) if (s.dirty) this.save(s);
     const ms = performance.now() - t0;
     this.metrics.ticks++;
@@ -196,6 +215,15 @@ export class GameServer {
     return true;
   }
 
+  /** Admin/test tool: move a connected player to a map (spawn point of that map). */
+  adminTeleport(accountId: string, mapId: number): boolean {
+    const s = this.sessions.get(accountId);
+    if (!s || s.instance.arena) return false;
+    this.leave(s);
+    this.enter(s, mapId);
+    return true;
+  }
+
   announce(text: string): void {
     this.deps.social.addAnnouncement(text);
     for (const s of this.sessions.values()) this.send(s, { type: 's_social_event', kind: 'announcement', data: { ts: this.clock.nowMs(), text } });
@@ -216,7 +244,11 @@ export class GameServer {
   }
 
   private enter(s: Session, mapId: number, at?: { x: number; y: number }): void {
-    const inst = this.getInstanceFor(mapId, s);
+    this.enterInstance(s, this.getInstanceFor(mapId, s), at);
+  }
+
+  private enterInstance(s: Session, inst: Instance, at?: { x: number; y: number }): void {
+    const mapId = inst.mapId;
     const pos = at ?? this.spawnPos(inst);
     const ent = spawnPlayerFromCharacter(inst.world, s.character, pos, s.ammo);
     s.instance = inst;
@@ -229,6 +261,10 @@ export class GameServer {
   }
 
   private leave(s: Session): void {
+    if (s.instance?.arena && !s.instance.arena.forfeits.has(s.accountId) && s.instance.arena.state.phase !== 'finished') {
+      s.instance.arena.forfeits.add(s.accountId);
+      this.arenaBans.set(s.accountId, this.clock.nowMs() + AR.DODGE_PENALTY_SECONDS * 1000);
+    }
     const ent = s.instance.world.entities.get(s.entityId);
     if (ent) { for (const k of Object.keys(s.ammo)) if (k !== 'STANDARD') s.ammo[k] = ent.ammoInventory[k as AmmoType] ?? s.ammo[k]; }
     s.instance.world.entities.delete(s.entityId);
@@ -291,14 +327,14 @@ export class GameServer {
       existing.ws.close(4409, 'logged_in_elsewhere');
     }
     const row = this.deps.profiles.get(auth.account.id);
-    const character = row?.character ?? createStarterCharacterForServer(auth.account.name);
+    const character = row?.character ?? createStarterCharacterForServer(auth.account.name, auth.account.startFaction as C.PlayerFaction);
     character.name = auth.account.name;
-    const mapId = row?.mapId ?? 1;
+    const mapId = row?.mapId ?? C.HOME_MAP_BY_FACTION[character.faction];
     C.talentPointsAvailable(character);
     const s: Session = {
       ws, accountId: auth.account.id, name: auth.account.name, character, ammo: { ...DEFAULT_AMMO, ...(row?.ammo ?? {}) },
       instance: undefined as any, entityId: 0, encoder: new DeltaEncoder(), pending: [], lastSeq: 0,
-      cmdBudget: MAX_COMMANDS_PER_SECOND, cmdBudgetRefill: 0, dirty: true, lastSave: this.clock.nowMs(), chatTimes: [], pendingEvents: [], suspicious: 0,
+      cmdBudget: MAX_COMMANDS_PER_SECOND, cmdBudgetRefill: 0, dirty: true, lastSave: this.clock.nowMs(), chatTimes: [], pendingEvents: [], suspicious: 0, streak: 0, bounty: 0, lastHonorAt: new Map(),
       rng: new SimRNG((this.clock.nowMs() ^ auth.account.id.length) >>> 0),
     };
     this.sessions.set(s.accountId, s);
@@ -332,6 +368,7 @@ export class GameServer {
     s.lastSeq = msg.seq;
     const ent = s.instance.world.entities.get(s.entityId);
     if (!ent || ent.hull <= 0) return;
+    if (s.instance.arena && s.instance.arena.state.phase !== 'fighting') return; // frozen during countdown/break
     for (const raw of msg.commands.slice(0, MAX_COMMANDS_PER_PACKET)) {
       if (s.cmdBudget < 1) { s.suspicious++; break; }
       s.cmdBudget--;
@@ -350,7 +387,8 @@ export class GameServer {
       case 'SetTarget': {
         if (c.targetId === null || c.targetId === undefined) return { type: 'SetTarget', targetId: null };
         const t = s.instance.world.entities.get(c.targetId);
-        return t && t.hull > 0 && t.isHostile ? { type: 'SetTarget', targetId: c.targetId } : undefined;
+        const me = s.instance.world.entities.get(s.entityId);
+        return t && me && t.hull > 0 && canEngage(s.instance.world, me, t) ? { type: 'SetTarget', targetId: c.targetId } : undefined;
       }
       case 'ToggleAutoFire': return { type: 'ToggleAutoFire' };
       case 'FireMain': return { type: 'FireMain' };
@@ -557,7 +595,21 @@ export class GameServer {
         } });
       }
       case 'ranking':
+        if (req.kind.startsWith('arena_')) return reply({ ok: true, data: this.deps.arena.top(req.kind.slice(6)) });
+        if (req.kind === 'honor') return reply({ ok: true, data: this.deps.profiles.topByLevel(20) });
         return reply({ ok: true, data: req.kind === 'clans' ? social.clanRanking(20) : this.deps.profiles.topByLevel(20) });
+      case 'arena_queue': return reply(this.arenaQueueJoin(s, req.mode));
+      case 'arena_leave': this.arenaQueue = this.arenaQueue.filter((e) => e.id !== s.accountId); return reply({ ok: true });
+      case 'arena_status': {
+        const ratings = Object.fromEntries((Object.keys(AR.ARENA_MODES) as AR.ArenaMode[]).map((m) => [m, this.deps.arena.get(s.accountId, m)]));
+        const stats = C.computeLoadoutStats(s.character);
+        const power = stats ? AR.arenaPower(stats.dps, stats.maxHull, stats.maxArmor, stats.flatReduction) : 0;
+        return reply({ ok: true, data: { power, league: AR.leagueForPower(power), ratings, queued: this.arenaQueue.find((e) => e.id === s.accountId)?.mode ?? null, inMatch: !!s.instance.arena, banMinutes: Math.ceil(Math.max(0, (this.arenaBans.get(s.accountId) ?? 0) - this.clock.nowMs()) / 60000) } });
+      }
+      case 'war_status': {
+        const week = Q.weekKey(Math.floor(this.clock.nowMs() / 1000));
+        return reply({ ok: true, data: { week, scores: this.deps.war.scores(week), lastWeekWinner: this.lastWeekWinner() } });
+      }
     }
   }
 
@@ -625,6 +677,8 @@ export class GameServer {
           const killer = ev.killerId !== undefined ? byEntity.get(ev.killerId) : undefined;
           const victim = world.entities.get(ev.victimId);
           if (killer && victim && victim.isHostile) this.rewardKill(killer, victim);
+          const victimSession = byEntity.get(ev.victimId);
+          if (victimSession && world.pvp) this.pvpDeath(inst, killer, victimSession);
           break;
         }
         case 'loot_collected': {
@@ -634,7 +688,7 @@ export class GameServer {
         }
         case 'player_died': {
           const s = byEntity.get(ev.entityId);
-          if (s) { s.character.wallet.scrap = Math.floor(s.character.wallet.scrap * 0.9); s.respawnAt = world.time + RESPAWN_SECONDS; s.dirty = true; this.sendCharacter(s); }
+          if (s && !inst.arena) { s.character.wallet.scrap = Math.floor(s.character.wallet.scrap * 0.9); s.respawnAt = world.time + RESPAWN_SECONDS; s.dirty = true; this.sendCharacter(s); }
           break;
         }
         case 'gate_used': {
@@ -645,6 +699,44 @@ export class GameServer {
       }
     }
   }
+
+  /** A player died on a PvP map: honor, kill cap, streaks and bounties. Killer is undefined for non-player deaths. */
+  private pvpDeath(inst: Instance, killer: Session | undefined, victim: Session): void {
+    const world = inst.world;
+    const vEnt = world.entities.get(victim.entityId);
+    const hadBounty = victim.bounty;
+    victim.streak = 0;
+    victim.bounty = 0;
+    if (!killer || killer === victim || !vEnt) return;
+    const kEnt = world.entities.get(killer.entityId);
+    if (!kEnt || !world.pvp) return;
+    registerPvpKill(world, kEnt.id, vEnt.id);
+    const honor = honorForKill(world, kEnt, vEnt, killer.lastHonorAt, Math.floor(world.time));
+    if (!world.pvp.arena) {
+      killer.character.wallet.honor += honor;
+      victim.character.wallet.honor = Math.max(0, victim.character.wallet.honor - HONOR_LOSS_ON_DEATH);
+    }
+    killer.streak++;
+    if (hadBounty > 0) {
+      killer.character.wallet.scrap += hadBounty;
+      killer.character.wallet.honor += 25;
+      this.systemMessage(inst, `${killer.name} claimed the ${hadBounty}-scrap bounty on ${victim.name}!`);
+    }
+    if (!world.pvp.arena && killer.streak >= BOUNTY_STREAK && killer.bounty === 0) {
+      killer.bounty = killer.streak * BOUNTY_SCRAP_PER_STREAK;
+      this.systemMessage(inst, `${killer.name} is on a ${killer.streak}-kill streak: bounty ${killer.bounty} scrap!`);
+    } else if (killer.bounty > 0) killer.bounty = killer.streak * BOUNTY_SCRAP_PER_STREAK;
+    killer.dirty = victim.dirty = true;
+    this.sendCharacter(killer);
+    this.sendCharacter(victim);
+  }
+
+  private systemMessage(inst: Instance, text: string): void {
+    const m: ServerMessage = { type: 's_chat', message: { id: `sys${this.clock.nowMs()}`, sender: 'SYSTEM', channel: 'S', text, timestamp: this.clock.nowMs() } };
+    for (const o of inst.sessions) this.send(o, m);
+  }
+
+  getSession(accountId: string) { return this.sessions.get(accountId); }
 
   private rewardKill(s: Session, victim: SimEntity): void {
     const ch = s.character;
@@ -722,6 +814,132 @@ export class GameServer {
       e.hull = e.maxHull; e.armor = e.maxArmor;
       e.invulnerableTime = 5; e.isWreck = false; e.wreckTimer = undefined; e.targetId = undefined; e.statusEffects = [];
       s.respawnAt = undefined;
+    }
+  }
+
+  // ---------------------------------------------------------------- arena
+
+  private arenaQueueJoin(s: Session, mode: AR.ArenaMode): C.Result {
+    if (!(mode in AR.ARENA_MODES)) return { ok: false, error: 'bad_mode' };
+    if (s.instance.arena) return { ok: false, error: 'in_match' };
+    if (this.arenaQueue.some((e) => e.id === s.accountId)) return { ok: false, error: 'already_queued' };
+    if ((this.arenaBans.get(s.accountId) ?? 0) > this.clock.nowMs()) return { ok: false, error: 'arena_ban' };
+    if (!this.inSafeZone(s)) return { ok: false, error: 'safe_zone_only' };
+    const stats = C.computeLoadoutStats(s.character);
+    if (!stats) return { ok: false, error: 'no_vehicle' };
+    const power = AR.arenaPower(stats.dps, stats.maxHull, stats.maxArmor, stats.flatReduction);
+    this.arenaQueue.push({ id: s.accountId, mode, power, rating: this.deps.arena.get(s.accountId, mode).rating, queuedAt: this.clock.nowMs() / 1000 });
+    return { ok: true };
+  }
+
+  private runMatchmaking(): void {
+    if (this.arenaQueue.length < 2) return;
+    // drop players who left
+    this.arenaQueue = this.arenaQueue.filter((e) => this.sessions.has(e.id) && !this.sessions.get(e.id)!.instance.arena);
+    const found = AR.findMatches(this.arenaQueue, this.clock.nowMs() / 1000);
+    for (const m of found) {
+      const ids = new Set([...m.teamA, ...m.teamB].map((e) => e.id));
+      this.arenaQueue = this.arenaQueue.filter((e) => !ids.has(e.id));
+      this.startArenaMatch(m);
+    }
+  }
+
+  private arenaSpawn(team: number, idx: number, total: number): { x: number; y: number } {
+    const map = getMapById(30) as MapDef;
+    const cx = map.width / 2;
+    const y = map.height / 2 + (idx - (total - 1) / 2) * 90;
+    return { x: team === 0 ? cx - 450 : cx + 450, y };
+  }
+
+  private startArenaMatch(m: AR.FoundMatch): void {
+    const map = getMapById(30) as MapDef;
+    const world = createWorld({ map, seed: 30 * 104729 + ++this.arenaSeq, populate: false, safeZones: [], pvp: { pvpEnabled: true, arena: true } });
+    const inst: Instance = { id: `a${this.arenaSeq}`, mapId: 30, map, world, sessions: new Set() };
+    const teams: [Session[], Session[]] = [[], []];
+    const ratings = new Map<string, number>();
+    const returnTo = new Map<string, { mapId: number }>();
+    [m.teamA, m.teamB].forEach((team, ti) => team.forEach((q) => { const s = this.sessions.get(q.id); if (s) { teams[ti].push(s); ratings.set(q.id, q.rating); } }));
+    if (teams[0].length === 0 || teams[1].length === 0) { for (const t of teams) for (const s of t) this.send(s, { type: 's_social_event', kind: 'arena_result', data: { cancelled: true } }); return; }
+    inst.arena = { state: AR.newMatch(m.mode, 0), teams, forfeits: new Set(), mode: m.mode, ratings, returnTo };
+    this.arenaInstances.add(inst);
+    teams.forEach((t, ti) => t.forEach((s, i) => {
+      returnTo.set(s.accountId, { mapId: s.instance.mapId });
+      this.leave(s);
+      s.arenaFree = true;
+      this.enterInstance(s, inst, this.arenaSpawn(ti, i, t.length));
+      const e = world.entities.get(s.entityId)!;
+      e.team = ti; e.invulnerableTime = AR.COUNTDOWN_SECONDS + 1;
+      this.send(s, { type: 's_social_event', kind: 'arena_start', data: { mode: m.mode, team: ti, opponents: teams[1 - ti].map((o) => o.name) } });
+    }));
+  }
+
+  private resetArenaRound(inst: Instance): void {
+    const a = inst.arena!;
+    a.teams.forEach((t, ti) => t.forEach((s, i) => {
+      const e = inst.world.entities.get(s.entityId);
+      if (!e) return;
+      const p = this.arenaSpawn(ti, i, t.length);
+      e.pos = { ...p }; e.vel = { x: 0, y: 0 }; e.hull = e.maxHull; e.armor = e.maxArmor; e.isWreck = false; e.wreckTimer = undefined; e.targetId = undefined; e.statusEffects = [];
+      e.invulnerableTime = 3.5; e.mainReloadRemaining = 0;
+    }));
+    for (const x of [...inst.world.entities.values()]) if (x.kind === 'projectile' || x.kind === 'telegraph') inst.world.entities.delete(x.id);
+  }
+
+  private stepArena(inst: Instance): void {
+    const a = inst.arena!;
+    const alive = (team: Session[]) => team.filter((s) => !a.forfeits.has(s.accountId) && (inst.world.entities.get(s.entityId)?.hull ?? 0) > 0).length;
+    const res = AR.advanceMatch(a.state, inst.world.time, [alive(a.teams[0]), alive(a.teams[1])]);
+    if (res === 'round_started') for (const s of a.teams.flat()) { const e = inst.world.entities.get(s.entityId); if (e) e.invulnerableTime = 0; }
+    if (a.state.phase === 'countdown' && a.state.phaseEndsAt - inst.world.time > 2.9 && a.state.round > 1 && !a.state.resetDone) { a.state.resetDone = true; this.resetArenaRound(inst); }
+    if (a.state.phase === 'fighting') a.state.resetDone = false;
+    if (res === 'round_over' || res === 'match_over') {
+      for (const s of inst.sessions) this.send(s, { type: 's_social_event', kind: 'arena_round', data: { wins: a.state.wins, round: a.state.round } });
+    }
+    if (res === 'match_over') this.finishArena(inst);
+  }
+
+  private finishArena(inst: Instance): void {
+    const a = inst.arena!;
+    const winner = a.state.winner!;
+    const avg = (team: Session[]) => team.reduce((sum, s) => sum + (a.ratings.get(s.accountId) ?? 1000), 0) / Math.max(1, team.length);
+    const d = AR.eloDelta(avg(a.teams[0]), avg(a.teams[1]), winner === 0 ? 1 : 0);
+    const season = 1;
+    a.teams.forEach((team, ti) => team.forEach((s) => {
+      const won = ti === winner && !a.forfeits.has(s.accountId);
+      const delta = a.forfeits.has(s.accountId) ? -Math.abs(ti === 0 ? d.a : d.b) - 8 : ti === 0 ? d.a : d.b;
+      const rating = this.deps.arena.record(s.accountId, a.mode, delta, won, season);
+      s.character.wallet.seasonMarks += won ? 5 : 1;
+      s.character.wallet.scrap += won ? 400 : 100;
+      if (won) Q.onQuestEvent(s.character, { type: 'win_arena' });
+      s.dirty = true;
+      this.send(s, { type: 's_social_event', kind: 'arena_result', data: { won, ratingDelta: delta, rating, wins: a.state.wins } });
+    }));
+    // return everyone to the hub after a short moment; here immediately with spawn protection
+    const hub = 13;
+    for (const s of a.teams.flat()) {
+      if (a.forfeits.has(s.accountId) || !this.sessions.has(s.accountId)) continue;
+      this.leave(s);
+      s.arenaFree = false;
+      this.enter(s, hub);
+      const e = s.instance.world.entities.get(s.entityId);
+      if (e) e.invulnerableTime = 5;
+      this.save(s);
+    }
+    this.arenaInstances.delete(inst);
+  }
+
+  // ---------------------------------------------------------------- faction war
+
+  private lastWeekWinner(): string | undefined {
+    const wk = Number(Q.weekKey(Math.floor(this.clock.nowMs() / 1000)).slice(1));
+    return weeklyWinner(this.deps.war.scores(`w${wk - 1}`));
+  }
+
+  /** Move accumulated control-point score of every instance into the weekly totals (called every 30 s). */
+  private flushWarScores(): void {
+    const week = Q.weekKey(Math.floor(this.clock.nowMs() / 1000));
+    for (const list of this.instances.values()) for (const inst of list) {
+      for (const [f, v] of Object.entries(inst.world.warScore)) { if (v >= 1) { this.deps.war.add(week, f, Math.floor(v)); inst.world.warScore[f] = v - Math.floor(v); } }
     }
   }
 

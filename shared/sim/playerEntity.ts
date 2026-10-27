@@ -24,6 +24,7 @@ export function spawnPlayerFromCharacter(world: World, ch: CharacterState, pos: 
   ent.critChance = stats.critChance;
   ent.flatArmorReduction = stats.flatReduction;
   ent.invulnerableTime = 5;
+  ent.faction = ch.faction;
   if (ammo) for (const [k, v] of Object.entries(ammo)) if (k !== 'STANDARD') (ent.ammoInventory as any)[k] = v ?? 0;
   return ent;
 }

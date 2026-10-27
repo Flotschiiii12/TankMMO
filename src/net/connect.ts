@@ -17,9 +17,9 @@ export const getCredential = (): string | null => { try { return localStorage.ge
 export const setCredential = (c: string): void => { try { localStorage.setItem(CRED_KEY, c); } catch { /* private mode */ } };
 export const clearCredential = (): void => { try { localStorage.removeItem(CRED_KEY); } catch { /* ignore */ } };
 
-export async function createGuest(): Promise<{ ok: true; credential: string; name: string } | { ok: false; error: string }> {
+export async function createGuest(faction = 'coastal'): Promise<{ ok: true; credential: string; name: string } | { ok: false; error: string }> {
   try {
-    const r = await fetch(`${serverBase()}/api/guest`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ageConfirmed: true }) });
+    const r = await fetch(`${serverBase()}/api/guest`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ageConfirmed: true, faction }) });
     const j: any = await r.json();
     return r.ok ? { ok: true, credential: j.credential, name: j.name } : { ok: false, error: j.error || 'failed' };
   } catch { return { ok: false, error: 'network' }; }

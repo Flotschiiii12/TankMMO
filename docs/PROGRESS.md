@@ -95,3 +95,4 @@ npm run build
 - Persistence behind interfaces (AccountRepo, ProfileRepo, ChatRepo), SQLite schema in plain SQL.
 - Load test: `npm run bots -- --count 200 --seconds 25 --url http://127.0.0.1:3000` (set LOAD_TEST=1 on the server to bypass REST rate limits). Optimizations after the first run: per-snapshot shared views and cached diffs (tick cost 237 ms -> ~20 ms at 190 clustered bots).
 - Tests: test/server.test.ts (9 integration tests with real sockets).
+- Load test result (200 bots, 2 instances of 100, all clustered at the spawn = worst case, same VPS core): 0 errors, 0 disconnects, ping p50 53 ms / p95 239 ms, avg tick 26 ms (budget 33 ms), spikes up to 577 ms, ~52 KB/s per bot. Conclusion: one Node thread holds about 150-200 clustered players; spread out players cost far less. Next scaling step: one worker thread per instance.

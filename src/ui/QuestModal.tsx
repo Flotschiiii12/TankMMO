@@ -8,12 +8,14 @@ import type { ClientAction } from '../../shared/rules/actions.ts';
 import { QUEST_BY_ID, QuestObjective } from '../../shared/data/quests.ts';
 import { SEASON_POINTS_PER_TIER, SEASON_REWARDS } from '../../shared/data/season.ts';
 import * as Q from '../../shared/rules/quests.ts';
+import { StoryJournal } from './Dialogue.tsx';
 
 interface Props {
   profile: UserProfile;
   isOpen: boolean;
   onClose: () => void;
   onAction: (action: ClientAction) => Promise<{ ok: boolean; error?: string }>;
+  onReplay?: (scene: import('../../shared/data/story.ts').StoryScene) => void;
 }
 
 const objectiveText = (o: QuestObjective, target: number): string => {
@@ -36,8 +38,8 @@ const objectiveText = (o: QuestObjective, target: number): string => {
   }
 };
 
-export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction }) => {
-  const [tab, setTab] = useState<'active' | 'available' | 'season'>('active');
+export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction, onReplay }) => {
+  const [tab, setTab] = useState<'active' | 'available' | 'journal' | 'season'>('active');
   const [msg, setMsg] = useState('');
   if (!isOpen) return null;
   const ch = profile.character;
@@ -60,9 +62,9 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
           <button onClick={() => { soundEngine.playUIClick(); onClose(); }} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
         <div className="flex gap-2 mt-2 text-xs">
-          {(['active', 'available', 'season'] as const).map((t) => (
+          {(['active', 'available', 'journal', 'season'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded capitalize ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>
-              {t === 'active' ? `${tr('Active')} (${active.length})` : t === 'available' ? `${tr('Available')} (${available.length})` : `${tr('Season')} ${ch.season.seasonId || ''}`}
+              {t === 'active' ? `${tr('Active')} (${active.length})` : t === 'available' ? `${tr('Available')} (${available.length})` : t === 'journal' ? tr('Journal') : `${tr('Season')} ${ch.season.seasonId || ''}`}
             </button>
           ))}
           {msg && <span className="ml-auto text-[11px] text-orange-300 self-center">{msg}</span>}
@@ -103,6 +105,8 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
               <button onClick={() => run({ kind: 'accept_quest', questId: def.id })} className="px-2 py-1 rounded bg-orange-600/80 text-white shrink-0 ml-2">{tr('Accept')}</button>
             </div>
           ))}
+
+          {tab === 'journal' && <StoryJournal ch={ch} onReplay={(s) => onReplay?.(s)} />}
 
           {tab === 'season' && (
             <>

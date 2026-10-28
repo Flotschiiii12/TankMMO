@@ -142,6 +142,23 @@ function buildDailyPool(): QuestDef[] {
   add('ore_any_80', 'Big haul', [{ type: 'collect_ore', count: 80 }], 1.5);
   add('elite_1', 'One elite', [{ type: 'kill', count: 1, elite: true }]);
   add('mixed_c', 'Salvage run', [{ type: 'collect_ore', count: 30 }, { type: 'craft', count: 1 }], 1.4);
+  // cloud run 3: sixteen more dailies with different shapes
+  add('night_patrol', 'Night patrol', [{ type: 'kill', count: 25 }, { type: 'kill', count: 1, elite: true }], 1.6);
+  add('dead_drop', 'Dead drop', [{ type: 'deliver', count: 1500 }], 1.3);
+  add('ground_zero', 'Ground zero', [{ type: 'kill', count: 20, target: 'artillery' }], 1.5);
+  add('quartermaster', 'Quartermaster', [{ type: 'craft', count: 2 }, { type: 'upgrade', count: 2 }], 1.3);
+  add('safe_passage', 'Safe passage', [{ type: 'use_portal', count: 5 }], 1.2);
+  add('twin_gates', 'Twin gates', [{ type: 'clear_gate', count: 2 }], 3);
+  add('sharpshooter_day', 'Sharpshooter day', [{ type: 'kill', count: 60 }], 2);
+  add('ironclad', 'Ironclad', [{ type: 'kill', count: 15, target: 'gunner_truck' }, { type: 'kill', count: 15, target: 'flak_wagon' }], 1.8);
+  add('wreck_diver', 'Wreck diver', [{ type: 'collect_ore', count: 120 }], 1.8);
+  add('gladiator_warmup', 'Gladiator warm-up', [{ type: 'win_arena', count: 2 }], 2.4);
+  add('long_road', 'The long road', [{ type: 'use_portal', count: 8 }, { type: 'explore', count: 1 }], 1.6);
+  add('boss_hunt_2', 'Double boss hunt', [{ type: 'defeat_boss', count: 2 }], 3);
+  add('elite_trio', 'Elite trio', [{ type: 'kill', count: 3, elite: true }], 1.8);
+  add('forge_day', 'Forge day', [{ type: 'upgrade', count: 10 }], 1.8);
+  add('convoy_double', 'Double escort', [{ type: 'escort', count: 2 }], 2);
+  add('rust_sweep', 'Rust sweep', [{ type: 'kill', count: 25, target: 'scout_buggy' }, { type: 'collect_ore', count: 25 }], 1.5);
   return pool;
 }
 
@@ -158,6 +175,12 @@ function buildWeeklyPool(): QuestDef[] {
   add('arena_climber', 'Arena climber', [{ type: 'win_arena', count: 5 }]);
   add('globetrotter', 'Globetrotter', [{ type: 'use_portal', count: 25 }]);
   add('convoy_guard', 'Convoy guard', [{ type: 'escort', count: 5 }]);
+  add('deep_miner', 'Deep miner', [{ type: 'collect_ore', count: 800 }]);
+  add('arena_veteran', 'Arena veteran', [{ type: 'win_arena', count: 10 }]);
+  add('gate_master', 'Gate master', [{ type: 'clear_gate', count: 10 }]);
+  add('boss_week', 'Boss week', [{ type: 'defeat_boss', count: 10 }]);
+  add('logistics', 'Logistics', [{ type: 'deliver', count: 8000 }]);
+  add('long_haul', 'Long haul', [{ type: 'use_portal', count: 40 }, { type: 'explore', count: 4 }]);
   return pool;
 }
 
@@ -168,6 +191,15 @@ export const BOUNTY_TARGETS = [
   { id: 'bounty_frost_wraith', name: 'Frost Wraith', kind: 'ice_tank', level: 40 },
   { id: 'bounty_mire_king', name: 'Mire King', kind: 'swamp_crawler', level: 50 },
   { id: 'bounty_ash_reaper', name: 'Ash Reaper', kind: 'lava_truck', level: 70 },
+  // cloud run 3
+  { id: 'bounty_gravel_jack', name: 'Gravel Jack', kind: 'scout_buggy', level: 8 },
+  { id: 'bounty_salt_hound', name: 'Salt Hound', kind: 'gunner_truck', level: 16 },
+  { id: 'bounty_canyon_queen', name: 'Canyon Queen', kind: 'artillery', level: 25 },
+  { id: 'bounty_frost_baron', name: 'Frost Baron', kind: 'ice_tank', level: 35 },
+  { id: 'bounty_bog_hag', name: 'Bog Hag', kind: 'swamp_crawler', level: 45 },
+  { id: 'bounty_dune_ghost', name: 'Dune Ghost', kind: 'sandstorm_raider', level: 60 },
+  { id: 'bounty_magma_tyrant', name: 'Magma Tyrant', kind: 'lava_truck', level: 80 },
+  { id: 'bounty_wire_fox', name: 'Wire Fox', kind: 'flak_wagon', level: 90 },
 ];
 
 function buildBounties(): QuestDef[] {
@@ -178,7 +210,7 @@ function buildBounties(): QuestDef[] {
 }
 
 function buildExplorer(): QuestDef[] {
-  return [1, 3, 6, 9, 14, 16, 19, 21, 25, 27].map((mapId) => ({
+  return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 19, 20, 21, 25, 27].map((mapId) => ({
     id: `explore_map_${mapId}`, kind: 'explorer' as const, nameKey: `quest.explorer.map_${mapId}`, name: `Explorer: map ${mapId}`, minLevel: 1, prerequisites: [],
     objectives: [{ type: 'explore' as const, count: 2, target: mapId }], reward: { ...rewardFor(mapId * 3, 2), fragments: 20 },
   }));

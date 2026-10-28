@@ -5,6 +5,7 @@
 import {
   ALL_QUESTS, DAILY_POOL, TUTORIAL_QUESTS, TUTORIAL_STEPS, DAILY_QUEST_COUNT, QUEST_BY_ID, QuestDef, QuestObjective, QuestReward, WEEKLY_POOL, WEEKLY_QUEST_COUNT,
 } from '../data/quests.ts';
+import { SCENE_BY_ID, sceneSeenFlag, STORY_SCENES, type StoryScene } from '../data/story.ts';
 import { SEASON_DAILY_POINT_CAP, SEASON_LENGTH_SECONDS, SEASON_POINTS_PER_TIER, SEASON_REWARDS, SEASON_TIERS } from '../data/season.ts';
 import { SimRNG } from '../prng.ts';
 import { CharacterState, createItem, grantXP, Result } from './character.ts';
@@ -152,6 +153,7 @@ export function refreshQuests(ch: CharacterState, clockSeconds: number): { daily
     log.weeklyKey = wk;
     weeklyChanged = true;
   }
+  initStoryScenes(ch);
   const before = Object.keys(log.active).length;
   ensureTutorial(ch);
   return { dailyChanged: dailyChanged || Object.keys(log.active).length !== before, weeklyChanged };
@@ -332,4 +334,35 @@ export function questMarkers(ch: CharacterState, maxQuests = 3): QuestMarkers {
     });
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Story scenes
+// ---------------------------------------------------------------------------
+
+/** Is the quest event that opens this scene behind us? ("accept": active or done, "claim": handed in) */
+export function sceneUnlocked(ch: CharacterState, scene: StoryScene): boolean {
+  return scene.on === 'accept' ? !!ch.quests.active[scene.questId] || ch.quests.completed.includes(scene.questId) : ch.quests.completed.includes(scene.questId);
+}
+
+export const sceneSeen = (ch: CharacterState, id: string): boolean => ch.stats[sceneSeenFlag(id)] === 1;
+
+/** The next scene the player has earned and not seen yet (story order). */
+export function pendingScene(ch: CharacterState): StoryScene | undefined {
+  return STORY_SCENES.find((s) => sceneUnlocked(ch, s) && !sceneSeen(ch, s.id));
+}
+
+/** Marks a scene as seen; only scenes the character really unlocked count (no free flags). */
+export function markSceneSeen(ch: CharacterState, id: string): boolean {
+  const scene = SCENE_BY_ID.get(id);
+  if (!scene || !sceneUnlocked(ch, scene)) return false;
+  ch.stats[sceneSeenFlag(id)] = 1;
+  return true;
+}
+
+/** Old characters would otherwise get a recap of everything they did before dialogues existed: mark it as seen, once. */
+export function initStoryScenes(ch: CharacterState): void {
+  if (ch.stats['scn_init'] === 1) return;
+  for (const s of STORY_SCENES) if (sceneUnlocked(ch, s)) ch.stats[sceneSeenFlag(s.id)] = 1;
+  ch.stats['scn_init'] = 1;
 }

@@ -25,10 +25,14 @@ const POOL_DE: Record<string, string> = {
   'daily.craft_1': 'Werkstattarbeit', 'daily.upgrade_3': 'Feinabstimmung', 'daily.upgrade_6': 'Schwere Aufrüstung', 'daily.portal_3': 'Portalspringer', 'daily.escort_1': 'Konvoi-Geleit',
   'daily.deliver_scrap': 'Nachschubabwurf', 'daily.arena_1': 'Arena-Debüt', 'daily.explore_1': 'Entdecker', 'daily.mixed_a': 'Patrouillendienst', 'daily.mixed_b': 'Frontlinie',
   'daily.ore_any_80': 'Große Ausbeute', 'daily.elite_1': 'Ein Elite-Gegner', 'daily.mixed_c': 'Bergungsfahrt',
+  'daily.night_patrol': 'Nachtpatrouille', 'daily.dead_drop': 'Toter Briefkasten', 'daily.ground_zero': 'Ground Zero', 'daily.quartermaster': 'Quartiermeister', 'daily.safe_passage': 'Sicheres Geleit',
+  'daily.twin_gates': 'Zwillingstore', 'daily.sharpshooter_day': 'Scharfschützentag', 'daily.ironclad': 'Eisenhaut', 'daily.wreck_diver': 'Wracktaucher', 'daily.gladiator_warmup': 'Gladiatoren-Aufwärmen',
+  'daily.long_road': 'Der lange Weg', 'daily.boss_hunt_2': 'Doppelte Bossjagd', 'daily.elite_trio': 'Elite-Trio', 'daily.forge_day': 'Schmiedetag', 'daily.convoy_double': 'Doppelgeleit', 'daily.rust_sweep': 'Rost-Säuberung',
+  'weekly.deep_miner': 'Tiefenschürfer', 'weekly.arena_veteran': 'Arena-Veteran', 'weekly.gate_master': 'Torbezwinger', 'weekly.boss_week': 'Bosswoche', 'weekly.logistics': 'Logistik', 'weekly.long_haul': 'Langstrecke',
   'weekly.slayer': 'Wöchentlicher Schlächter', 'weekly.elite_hunter': 'Elite-Jäger', 'weekly.miner': 'Wöchentlicher Minenarbeiter', 'weekly.dungeon_runner': 'Torläufer',
   'weekly.boss_breaker': 'Bossbezwinger', 'weekly.smith': 'Meisterschmied', 'weekly.arena_climber': 'Arena-Aufsteiger', 'weekly.globetrotter': 'Weltenbummler', 'weekly.convoy_guard': 'Konvoiwache',
 };
-const BOUNTY_DE: Record<string, string> = { rust_baron: 'Rostbaron', dust_widow: 'Staubwitwe', iron_hound: 'Eisenhund', frost_wraith: 'Frostgeist', mire_king: 'Moorkönig', ash_reaper: 'Aschenschnitter' };
+const BOUNTY_DE: Record<string, string> = { rust_baron: 'Rostbaron', dust_widow: 'Staubwitwe', iron_hound: 'Eisenhund', frost_wraith: 'Frostgeist', mire_king: 'Moorkönig', ash_reaper: 'Aschenschnitter', gravel_jack: 'Kies-Jack', salt_hound: 'Salzhund', canyon_queen: 'Schluchtenkönigin', frost_baron: 'Frostbaron', bog_hag: 'Moorhexe', dune_ghost: 'Dünengeist', magma_tyrant: 'Magmatyrann', wire_fox: 'Drahtfuchs' };
 const FACTION_DE: Record<string, string> = { coastal: 'Küstenbund', highland: 'Hochlandbund', steppe: 'Steppenkarawane' };
 const CLAN_DE: Record<string, string> = { 'quest.clan_hunt': 'Clan-Jagd', 'quest.clan_mine': 'Clan-Bergbau', 'quest.clan_gates': 'Clan-Tore' };
 

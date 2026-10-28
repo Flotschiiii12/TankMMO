@@ -28,6 +28,7 @@ export type ClientAction =
   | { kind: 'buy_ammo'; ammo: AmmoType; packs: number }
   | { kind: 'tutorial'; step: string }
   | { kind: 'skip_tutorial' }
+  | { kind: 'scene_seen'; sceneId: string }
   | { kind: 'set_skin'; skin: string | null }
   | { kind: 'change_faction'; faction: C.PlayerFaction }
   | { kind: 'sell_item'; uid: string };
@@ -92,6 +93,7 @@ export function executeAction(ch: C.CharacterState, a: ClientAction, rng: SimRNG
     case 'sell_item': return C.sellItemToNpc(ch, a.uid);
     case 'tutorial': Q.onQuestEvent(ch, { type: 'tutorial', step: String(a.step) }); return { ok: true };
     case 'skip_tutorial': Q.skipTutorial(ch); return { ok: true };
+    case 'scene_seen': return Q.markSceneSeen(ch, String(a.sceneId)) ? { ok: true } : { ok: false, error: 'unknown_scene' };
     default: return { ok: false, error: 'unknown_action' };
   }
 }

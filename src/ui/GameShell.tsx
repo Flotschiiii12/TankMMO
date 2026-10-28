@@ -25,6 +25,9 @@ import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts
 import { HUD } from './HUD.tsx';
 import { ControlsOverlay } from './ControlsOverlay.tsx';
 import { SpectateBar } from './SpectateBar.tsx';
+import { DialogueModal } from './Dialogue.tsx';
+import { pendingScene } from '../../shared/rules/quests.ts';
+import type { StoryScene } from '../../shared/data/story.ts';
 import { HintToast, HowToPlay, TutorialChip } from './Guidance.tsx';
 import { markShown, newHintMemory, nextHint, type HintState } from '../../shared/rules/hints.ts';
 import { tutorialStatus, tutorialFlag, questMarkers } from '../../shared/rules/quests.ts';
@@ -86,6 +89,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const mergerRef = useRef(new DamageNumberMerger());
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([]);
   const [howToOpen, setHowToOpen] = useState(false);
+  const [replayScene, setReplayScene] = useState<StoryScene | null>(null);
   const [hint, setHint] = useState<{ id: string; text: string } | null>(null);
   const hintMemRef = useRef(newHintMemory());
   const lastSpecialAmmo = useRef(0);
@@ -978,6 +982,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         profile={profile}
         isOpen={questOpen}
         onClose={() => setQuestOpen(false)}
+        onReplay={(sc) => { setQuestOpen(false); setReplayScene(sc); }}
         onAction={performAction}
       />
 
@@ -989,6 +994,11 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       />
 
       <WorldMapModal isOpen={worldMapOpen} onClose={() => setWorldMapOpen(false)} currentMapId={online ? online.mapId : profile.currentMapId} playerLevel={profile.character.level} onTravelToMap={(id) => { setWorldMapOpen(false); handleTravelToMap(id); }} questMapIds={questMarkers(profile.character).mapIds} />
+      {gameState === 'PLAYING' && (() => {
+        const blocked = garageOpen || inventoryOpen || socialOpen || settingsOpen || worldMapOpen || questOpen || howToOpen;
+        const scene = replayScene ?? (blocked ? null : pendingScene(profile.character) ?? null);
+        return <DialogueModal scene={scene} onDone={(id) => { if (replayScene) setReplayScene(null); else void performAction({ kind: 'scene_seen', sceneId: id }); }} />;
+      })()}
       <HowToPlay open={howToOpen} onClose={() => setHowToOpen(false)} done={TUTORIAL_STEPS.filter((s) => profile.character.stats[tutorialFlag(s)] === 1)} />
       <SettingsModal
         onHowToPlay={() => { setSettingsOpen(false); setHowToOpen(true); }}

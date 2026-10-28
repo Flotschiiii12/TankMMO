@@ -16,8 +16,8 @@ describe('Quest data', () => {
       expect(n).toBeLessThanOrEqual(12);
     }
     expect(CHAPTERS).toHaveLength(10);
-    expect(DAILY_POOL).toHaveLength(40);
-    expect(WEEKLY_POOL).toHaveLength(9);
+    expect(DAILY_POOL).toHaveLength(56); // 40 + 16 added in cloud run 3
+    expect(WEEKLY_POOL).toHaveLength(15); // 9 + 6
     expect(new Set(ALL_QUESTS.map((q) => q.id)).size).toBe(ALL_QUESTS.length);
     for (const q of ALL_QUESTS) for (const p of q.prerequisites) expect(QUEST_BY_ID.has(p), `${q.id} -> ${p}`).toBe(true);
     // every chapter ends with a boss or a gate

@@ -6,11 +6,12 @@
 import { buildGearNames } from './gear.ts';
 import { buildWorldNames } from './world.ts';
 import { buildProgressNames, TITLE_DE } from './progress.ts';
+import { buildStoryNames } from './story.ts';
 import type { Table } from './gear.ts';
 
 export { TITLE_DE };
 
-export const NAME_TABLE: Table = { ...buildGearNames(), ...buildWorldNames(), ...buildProgressNames() };
+export const NAME_TABLE: Table = { ...buildGearNames(), ...buildWorldNames(), ...buildProgressNames(), ...buildStoryNames() };
 
 const split = (side: 'en' | 'de'): Record<string, string> => Object.fromEntries(Object.entries(NAME_TABLE).map(([k, v]) => [k, v[side]]));
 export const NAMES_EN: Record<string, string> = split('en');

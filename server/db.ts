@@ -47,6 +47,7 @@ export interface ProfileRepo {
   get(accountId: string): ProfileRow | undefined;
   save(row: ProfileRow): void;
   topByLevel(limit: number): Array<{ accountId: string; name: string; level: number }>;
+  topByHonor(limit: number): Array<{ accountId: string; name: string; honor: number }>;
 }
 
 export interface ChatRepo {
@@ -103,6 +104,10 @@ export class SqliteProfileRepo implements ProfileRepo {
        map_id = excluded.map_id, level = excluded.level, updated_at = excluded.updated_at`
     ).run(row.accountId, JSON.stringify(row.character), JSON.stringify(row.ammo), row.mapId, row.character.level, row.updatedAt);
   }
+  topByHonor(limit: number) {
+    return (this.db.prepare(`SELECT a.id AS id, a.name AS name, CAST(json_extract(p.character_json, '$.wallet.honor') AS INTEGER) AS honor FROM profiles p JOIN accounts a ON a.id = p.account_id WHERE honor > 0 ORDER BY honor DESC, p.updated_at ASC LIMIT ?`).all(limit) as any[])
+      .map((r) => ({ accountId: r.id, name: r.name, honor: r.honor }));
+  }
   topByLevel(limit: number) {
     return (this.db.prepare('SELECT a.id AS id, a.name AS name, p.level AS level FROM profiles p JOIN accounts a ON a.id = p.account_id ORDER BY p.level DESC, p.updated_at ASC LIMIT ?').all(limit) as any[])
       .map((r) => ({ accountId: r.id, name: r.name, level: r.level }));
@@ -148,6 +153,20 @@ export class SqliteWarRepo {
     const out: Record<string, number> = { coastal: 0, highland: 0, steppe: 0 };
     for (const r of this.db.prepare(`SELECT faction, score FROM war_scores WHERE week = ?`).all(week) as any[]) out[r.faction] = r.score;
     return out;
+  }
+  /** Seconds a player spent fighting for a control point of their own faction in `week`. */
+  addContribution(week: string, accountId: string, seconds: number): void {
+    this.db.prepare(`INSERT INTO war_contrib (week, account_id, seconds) VALUES (?, ?, ?) ON CONFLICT(week, account_id) DO UPDATE SET seconds = seconds + excluded.seconds`).run(week, accountId, seconds);
+  }
+  contribution(week: string, accountId: string): number {
+    return ((this.db.prepare(`SELECT seconds FROM war_contrib WHERE week = ? AND account_id = ?`).get(week, accountId) as any)?.seconds as number | undefined) ?? 0;
+  }
+  hasClaimed(week: string, accountId: string): boolean {
+    return !!this.db.prepare(`SELECT 1 FROM war_claims WHERE week = ? AND account_id = ?`).get(week, accountId);
+  }
+  /** True exactly once per (week, account): the primary key decides, so two simultaneous claims cannot both win. */
+  claim(week: string, accountId: string, now: number): boolean {
+    return Number(this.db.prepare(`INSERT OR IGNORE INTO war_claims (week, account_id, claimed_at) VALUES (?, ?, ?)`).run(week, accountId, now).changes) === 1;
   }
 }
 

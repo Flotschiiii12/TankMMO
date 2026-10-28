@@ -32,6 +32,7 @@ import { HintToast, HowToPlay, TutorialChip } from './Guidance.tsx';
 import { markShown, newHintMemory, nextHint, type HintState } from '../../shared/rules/hints.ts';
 import { tutorialStatus, tutorialFlag, questMarkers } from '../../shared/rules/quests.ts';
 import { TUTORIAL_STEPS } from '../../shared/data/quests.ts';
+import { WAR_MAPS } from '../../shared/sim/war.ts';
 import { activeEvents, eventAppliesToMap, worldBossSlot, WORLD_BOSS_PERIOD_SECONDS } from '../../shared/sim/events.ts';
 import { KillFeed, LowHealthVignette, TargetPanel } from './CombatHud.tsx';
 import { DamageNumberMerger, killFeedEntry, type KillFeedEntry } from './combatLogic.ts';
@@ -63,6 +64,19 @@ function runningEventLines(mapId: number): string[] {
   if (wb.mapId === mapId) lines.push(`${nm('event.world_boss.name', 'World Boss')} · ${fmtClock(wb.startsAt + WORLD_BOSS_PERIOD_SECONDS - now)}`);
   return lines;
 }
+/** One plain-language line after a player kill / death, including why honor was withheld. */
+function pvpSummaryText(d: any): string {
+  if (d.role === 'death') return tr('Defeated by {other} (-{n} honor)', { other: d.other, n: -d.honor });
+  const parts: string[] = [];
+  if (d.honor > 0) parts.push(tr('Kill: {other} (+{honor} honor)', { other: d.other, honor: d.honor }));
+  else if (d.reason === 'level_gap') parts.push(tr('Kill: {other}, no honor: the level gap is more than {n}', { other: d.other, n: 5 }));
+  else if (d.reason === 'repeat_target') parts.push(tr('Kill: {other}, no honor: you were paid for this player in the last {n} minutes', { other: d.other, n: 30 }));
+  else parts.push(tr('Kill: {other} (+{honor} honor)', { other: d.other, honor: 0 }));
+  if (d.bounty > 0) parts.push(tr('Bounty claimed: +{n} scrap', { n: d.bounty }));
+  if (d.capped) parts.push(tr('You can not hit {other} for the next hour: kill limit reached', { other: d.other }));
+  return parts.join(' · ');
+}
+const FACTION_LABEL: Record<string, string> = { coastal: 'Coastal Union', highland: 'Highland Union', steppe: 'Steppe Caravan' };
 const fmtClock = (sec: number) => { const s = Math.max(0, Math.floor(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ online }) => {
@@ -90,6 +104,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([]);
   const [howToOpen, setHowToOpen] = useState(false);
   const [replayScene, setReplayScene] = useState<StoryScene | null>(null);
+  const warRef = useRef<Array<{ id: string; x: number; y: number; radius: number; owner: string | null; progress: Record<string, number>; contested: boolean }>>([]);
+  const warOwnersRef = useRef<Record<string, string | null>>({});
+  const [warLines, setWarLines] = useState<string[]>([]);
   const [hint, setHint] = useState<{ id: string; text: string } | null>(null);
   const hintMemRef = useRef(newHintMemory());
   const lastSpecialAmmo = useRef(0);
@@ -148,13 +165,13 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       refreshParty();
       online.onSocialEvent((kind, d) => {
         if (kind === 'party_update') setPartyNames(d ? d.members.map((m: any) => m.name) : []);
-        const text = kind === 'friend_request' ? tr('{from} sent you a friend request', { from: d.from }) : kind === 'friend_accepted' ? tr('{from} is now your friend', { from: d.from }) : kind === 'party_invite' ? tr('{from} invited you to a party', { from: d.from }) : kind === 'clan_invite' ? tr('{from} invited you to {clan}', { from: d.from, clan: d.clan }) : kind === 'event_reward' ? tr('{event} reward: +{scrap} scrap for {kills} kills', { event: nm(`event.${d.event}.name`, d.event), scrap: d.scrap, kills: d.kills }) : kind === 'announcement' ? `${tr('Announcement')}: ${d.text}` : kind === 'achievement' ? `${tr('Achievement unlocked')}: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `${tr('Gate')} ${tr(String(d.result))}` : kind === 'arena_start' ? tr('Arena match starting') : kind === 'arena_round' ? `${tr('Round over')}: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `${d.won ? tr('Arena won') : tr('Arena lost')} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
+        const text = kind === 'friend_request' ? tr('{from} sent you a friend request', { from: d.from }) : kind === 'friend_accepted' ? tr('{from} is now your friend', { from: d.from }) : kind === 'party_invite' ? tr('{from} invited you to a party', { from: d.from }) : kind === 'clan_invite' ? tr('{from} invited you to {clan}', { from: d.from, clan: d.clan }) : kind === 'pvp_summary' ? pvpSummaryText(d) : kind === 'event_reward' ? tr('{event} reward: +{scrap} scrap for {kills} kills', { event: nm(`event.${d.event}.name`, d.event), scrap: d.scrap, kills: d.kills }) : kind === 'announcement' ? `${tr('Announcement')}: ${d.text}` : kind === 'achievement' ? `${tr('Achievement unlocked')}: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `${tr('Gate')} ${tr(String(d.result))}` : kind === 'arena_start' ? tr('Arena match starting') : kind === 'arena_round' ? `${tr('Round over')}: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `${d.won ? tr('Arena won') : tr('Arena lost')} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
         if (text) setNotices((n) => [...n.slice(-4), text]);
         if (kind === 'arena_phase') { arenaRef.current = { phase: d.phase, round: d.round, wins: d.wins, endsAt: Date.now() + d.secondsLeft * 1000 }; setProgress('arena'); }
         else if (kind === 'arena_start') setProgress(`${tr('Arena')} · ${tr('Round')} 1`);
         else if (kind === 'arena_round' && !arenaRef.current) setProgress(`${tr('Arena')} · ${d.wins?.join(' - ')}`);
         else if (kind === 'arena_result') { arenaRef.current = null; setProgress(null); }
-        if (text && (kind.startsWith('arena') || kind === 'dungeon' || kind === 'achievement' || kind === 'event_reward' || kind === 'announcement')) showBanner(text);
+        if (text && (kind.startsWith('arena') || kind === 'dungeon' || kind === 'achievement' || kind === 'event_reward' || kind === 'pvp_summary' || kind === 'announcement')) showBanner(text);
       });
     }
     rendererRef.current = new WorldRenderer(cameraRef.current, particlesRef.current);
@@ -240,6 +257,32 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     const id = setInterval(() => forceRender((n) => (n + 1) % 1e6), 200);
     return () => clearInterval(id);
   }, []);
+
+  // Faction war: poll the control points while on a war map (zones 21 - 24), draw them, show a chip and announce captures
+  useEffect(() => {
+    if (!online || gameState !== 'PLAYING') return;
+    const id = setInterval(async () => {
+      if (!WAR_MAPS.includes(online.mapId)) { if (warRef.current.length) { warRef.current = []; warOwnersRef.current = {}; setWarLines([]); if (rendererRef.current) rendererRef.current.warPoints = []; } return; }
+      const r = await online.social({ op: 'war_status' });
+      if (!r.ok) return;
+      const pts = r.data.points as typeof warRef.current;
+      const mine = r.data.myFaction as string;
+      for (const p of pts) {
+        const prev = warOwnersRef.current[p.id];
+        if (prev !== undefined && prev !== p.owner) {
+          if (p.owner === mine) showBanner(tr('Control point captured by {faction}', { faction: tr(FACTION_LABEL[p.owner] ?? p.owner) }));
+          else if (p.owner) showBanner(tr('Control point lost to {faction}', { faction: tr(FACTION_LABEL[p.owner] ?? p.owner) }));
+        }
+        warOwnersRef.current[p.id] = p.owner;
+      }
+      warRef.current = pts;
+      if (rendererRef.current) rendererRef.current.warPoints = pts;
+      const me = clientRef.current?.getPredictedPlayer();
+      const near = me ? pts.map((p, i) => ({ p, i, d: Math.hypot(p.x - me.pos.x, p.y - me.pos.y) })).filter((x) => x.d < 1100).sort((a, b) => a.d - b.d)[0] : undefined;
+      setWarLines(near ? [tr('Control point {n}: {owner} {pct} %', { n: near.i + 1, owner: near.p.owner ? tr(FACTION_LABEL[near.p.owner] ?? near.p.owner) : tr('neutral'), pct: Math.round(Math.max(...Object.values(near.p.progress))) }) + (near.p.contested ? ` · ${tr('contested')}` : '')] : []);
+    }, 2000);
+    return () => clearInterval(id);
+  }, [online, gameState, showBanner]);
 
   // Contextual hints for new players: evaluated twice a second, shown for 8 s, never nagging (see shared/rules/hints.ts)
   useEffect(() => {
@@ -905,7 +948,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             mapHeight={currentMapDef?.height || 4000}
             partyNames={partyNames}
             mapName={currentMapDef?.name || 'Green Valley'}
-            eventLines={runningEventLines(online ? online.mapId : Number(profile.currentMapId) || 1)}
+            eventLines={[...runningEventLines(online ? online.mapId : Number(profile.currentMapId) || 1), ...warLines]}
             isSafeZone={inSafeZone}
             profile={profile}
             chatMessages={activeSnapshot?.chatHistory || []}

@@ -55,3 +55,21 @@ export function weeklyWinner(scores: Record<string, number>): string | undefined
 }
 
 export const WAR_WINNER_MARKET_DISCOUNT = 0.02; // cosmetic + convenience only, never combat stats
+
+// ---------------------------------------------------------------------------
+// Weekly result and rewards (cloud run 3)
+// ---------------------------------------------------------------------------
+
+/** Seconds spent contributing to a control point of the own faction that a player needs for the weekly reward. */
+export const WAR_CLAIM_MIN_SECONDS = 120;
+/** What the winning faction's contributors can claim once for the week that just ended (the 2 % market discount applies automatically). */
+export const WAR_REWARD = { scrap: 1000, seasonMarks: 40, title: 'War Victor' } as const;
+
+/** Seconds a full capture takes with one faction on an empty point (derived from the rates, used by the war screen). */
+export const CAPTURE_SECONDS = Math.ceil(100 / CAPTURE_PER_SECOND);
+
+/** Is a player at `pos` of `faction` fighting for this point (standing on it while it is theirs or they are taking it)? */
+export function contributesTo(point: WarPoint, pos: { x: number; y: number }, faction: string): boolean {
+  if ((pos.x - point.x) ** 2 + (pos.y - point.y) ** 2 > point.radius ** 2) return false;
+  return point.owner === faction || point.progress[faction] > 0;
+}

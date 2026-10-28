@@ -13,7 +13,7 @@ import * as C from '../shared/rules/character.ts';
 import { AMMO_PRICES, ammoCost, executeAction } from '../shared/rules/actions.ts';
 import { calculateKillXP } from '../shared/rules/progression.ts';
 import * as Q from '../shared/rules/quests.ts';
-import { canEngage, BOUNTY_SCRAP_PER_STREAK, BOUNTY_STREAK, HONOR_LOSS_ON_DEATH, honorForKill, registerPvpKill } from '../shared/sim/pvp.ts';
+import { canEngage, BOUNTY_SCRAP_PER_STREAK, BOUNTY_STREAK, HONOR_LOSS_ON_DEATH, HONOR_REPEAT_SECONDS, honorOutcome, KILL_CAP_COUNT, KILL_CAP_IMMUNITY_SECONDS, KILL_CAP_WINDOW_SECONDS, PVP_DAMAGE_MULT, PVP_LEVEL_WINDOW, PVP_MIN_LEVEL, registerPvpKill } from '../shared/sim/pvp.ts';
 import { refreshPlayerStats, spawnPlayerFromCharacter } from '../shared/sim/playerEntity.ts';
 import { createWorld, stepWorld, World } from '../shared/sim/world.ts';
 import { weeklyWinner } from '../shared/sim/war.ts';
@@ -22,6 +22,7 @@ import { AccountService } from './accounts.ts';
 import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
 import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
 import { MatchRecorder, MAX_SPECTATORS_PER_MATCH, SPECTATE_DELAY_TICKS, SpectateHud, SpectateMatchInfo } from './spectate.ts';
+import { CAPTURE_SECONDS, contributesTo, WAR_CLAIM_MIN_SECONDS, WAR_REWARD } from '../shared/sim/war.ts';
 import { invasionReward, isWeekendXp, WEEKEND_XP_MULTIPLIER } from '../shared/sim/events.ts';
 import { NEWBIE_PROTECTION_LEVEL } from '../shared/rules/hints.ts';
 import { AllianceRepo, ClanStorageRepo, STORAGE_DAILY_WITHDRAW } from './clanStorage.ts';
@@ -140,6 +141,8 @@ interface Session {
   lastShotAt?: number;
   /** raiders destroyed during the running invasion on this map (reward when it ends) */
   invasionKills?: number;
+  /** seconds fighting for an own-faction control point since the last flush to the database */
+  warSeconds?: number;
 }
 
 interface Party { id: number; leader: string; members: Set<string> }
@@ -283,7 +286,7 @@ export class GameServer {
         }
       }
     }
-    this.guarded('periodic', () => { if (this.tick % TICK_HZ === 0) { this.runMatchmaking(); this.checkSecrets(); } });
+    this.guarded('periodic', () => { if (this.tick % TICK_HZ === 0) { this.runMatchmaking(); this.checkSecrets(); this.accrueWar(); } });
     took('every_second');
     this.guarded('war_scores', () => { if (this.tick % (TICK_HZ * 30) === 0) this.flushWarScores(); });
     took('war_scores');
@@ -978,7 +981,7 @@ export class GameServer {
       }
       case 'ranking':
         if (req.kind.startsWith('arena_')) return reply({ ok: true, data: this.deps.arena.top(req.kind.slice(6)) });
-        if (req.kind === 'honor') return reply({ ok: true, data: this.deps.profiles.topByLevel(20) });
+        if (req.kind === 'honor') return reply({ ok: true, data: this.deps.profiles.topByHonor(20) });
         return reply({ ok: true, data: req.kind === 'clans' ? social.clanRanking(20) : this.deps.profiles.topByLevel(20) });
       case 'arena_queue': return reply(this.arenaQueueJoin(s, req.mode));
       case 'dungeon_list': case 'dungeon_enter': case 'dungeon_leave': return reply(this.handleDungeon(s, req as any));
@@ -996,10 +999,8 @@ export class GameServer {
         const power = stats ? AR.arenaPower(stats.dps, stats.maxHull, stats.maxArmor, stats.flatReduction) : 0;
         return reply({ ok: true, data: { power, league: AR.leagueForPower(power), ratings, queued: this.arenaQueue.find((e) => e.id === s.accountId)?.mode ?? null, inMatch: !!s.instance.arena, banMinutes: Math.ceil(Math.max(0, (this.arenaBans.get(s.accountId) ?? 0) - this.clock.nowMs()) / 60000) } });
       }
-      case 'war_status': {
-        const week = Q.weekKey(Math.floor(this.clock.nowMs() / 1000));
-        return reply({ ok: true, data: { week, scores: this.deps.war.scores(week), lastWeekWinner: this.lastWeekWinner() } });
-      }
+      case 'war_status': return reply({ ok: true, data: this.warStatus(s) });
+      case 'war_claim': return reply(this.warClaim(s));
     }
   }
 
@@ -1139,7 +1140,8 @@ export class GameServer {
     const kEnt = world.entities.get(killer.entityId);
     if (!kEnt || !world.pvp) return;
     registerPvpKill(world, kEnt.id, vEnt.id);
-    const honor = honorForKill(world, kEnt, vEnt, killer.lastHonorAt, Math.floor(world.time));
+    const outcome = honorOutcome(world, kEnt, vEnt, killer.lastHonorAt, Math.floor(world.time));
+    const honor = outcome.honor;
     if (!world.pvp.arena) {
       killer.character.wallet.honor += honor;
       victim.character.wallet.honor = Math.max(0, victim.character.wallet.honor - HONOR_LOSS_ON_DEATH);
@@ -1158,6 +1160,12 @@ export class GameServer {
     killer.dirty = victim.dirty = true;
     this.sendCharacter(killer);
     this.sendCharacter(victim);
+    // plain-language summary after every player kill (rules explained when something was withheld)
+    if (!world.pvp.arena) {
+      const capHit = (world.pvpImmunity.get(`${kEnt.id}>${vEnt.id}`) ?? 0) > world.time;
+      this.send(killer, { type: 's_social_event', kind: 'pvp_summary', data: { role: 'kill', other: victim.name, honor, bounty: hadBounty, streak: killer.streak, reason: outcome.reason, capped: capHit } });
+      this.send(victim, { type: 's_social_event', kind: 'pvp_summary', data: { role: 'death', other: killer.name, honor: -HONOR_LOSS_ON_DEATH, bounty: 0, streak: 0 } });
+    }
   }
 
   private systemMessage(inst: Instance, text: string): void {
@@ -1787,6 +1795,55 @@ export class GameServer {
 
   // ---------------------------------------------------------------- faction war
 
+  /** Everything the war screen shows: this week's scores and time left, the last result with the reward state of this player, control points on the current map. */
+  private warStatus(s: Session) {
+    const nowSec = Math.floor(this.clock.nowMs() / 1000);
+    const week = Q.weekKey(nowSec);
+    const lastWeek = `w${Number(week.slice(1)) - 1}`;
+    const winner = weeklyWinner(this.deps.war.scores(lastWeek));
+    const mine = this.deps.war.contribution(lastWeek, s.accountId);
+    const claimed = this.deps.war.hasClaimed(lastWeek, s.accountId);
+    const w = s.instance.world;
+    return {
+      week, scores: this.deps.war.scores(week), weekEndsInSeconds: Q.weekEndsAt(nowSec) - nowSec, lastWeekWinner: winner,
+      last: { week: lastWeek, scores: this.deps.war.scores(lastWeek), winner, mySeconds: mine, neededSeconds: WAR_CLAIM_MIN_SECONDS, claimed, canClaim: !!winner && winner === s.character.faction && mine >= WAR_CLAIM_MIN_SECONDS && !claimed },
+      reward: { ...WAR_REWARD, marketDiscount: WAR_WINNER_MARKET_DISCOUNT },
+      myFaction: s.character.faction,
+      points: (w.war ?? []).map((p) => ({ id: p.id, x: Math.round(p.x), y: Math.round(p.y), radius: p.radius, owner: p.owner ?? null, progress: { coastal: Math.round(p.progress.coastal), highland: Math.round(p.progress.highland), steppe: Math.round(p.progress.steppe) }, contested: p.contested })),
+      rules: { minLevel: PVP_MIN_LEVEL, levelWindow: PVP_LEVEL_WINDOW, killCap: KILL_CAP_COUNT, killCapWindowMin: KILL_CAP_WINDOW_SECONDS / 60, immunityMin: KILL_CAP_IMMUNITY_SECONDS / 60, honorRepeatMin: HONOR_REPEAT_SECONDS / 60, damagePercent: Math.round(PVP_DAMAGE_MULT * 100), captureSeconds: CAPTURE_SECONDS },
+    };
+  }
+
+  /** One reward per player and week for the winning faction's contributors; the database key decides if two requests race. */
+  private warClaim(s: Session): { ok: boolean; error?: string; data?: any } {
+    const nowSec = Math.floor(this.clock.nowMs() / 1000);
+    const lastWeek = `w${Number(Q.weekKey(nowSec).slice(1)) - 1}`;
+    const winner = weeklyWinner(this.deps.war.scores(lastWeek));
+    if (!winner) return { ok: false, error: 'no_winner' };
+    if (winner !== s.character.faction) return { ok: false, error: 'not_winner' };
+    if (this.deps.war.contribution(lastWeek, s.accountId) < WAR_CLAIM_MIN_SECONDS) return { ok: false, error: 'not_enough_contribution' };
+    if (!this.deps.war.claim(lastWeek, s.accountId, nowSec)) return { ok: false, error: 'already_claimed' };
+    const ch = s.character;
+    ch.wallet.scrap += WAR_REWARD.scrap;
+    ch.wallet.seasonMarks += WAR_REWARD.seasonMarks;
+    if (!ch.season.titles.includes(WAR_REWARD.title)) ch.season.titles.push(WAR_REWARD.title);
+    s.dirty = true; this.save(s); this.sendCharacter(s);
+    return { ok: true, data: { scrap: WAR_REWARD.scrap, seasonMarks: WAR_REWARD.seasonMarks, title: WAR_REWARD.title } };
+  }
+
+  /** Once a second: players fighting for a control point of their own faction collect war contribution seconds. */
+  private accrueWar(): void {
+    for (const list of this.instances.values()) for (const inst of list) {
+      const points = inst.world.war;
+      if (!points?.length) continue;
+      for (const s of inst.sessions) {
+        const e = inst.world.entities.get(s.entityId);
+        if (!e || e.hull <= 0 || !e.faction) continue;
+        if (points.some((p) => contributesTo(p, e.pos, e.faction!))) s.warSeconds = (s.warSeconds ?? 0) + 1;
+      }
+    }
+  }
+
   private lastWeekWinner(): string | undefined {
     const wk = Number(Q.weekKey(Math.floor(this.clock.nowMs() / 1000)).slice(1));
     return weeklyWinner(this.deps.war.scores(`w${wk - 1}`));
@@ -1795,6 +1852,7 @@ export class GameServer {
   /** Move accumulated control-point score of every instance into the weekly totals (called every 30 s). */
   private flushWarScores(): void {
     const week = Q.weekKey(Math.floor(this.clock.nowMs() / 1000));
+    for (const s of this.sessions.values()) if (s.warSeconds) { this.deps.war.addContribution(week, s.accountId, s.warSeconds); s.warSeconds = 0; }
     for (const list of this.instances.values()) for (const inst of list) {
       for (const [f, v] of Object.entries(inst.world.warScore)) { if (v >= 1) { this.deps.war.add(week, f, Math.floor(v)); inst.world.warScore[f] = v - Math.floor(v); } }
     }

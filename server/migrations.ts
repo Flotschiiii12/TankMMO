@@ -203,6 +203,23 @@ CREATE TABLE IF NOT EXISTS clan_alliances (
 );`);
     },
   },
+  {
+    version: 5,
+    name: 'faction war contribution and weekly reward claims',
+    up: (db) => db.exec(`
+CREATE TABLE IF NOT EXISTS war_contrib (
+  week TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  seconds INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (week, account_id)
+);
+CREATE TABLE IF NOT EXISTS war_claims (
+  week TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  claimed_at INTEGER NOT NULL,
+  PRIMARY KEY (week, account_id)
+);`),
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

@@ -60,6 +60,8 @@ export const createSeasonState = (): SeasonState => ({ seasonId: 0, points: 0, c
 export const dayKey = (clockSeconds: number): string => `d${Math.floor(clockSeconds / 86400)}`;
 /** Weeks start on Monday (epoch day 0 was a Thursday). */
 export const weekKey = (clockSeconds: number): string => `w${Math.floor((Math.floor(clockSeconds / 86400) + 3) / 7)}`;
+/** Epoch second at which the week of `clockSeconds` ends (weeks start on Monday, UTC). */
+export const weekEndsAt = (clockSeconds: number): number => ((Math.floor((Math.floor(clockSeconds / 86400) + 3) / 7) + 1) * 7 - 3) * 86400;
 export const seasonIdFor = (clockSeconds: number): number => Math.floor(clockSeconds / SEASON_LENGTH_SECONDS) + 1;
 
 function hashString(s: string): number {

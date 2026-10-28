@@ -93,6 +93,8 @@ export type SocialOp =
   | { op: 'spectate_join'; matchId: string }
   | { op: 'spectate_leave' }
   | { op: 'war_status' }
+  | { op: 'war_claim' }
+  | { op: 'war_claim' }
   | { op: 'ah_sell'; uid: string; price: number; hours: number }
   | { op: 'ah_search'; defId?: string; slot?: string; maxPrice?: number }
   | { op: 'ah_mine' }
@@ -129,7 +131,7 @@ export interface ServerSocialResultPacket {
 
 export interface ServerSocialEventPacket {
   type: 's_social_event';
-  kind: 'event_reward' | 'clan_storage' | 'clan_allies' | 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_phase' | 'arena_result' | 'war_result' | 'trade_update' | 'mail' | 'achievement' | 'dungeon';
+  kind: 'pvp_summary' | 'event_reward' | 'clan_storage' | 'clan_allies' | 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_phase' | 'arena_result' | 'war_result' | 'trade_update' | 'mail' | 'achievement' | 'dungeon';
   data: any;
 }
 

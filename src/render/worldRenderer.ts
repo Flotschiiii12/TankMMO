@@ -296,6 +296,8 @@ export class WorldRenderer {
   /** HUD scale setting (0.8 - 1.4): name plate text follows it */
   uiScale = 1;
   private localPlayer: SimEntity | null = null;
+  /** faction-war control points of the current map (polled from the server every few seconds) */
+  warPoints: Array<{ id: string; x: number; y: number; radius: number; owner: string | null; progress: Record<string, number>; contested: boolean }> = [];
   private byId = new Map<number, SimEntity>();
 
   public render(
@@ -328,6 +330,8 @@ export class WorldRenderer {
     } else if (mapDef.safeZone) {
       this.renderSafeZone(ctx, mapDef.safeZone, time);
     }
+
+    for (const p of this.warPoints) this.renderWarPoint(ctx, p, time);
 
     // 5. Render Tread Marks
     this.particles.renderTreads(ctx, this.camera);
@@ -948,6 +952,22 @@ export class WorldRenderer {
     ctx.fillStyle = isHostile ? (this.colorBlind ? '#f59e0b' : '#ef4444') : (this.colorBlind ? '#38bdf8' : '#22c55e');
     ctx.fillRect(-barW / 2, barH + 1, barW * hpRatio, barH);
 
+    ctx.restore();
+  }
+
+  private static readonly WAR_COLOR: Record<string, string> = { coastal: '#38bdf8', highland: '#4ade80', steppe: '#fbbf24' };
+  /** Ground ring of a control point: owner colour, capture progress arc of the leading faction, red dashes while contested. */
+  private renderWarPoint(ctx: CanvasRenderingContext2D, p: { x: number; y: number; radius: number; owner: string | null; progress: Record<string, number>; contested: boolean }, time: number) {
+    const s = this.camera.worldToScreen(p); const z = this.camera.zoom; const r = p.radius * z;
+    if (s.x < -r || s.x > this.camera.viewportWidth + r || s.y < -r || s.y > this.camera.viewportHeight + r) return;
+    const owner = p.owner ? WorldRenderer.WAR_COLOR[p.owner] : '#94a3b8';
+    ctx.save();
+    ctx.fillStyle = owner; ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.85; ctx.strokeStyle = owner; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.stroke();
+    let lead: string | undefined; let best = 0;
+    for (const [f, v] of Object.entries(p.progress)) if (v > best) { best = v; lead = f; }
+    if (lead && best > 0) { ctx.strokeStyle = WorldRenderer.WAR_COLOR[lead]; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(s.x, s.y, r * 0.8, -Math.PI / 2, -Math.PI / 2 + (best / 100) * Math.PI * 2); ctx.stroke(); }
+    if (p.contested && !this.reducedEffects) { ctx.strokeStyle = '#f87171'; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.lineDashOffset = -time * 20; ctx.beginPath(); ctx.arc(s.x, s.y, r * 0.92, 0, Math.PI * 2); ctx.stroke(); }
     ctx.restore();
   }
 

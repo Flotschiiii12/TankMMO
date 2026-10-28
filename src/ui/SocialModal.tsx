@@ -10,13 +10,15 @@ import { ITEM_BY_ID } from '../../shared/data/items.ts';
 import { priceBandClient } from '../game/priceBand.ts';
 import { ACHIEVEMENTS_CATALOG } from '../../shared/data/achievements.ts';
 import { ClanExtras } from './ClanExtras.tsx';
+import { WarPanel } from './WarPanel.tsx';
 import { SpectateList } from './SpectateList.tsx';
 import { RankBadge, FactionCrest, ClanEmblemBadge, CurrencyIcon } from './GameIcon.tsx';
 import { CLAN_EMBLEMS } from '../../shared/data/emblems.ts';
 import { getRankForHonor } from '../../shared/data/ranks.ts';
 import { codexProgress, progressOf } from '../../shared/rules/achievements.ts';
 
-type Tab = 'friends' | 'party' | 'clan' | 'ranking' | 'market' | 'arena' | 'gates' | 'career';
+type Tab = 'friends' | 'party' | 'clan' | 'war' | 'ranking' | 'market' | 'arena' | 'gates' | 'career';
+type RankKind = 'level' | 'clans' | 'honor' | 'arena_1v1' | 'arena_3v3' | 'arena_5v5';
 
 export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; onClose: () => void; notices: string[]; character: import('../../shared/rules/character.ts').CharacterState }> = ({ client, isOpen, onClose, notices, character }) => {
   const [sellUid, setSellUid] = useState('');
@@ -25,7 +27,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
   const [tab, setTab] = useState<Tab>('friends');
   const [msg, setMsg] = useState('');
   const [name, setName] = useState('');
-  const [rankKind, setRankKind] = useState<'level' | 'clans'>('level');
+  const [rankKind, setRankKind] = useState<RankKind>('level');
   const [rawData, setRawData] = useState<{ key: string; value: any } | null>(null);
   const tabKey = `${tab}:${rankKind}`;
   const data = rawData && rawData.key === tabKey ? rawData.value : null; // never render another tab's data
@@ -44,7 +46,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
   };
 
   const load = useCallback(async () => {
-    const req: SocialOp = tab === 'gates' ? { op: 'dungeon_list' } : tab === 'career' ? { op: 'friend_list' } : tab === 'market' ? { op: 'ah_search' } : tab === 'arena' ? { op: 'arena_status' } : tab === 'friends' ? { op: 'friend_list' } : tab === 'party' ? { op: 'party_info' } : tab === 'clan' ? { op: 'clan_info' } : { op: 'ranking', kind: rankKind };
+    const req: SocialOp = tab === 'gates' ? { op: 'dungeon_list' } : tab === 'career' ? { op: 'friend_list' } : tab === 'market' ? { op: 'ah_search' } : tab === 'arena' ? { op: 'arena_status' } : tab === 'friends' ? { op: 'friend_list' } : tab === 'party' ? { op: 'party_info' } : tab === 'clan' ? { op: 'clan_info' } : tab === 'war' ? { op: 'war_status' } : { op: 'ranking', kind: rankKind };
     const r = await client.social(req);
     setData(r.ok ? r.data : tab === 'clan' ? { none: true, invites: (await client.social({ op: 'clan_invites' })).data ?? [] } : null);
   }, [client, tab, rankKind]);
@@ -64,7 +66,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
           <button onClick={() => { soundEngine.playUIClick(); onClose(); }} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
         <div className="flex gap-2 mt-2 text-xs items-center">
-          {(['friends', 'party', 'clan', 'ranking', 'market', 'arena', 'gates', 'career'] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded capitalize ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{tr(t)}</button>)}
+          {(['friends', 'party', 'clan', 'war', 'ranking', 'market', 'arena', 'gates', 'career'] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded capitalize ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{tr(t)}</button>)}
           {msg && <span className="ml-auto text-[11px] text-orange-300">{msg}</span>}
         </div>
         {notices.length > 0 && <div className="mt-2 text-[11px] text-emerald-300">{notices.slice(-2).join(' · ')}</div>}
@@ -120,6 +122,8 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
               </>
             )
           )}
+
+          {tab === 'war' && <WarPanel client={client} />}
 
           {tab === 'gates' && data && (
             <>
@@ -190,8 +194,9 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
 
           {tab === 'ranking' && (
             <>
-              <div className="flex gap-1.5">{(['level', 'clans'] as const).map((k) => <button key={k} onClick={() => setRankKind(k)} className={`px-2 py-1 rounded text-xs ${rankKind === k ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{k}</button>)}</div>
-              {(data ?? []).map((r: any, i: number) => <div key={i} className={row}><span>#{i + 1} <b className="text-white inline-flex items-center gap-1">{r.emblem && <ClanEmblemBadge emblem={r.emblem} size={16} />}{r.name}{r.tag ? ` [${r.tag}]` : ''}</b></span><span className="text-slate-400">{r.level ? `Lv ${r.level}` : tr('{m} members · {l} levels', { m: r.members, l: r.totalLevel })}</span></div>)}
+              <div className="flex gap-1.5">{(['level', 'clans', 'honor', 'arena_1v1', 'arena_3v3', 'arena_5v5'] as const).map((k) => <button key={k} onClick={() => setRankKind(k)} className={`px-2 py-1 rounded text-xs ${rankKind === k ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{k.startsWith('arena') ? k.replace('arena_', tr('Arena') + ' ') : tr(k)}</button>)}</div>
+              {(rankKind === 'honor' || rankKind.startsWith('arena')) && <div className="text-[11px] text-slate-500">{rankKind === 'honor' ? tr('Honor is earned in PvP on the war maps and never resets.') : tr('Arena season {n}: ratings start at 1000; a new season starts from scratch.', { n: 1 })}</div>}
+              {(data ?? []).map((r: any, i: number) => <div key={i} className={row}><span>#{i + 1} <b className="text-white inline-flex items-center gap-1">{r.emblem && <ClanEmblemBadge emblem={r.emblem} size={16} />}{r.name}{r.tag ? ` [${r.tag}]` : ''}</b></span><span className="text-slate-400">{r.honor !== undefined ? `${r.honor} ${tr('Honor')}` : r.rating !== undefined ? `${r.rating} · ${r.wins}W/${r.losses}L` : r.level ? `Lv ${r.level}` : tr('{m} members · {l} levels', { m: r.members, l: r.totalLevel })}</span></div>)}
             </>
           )}
         </div>

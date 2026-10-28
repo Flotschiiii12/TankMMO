@@ -88,13 +88,19 @@ export function registerPvpKill(world: World, killerId: number, victimId: number
 }
 
 /** Honor only for targets within +-5 levels and once per victim per 30 minutes (arena kills give none). */
-export function honorForKill(world: World, killer: SimEntity, victim: SimEntity, lastHonorAt: Map<number, number>, nowSeconds: number): number {
-  if (world.pvp?.arena) return 0;
-  if (Math.abs(killer.level - victim.level) > PVP_LEVEL_WINDOW) return 0;
+export type HonorReason = 'arena' | 'level_gap' | 'repeat_target';
+/** Honor for a kill and, when it is zero, why (shown to the player in plain language). */
+export function honorOutcome(world: World, killer: SimEntity, victim: SimEntity, lastHonorAt: Map<number, number>, nowSeconds: number): { honor: number; reason?: HonorReason } {
+  if (world.pvp?.arena) return { honor: 0, reason: 'arena' };
+  if (Math.abs(killer.level - victim.level) > PVP_LEVEL_WINDOW) return { honor: 0, reason: 'level_gap' };
   const last = lastHonorAt.get(victim.id);
-  if (last !== undefined && nowSeconds - last < HONOR_REPEAT_SECONDS) return 0;
+  if (last !== undefined && nowSeconds - last < HONOR_REPEAT_SECONDS) return { honor: 0, reason: 'repeat_target' };
   lastHonorAt.set(victim.id, nowSeconds);
-  return 20 + victim.level;
+  return { honor: 20 + victim.level };
+}
+
+export function honorForKill(world: World, killer: SimEntity, victim: SimEntity, lastHonorAt: Map<number, number>, nowSeconds: number): number {
+  return honorOutcome(world, killer, victim, lastHonorAt, nowSeconds).honor;
 }
 
 export const HONOR_LOSS_ON_DEATH = 5;

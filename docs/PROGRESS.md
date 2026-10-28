@@ -134,3 +134,4 @@ npm run build
 - Update 2026-10-28: modules and drones now affect stats; live at https://treadfront.213-199-44-82.sslip.io; screen shake removed; boss bar + banners; DE/EN UI; kill XP x0.2.
 - Update 2026-10-28 (2): faction chat (F), party markers on the radar, accessibility (colour-blind radar, reduced effects, UI size), automatic daily DB backup (BACKUP_DIR, newest 14) - no cron needed.
 - Update 2026-10-28 (3): PvP targeting + red name plates, Social tab crash fixed, HUD live refresh, reputation ammo discount, VITE_SERVER_URL for native builds.
+- Update 2026-10-28 (4): persistent gate-wave / arena-round chip in the HUD (event driven; no timer yet because snapshots carry no dungeon state).

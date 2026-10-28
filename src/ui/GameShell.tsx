@@ -17,7 +17,7 @@ import type { QuestEvent } from '../../shared/rules/quests.ts';
 import { QuestModal } from './QuestModal.tsx';
 import { SocialModal } from './SocialModal.tsx';
 import { ChatInput } from './ChatInput.tsx';
-import { Banner, BossBar } from './Overlays.tsx';
+import { Banner, BossBar, ProgressChip } from './Overlays.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts';
 import { HUD } from './HUD.tsx';
@@ -51,6 +51,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [socialOpen, setSocialOpen] = useState(false);
   const [notices, setNotices] = useState<string[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
   const [, forceRender] = useState(0);
   const [partyNames, setPartyNames] = useState<string[]>([]);
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,6 +105,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         if (kind === 'party_update') setPartyNames(d ? d.members.map((m: any) => m.name) : []);
         const text = kind === 'friend_request' ? `${d.from} sent you a friend request` : kind === 'friend_accepted' ? `${d.from} is now your friend` : kind === 'party_invite' ? `${d.from} invited you to a party` : kind === 'clan_invite' ? `${d.from} invited you to ${d.clan}` : kind === 'announcement' ? `Announcement: ${d.text}` : kind === 'achievement' ? `Achievement unlocked: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `Gate ${d.result}` : kind === 'arena_start' ? 'Arena match starting' : kind === 'arena_round' ? `Round over: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `Arena ${d.won ? 'won' : 'lost'} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
         if (text) setNotices((n) => [...n.slice(-4), text]);
+        if (kind === 'arena_start') setProgress('Arena · Round 1');
+        else if (kind === 'arena_round') setProgress(`Arena · ${d.wins?.join(' - ')}`);
+        else if (kind === 'arena_result') setProgress(null);
         if (text && (kind.startsWith('arena') || kind === 'dungeon' || kind === 'achievement' || kind === 'announcement')) showBanner(text);
       });
     }
@@ -232,9 +236,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         }
 
         case 'event_started': { showBanner(`Event: ${event.kind.replace(/_/g, ' ')}`); break; }
-        case 'dungeon_wave': { showBanner(`Wave ${event.wave} / ${event.total}`); break; }
-        case 'dungeon_cleared': { showBanner('Gate cleared!'); break; }
-        case 'dungeon_failed': { showBanner(`Gate failed (${event.reason})`); break; }
+        case 'dungeon_wave': { showBanner(`Wave ${event.wave} / ${event.total}`); setProgress(`Gate · Wave ${event.wave} / ${event.total}`); break; }
+        case 'dungeon_cleared': { showBanner('Gate cleared!'); setProgress(null); break; }
+        case 'dungeon_failed': { showBanner(`Gate failed (${event.reason})`); setProgress(null); break; }
         case 'boss_rewards': { showBanner('Boss defeated'); break; }
         case 'explosion': {
           particles.emitExplosion(event.pos, true);
@@ -834,6 +838,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} character={profile.character} />}
       {online && gameState === 'PLAYING' && <ChatInput client={online} />}
       {gameState === 'PLAYING' && <Banner text={banner} />}
+      {gameState === 'PLAYING' && <ProgressChip text={progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}
 
       <QuestModal

@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 export function openDatabase(path = ':memory:'): DatabaseSync {
   const db = new DatabaseSync(path);
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
   return db;
 }

@@ -43,6 +43,8 @@ export const MAX_COMMANDS_PER_SECOND = 90;
 export const MAX_COMMANDS_PER_PACKET = 16;
 export const RESPAWN_SECONDS = 5;
 export const AUTOSAVE_SECONDS = 30;
+const AUTOSAVE_PER_TICK = 6;
+const patchJson = new WeakMap<object, string>();
 export const CHAT_MIN_INTERVAL_MS = 1000;
 export const CHAT_BURST = { count: 5, windowMs: 10_000 };
 
@@ -203,7 +205,7 @@ export class GameServer {
     if (this.tick % TICK_HZ === 0) { this.runMatchmaking(); this.checkSecrets(); }
     if (this.tick % (TICK_HZ * 30) === 0) this.flushWarScores();
     if (this.tick % (TICK_HZ * 60) === 0) { this.sweepAuctions(); this.runScheduler(); }
-    if (this.tick % (TICK_HZ * AUTOSAVE_SECONDS) === 0) for (const s of this.sessions.values()) if (s.dirty) this.save(s);
+    this.autosaveSome();
     const ms = performance.now() - t0;
     this.metrics.ticks++;
     this.metrics.maxTickMs = Math.max(this.metrics.maxTickMs, ms);
@@ -1386,7 +1388,15 @@ export class GameServer {
       const { patches, removed } = s.encoder.encode(visible);
       const events = s.pendingEvents.filter((ev: any) => !ev.pos || (ev.pos.x - me.pos.x) ** 2 + (ev.pos.y - me.pos.y) ** 2 <= r2 * 1.4);
       s.pendingEvents = [];
-      this.send(s, { type: 's_state', tick: world.tick, lastProcessedSeq: s.lastSeq, serverTime: world.time, patches, removed, events });
+      // Patch objects are shared between clients, so each one is serialised once per tick, not once per client.
+      let body = '';
+      for (let i = 0; i < patches.length; i++) {
+        const pt = patches[i];
+        let js = patchJson.get(pt);
+        if (js === undefined) { js = JSON.stringify(pt); patchJson.set(pt, js); }
+        body += i ? ',' + js : js;
+      }
+      this.sendText(s.ws, `{"type":"s_state","tick":${world.tick},"lastProcessedSeq":${s.lastSeq},"serverTime":${world.time},"patches":[${body}],"removed":${JSON.stringify(removed)},"events":${JSON.stringify(events)}}`);
     }
   }
 
@@ -1424,6 +1434,17 @@ export class GameServer {
     this.send(s, { type: 's_character', character: s.character, ammo: ammo as any });
   }
 
+  /** Autosave is spread over ticks (a few sessions per tick) so 200 players never write in one 33 ms frame. */
+  private autosaveSome(): void {
+    const now = this.clock.nowMs();
+    let budget = AUTOSAVE_PER_TICK;
+    for (const s of this.sessions.values()) {
+      if (!s.dirty || now - s.lastSave < AUTOSAVE_SECONDS * 1000) continue;
+      this.save(s);
+      if (--budget <= 0) break;
+    }
+  }
+
   save(s: Session): void {
     if (!this.deps.accounts.get(s.accountId)) return; // account was deleted (admin/GDPR): nothing to persist
     const ent = s.instance?.world.entities.get(s.entityId);
@@ -1437,7 +1458,11 @@ export class GameServer {
 
   private sendRaw(ws: WebSocket, msg: ServerMessage): void {
     if (ws.readyState !== WebSocket.OPEN) return;
-    const data = JSON.stringify(msg);
+    this.sendText(ws, JSON.stringify(msg));
+  }
+
+  private sendText(ws: WebSocket, data: string): void {
+    if (ws.readyState !== WebSocket.OPEN) return;
     this.metrics.bytesOut += data.length;
     ws.send(data);
   }

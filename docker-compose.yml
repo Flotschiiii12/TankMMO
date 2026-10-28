@@ -1,0 +1,11 @@
+services:
+  treadfront:
+    build: .
+    container_name: treadfront
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3200:3000"   # put Caddy/nginx with TLS in front
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+    volumes:
+      - ./data:/data

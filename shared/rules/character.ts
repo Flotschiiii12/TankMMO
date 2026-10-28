@@ -3,6 +3,7 @@
  * CharacterState. Randomness comes from the SimRNG you pass in; nothing here touches time or the DOM.
  * All mutating functions return `{ ok: true, ... }` or `{ ok: false, error }` and leave the state untouched on failure.
  */
+import type { DroneSpec } from '../types.ts';
 import { MG_MAIN_DAMAGE_RATIO } from '../data/balance.ts';
 import { AFFIX_POOL, AFFIX_ROLL_BIAS } from '../data/affixes.ts';
 import {
@@ -478,6 +479,15 @@ export interface LoadoutStats {
   critDamage: number;
   flatReduction: number;
   dps: number;
+  drones: DroneSpec[];
+  radarMult: number;
+}
+
+/** Radar range factor from recon drones: +8 % per drone tier scaled by the drone's quality, capped at +60 %. */
+export function radarMultiplier(drones: DroneSpec[]): number {
+  let bonus = 0;
+  for (const d of drones) if (d.type === 'recon') bonus += 0.08 * d.tier * Math.min(2, d.power / (40 * d.tier));
+  return 1 + Math.min(0.6, bonus);
 }
 
 /** Module effects per tier (percent, or flat for 'flat_reduction'). Modules without a stat entry are utility only. */
@@ -500,6 +510,7 @@ export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVeh
   const mastery = 1 + masteryLevel(g.masteryXp) * MASTERY_BONUS_PER_LEVEL;
   const levelMult = 1 + (ch.level - 1) * 0.02;
 
+  const drones: DroneSpec[] = [];
   let hullBonus = 0, armorBonus = 0, speedBonus = 0, flat = 0, dmgAdd = 0, mgAdd = 0, range = v.range, mgRange = 300;
   let affDps = 0, affHull = 0, affArmor = 0, affSpeed = 0, affCrit = 0, affFlat = 0, affReload = 0, affRange = 0;
   for (const uid of Object.values(g.loadout)) {
@@ -509,7 +520,11 @@ export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVeh
     const m = itemStatMultiplier(item);
     if (def.slotType === 'main') { dmgAdd += (def.baseDPS ?? 0) * m * 0.5; range = Math.max(range, def.baseRange ?? range); }
     if (def.slotType === 'secondary') { mgAdd += (def.baseDPS ?? 0) * m * 0.15; mgRange = Math.max(mgRange, def.baseRange ?? mgRange); }
-    if (def.slotType === 'drone') dmgAdd += (def.baseDPS ?? 0) * m * 0.25;
+    if (def.slotType === 'drone') {
+      const dt = def.id.replace(/^drn_/, '').replace(/_t\d+$/, '');
+      const slot = Number(/^drone(\d+)$/.exec(Object.entries(g.loadout).find(([, u]) => u === uid)?.[0] ?? '')?.[1] ?? drones.length);
+      drones.push({ type: dt, tier: def.tier, slot, power: Math.round((def.baseDPS ?? 0) * m * (1 + (tal['drone_efficiency'] ?? 0))) }); // the drone's own gun / effect replaces the old flat damage bonus
+    }
     hullBonus += (def.baseHullBonus ?? 0) * m;
     armorBonus += (def.baseArmorBonus ?? 0) * m;
     speedBonus += (def.baseSpeedBonus ?? 0) * Math.min(m, MAX_SPEED_ITEM_MULT); // rarity/upgrades make guns and plating stronger, not the vehicle ever faster (shells miss fast targets)
@@ -554,6 +569,8 @@ export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVeh
     critDamage: 1.5 + (tal['crit_damage'] ?? 0),
     flatReduction,
     dps: Math.round(mainDamage / reload),
+    drones: drones.sort((x, y) => x.slot - y.slot),
+    radarMult: radarMultiplier(drones),
   };
 }
 

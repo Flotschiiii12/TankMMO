@@ -83,14 +83,14 @@ const MODULE: Record<string, Pair & { desc: Pair }> = {
 };
 
 const DRONE: Record<string, Pair & { desc: Pair }> = {
-  guardian: { en: 'Guardian Drone', de: 'Wächter-Drohne', desc: { en: 'Defensive drone that stays close to you.', de: 'Verteidigungsdrohne, die in deiner Nähe bleibt.' } },
-  sentinel: { en: 'Sentinel Drone', de: 'Posten-Drohne', desc: { en: 'Drone that keeps watch and supports you in combat.', de: 'Drohne, die Wache hält und dich im Kampf unterstützt.' } },
-  repair_bot: { en: 'Repair Bot Drone', de: 'Reparaturdrohne', desc: { en: 'Drone that helps repair your vehicle.', de: 'Drohne, die bei der Reparatur deines Fahrzeugs hilft.' } },
-  recon: { en: 'Recon Drone', de: 'Aufklärungsdrohne', desc: { en: 'Scouting drone for a wider view.', de: 'Aufklärungsdrohne für einen weiteren Überblick.' } },
-  arc_drone: { en: 'Arc Drone', de: 'Lichtbogendrohne', desc: { en: 'Attack drone with electric arcs.', de: 'Angriffsdrohne mit Lichtbögen.' } },
-  sapper: { en: 'Sapper Drone', de: 'Pionierdrohne', desc: { en: 'Support drone for dirty work at the front.', de: 'Unterstützungsdrohne für die Drecksarbeit an der Front.' } },
-  interceptor: { en: 'Interceptor Drone', de: 'Abfangdrohne', desc: { en: 'Drone that helps against incoming fire.', de: 'Drohne, die gegen anfliegendes Feuer hilft.' } },
-  aegis: { en: 'Aegis Drone', de: 'Aegis-Drohne', desc: { en: 'Drone that adds a protective field.', de: 'Drohne, die ein Schutzfeld hinzufügt.' } },
+  guardian: { en: 'Guardian Drone', de: 'Wächter-Drohne', desc: { en: 'Orbits you and takes a share of incoming damage until its shield pool is drained; the pool refills out of combat.', de: 'Umkreist dich und nimmt einen Teil des Schadens auf, bis sein Schildvorrat leer ist; der Vorrat füllt sich außerhalb von Kämpfen wieder.' } },
+  sentinel: { en: 'Sentinel Drone', de: 'Posten-Drohne', desc: { en: 'Flies at your side and shoots your locked target.', de: 'Fliegt an deiner Seite und beschießt dein anvisiertes Ziel.' } },
+  repair_bot: { en: 'Repair Bot Drone', de: 'Reparaturdrohne', desc: { en: 'Trails behind you and repairs hull and armor when you were not hit for 4 seconds.', de: 'Folgt dir und repariert Rumpf und Panzerung, wenn du 4 Sekunden nicht getroffen wurdest.' } },
+  recon: { en: 'Recon Drone', de: 'Aufklärungsdrohne', desc: { en: 'Circles high above you and widens your radar range.', de: 'Kreist hoch über dir und vergrößert die Reichweite deines Radars.' } },
+  arc_drone: { en: 'Arc Drone', de: 'Lichtbogendrohne', desc: { en: 'Zaps your target and up to two enemies next to it with chaining lightning.', de: 'Trifft dein Ziel und bis zu zwei Gegner daneben mit Kettenblitzen.' } },
+  sapper: { en: 'Sapper Drone', de: 'Pionierdrohne', desc: { en: 'Lays slowing mines behind you while enemies are near (up to 3 at a time).', de: 'Legt hinter dir bremsende Minen, solange Gegner in der Nähe sind (bis zu 3 gleichzeitig).' } },
+  interceptor: { en: 'Interceptor Drone', de: 'Abfangdrohne', desc: { en: 'Shoots down incoming enemy shells and weakens enemy ground strikes aimed at you.', de: 'Schießt anfliegende Geschosse ab und schwächt gegnerische Bodenschläge, die auf dich zielen.' } },
+  aegis: { en: 'Aegis Drone', de: 'Aegis-Drohne', desc: { en: 'Raises a short protective shield around you after you take damage, then recharges.', de: 'Spannt nach Treffern kurz ein Schutzschild um dich und lädt sich danach wieder auf.' } },
 };
 
 const AFFIX: Record<string, Pair> = {

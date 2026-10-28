@@ -12,7 +12,7 @@ interface RadarProps {
 
 export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHeight, partyNames, colorBlind }) => {
   const radarRadius = 46;
-  const radarRange = 1200; // World units displayed on radar
+  const radarRange = 1200 * (player?.radarMult ?? 1); // World units displayed on radar (recon drones widen it)
 
   const playerPos = player ? player.pos : { x: 2000, y: 2000 };
   const playerAngle = player ? player.chassisAngle : 0;
@@ -30,7 +30,7 @@ export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHei
     const computedDots: Array<{ x: number; y: number; color: string; size: number }> = [];
 
     for (const ent of entities) {
-      if (ent.id === player?.id) continue;
+      if (ent.id === player?.id || ent.kind === 'mine') continue;
       const dx = ent.pos.x - playerPos.x;
       const dy = ent.pos.y - playerPos.y;
       const dist = Math.hypot(dx, dy);

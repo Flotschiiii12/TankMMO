@@ -1,4 +1,5 @@
 import { localizeEntityName } from '../i18n.ts';
+import { DroneRenderer } from './droneDraw.ts';
 import { clamp, MapDef, SimEntity, Vec2, dist } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { ParticleSystem } from './particles.ts';
@@ -285,6 +286,8 @@ export class WorldRenderer {
     return pattern;
   }
 
+  readonly drones = new DroneRenderer();
+
   public render(
     ctx: CanvasRenderingContext2D,
     entities: SimEntity[],
@@ -404,6 +407,14 @@ export class WorldRenderer {
         }
       }
     }
+
+    // 11b. Companion drones (above the vehicles), mines on the ground effects, then beams
+    const clock = performance.now() / 1000;
+    for (const ent of entities) {
+      if (ent.kind === 'mine') this.drones.drawMine(ctx, this.camera, ent, clock);
+      else if (ent.drones && ent.hull > 0) this.drones.drawOwner(ctx, this.camera, ent, clock);
+    }
+    this.drones.drawFx(ctx, this.camera, clock);
 
     // 12. Render Projectiles (with shell trails)
     this.renderProjectiles(ctx, entities);

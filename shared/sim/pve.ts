@@ -23,6 +23,7 @@ import {
 import { stepDungeon } from './dungeon.ts';
 import { activeEvents, eventAppliesToMap, WORLD_BOSS_PERIOD_SECONDS } from './events.ts';
 import { getNextEntityId, isPosInSafeZone, spawnVehicle, World, fireMainCannon } from './world.ts';
+import { droneAbsorb } from './drones.ts';
 
 export const PORTAL_HOLD_SECONDS = 3;
 export const WRECK_SECONDS = 8;
@@ -55,7 +56,7 @@ export function createPveState(): PveState {
 
 /** Entities that are scenery/interactables, not vehicles: no AI, no physics, no targeting. */
 export function isInertKind(kind: EntityKind): boolean {
-  return kind === 'gate' || kind === 'loot_crate' || kind === 'telegraph' || kind === 'resource_node' || kind === 'projectile';
+  return kind === 'gate' || kind === 'loot_crate' || kind === 'telegraph' || kind === 'resource_node' || kind === 'projectile' || kind === 'mine';
 }
 
 function pushChat(world: World, sender: string, clanTag: string, channel: ChatMessage['channel'], text: string): void {
@@ -69,6 +70,17 @@ function archetypeFor(type: string): EnemyArchetype {
     Object.values(ENEMY_ARCHETYPES).find((a) => a.kind === type) ||
     ENEMY_ARCHETYPES['scout_buggy']
   );
+}
+
+export function spawnMine(world: World, owner: SimEntity, pos: Vec2, damage: number, lifetime: number): SimEntity {
+  const m = makeInert(world, 'mine', 'Mine', pos, 14, 1);
+  m.isHostile = owner.isHostile;
+  m.sourceEntityId = owner.id;
+  m.faction = owner.faction;
+  m.team = owner.team;
+  m.telegraphDamage = Math.round(damage);
+  m.wreckTimer = lifetime;
+  return m;
 }
 
 function makeInert(world: World, kind: EntityKind, name: string, pos: Vec2, radius: number, hull = 1): SimEntity {
@@ -534,6 +546,7 @@ function applySplashDamage(world: World, victim: SimEntity, damage: number, sour
   const toHull = damage - toArmor;
   victim.armor -= toArmor;
   victim.hull = Math.max(0, victim.hull - toHull);
+  droneAbsorb(world, victim, toArmor, toHull);
   victim.armorRegenTimer = 0;
   victim.statusEffects = victim.statusEffects.filter((s) => s.type !== 'repairing');
   world.events.push({ type: 'damage_dealt', attackerId: source.sourceEntityId, targetId: victim.id, rawDamage: damage, finalDamage: damage, armorDamage: toArmor, hullDamage: toHull, isCrit: false, isRearHit: false, isFrontHit: false, ammoType: 'EXPLOSIVE', pos: { ...victim.pos } });

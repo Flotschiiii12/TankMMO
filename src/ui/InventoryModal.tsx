@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { tr, T } from '../i18n.ts';
+import { tr, T, nm } from '../i18n.ts';
 import { RarityGem, CurrencyIcon, SlotIcon, FamilyIcon } from './GameIcon.tsx';
 import { X, Package } from 'lucide-react';
 import { UserProfile } from '../save/profile.ts';
@@ -153,8 +153,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                     <div className="text-sm font-semibold flex items-center gap-1" style={{ color: selInfo.color }}><RarityGem rarity={sel.rarity} size={18} />{selInfo.name}</div>
                     <div className="text-[11px] text-slate-400">{tr(sel.rarity)} · {tr(selInfo.def.slotType)} · {tr('needs level')} {selInfo.def.minLevel}</div>
                   </div>
+                  <div className="text-[11px] text-slate-400 italic">{nm(selInfo.def.descriptionKey, '')}</div>
                   <div className="text-[11px] text-slate-300 space-y-0.5">
-                    {selInfo.def.baseDPS ? <div>{tr('Damage')} {Math.round(selInfo.def.baseDPS * C.itemStatMultiplier(sel))}</div> : null}
+                    {selInfo.def.baseDPS ? <div>{selInfo.def.slotType === 'drone' ? tr('Drone power') : tr('Damage')} {Math.round(selInfo.def.baseDPS * C.itemStatMultiplier(sel))}</div> : null}
                     {selInfo.def.baseHullBonus ? <div>{tr('Hull')} +{Math.round(selInfo.def.baseHullBonus * C.itemStatMultiplier(sel))}</div> : null}
                     {selInfo.def.baseArmorBonus ? <div>{tr('Armor')} +{Math.round(selInfo.def.baseArmorBonus * C.itemStatMultiplier(sel))}</div> : null}
                     {selInfo.def.baseFlatReduction ? <div>{tr('Flat reduction')} {Math.round(selInfo.def.baseFlatReduction * C.itemStatMultiplier(sel))}</div> : null}

@@ -11,6 +11,7 @@ import { generateProceduralMap } from './mapGenerator.ts';
 import type { DungeonState } from './dungeon.ts';
 import { createWarPoints, stepWar, WarPoint } from './war.ts';
 import { canEngage, isPvpMap, PvpContext, PVP_DAMAGE_MULT } from './pvp.ts';
+import { droneAbsorb, stepDrones } from './drones.ts';
 import { createPveState, isInertKind, populateWorld, PveState, stepPve } from './pve.ts';
 import {
   AMMO_CONFIGS,
@@ -80,6 +81,8 @@ export interface World {
   alliances: Set<string>;
   war?: WarPoint[];
   warScore: Record<string, number>;
+  /** per-owner drone runtime (cooldowns, guardian pool, aegis); see drones.ts */
+  droneRt: Map<number, any>;
   /** Server clock (epoch seconds) at world time 0: drives the event/world-boss schedule. */
   clockOffset: number;
 }
@@ -142,6 +145,7 @@ export function createWorld(options: WorldInitOptions = {}): World {
     alliances: new Set(),
     war: map && options.populate !== false ? (createWarPoints(Number(map.numericId ?? map.id), width, height) || undefined) : undefined,
     warScore: {},
+    droneRt: new Map(),
   };
 
   if (map && options.populate !== false) populateWorld(world, map);
@@ -285,6 +289,7 @@ export function stepWorld(
   // 4. Update Combat & Projectiles
   updateCombat(world, dt);
   updateSecondaryWeapons(world);
+  stepDrones(world, dt);
 
   // 5. Update Status Effects, Abilities, & Regen
   updateStatusAndRegen(world, dt);
@@ -658,37 +663,43 @@ function updateSecondaryWeapons(world: World): void {
     }
     if (!target || isPosInSafeZone(world, target.pos) || target.invulnerableTime > 0) continue;
     ent.mgReloadRemaining = ent.mgReloadTime;
-    const res = resolveDamage({
-      rawDamage: ent.kind === 'player' && target.kind === 'player' ? ent.mgDamage * PVP_DAMAGE_MULT : ent.mgDamage,
-      attackerPos: ent.pos,
-      targetPos: target.pos,
-      targetChassisAngle: target.chassisAngle,
-      targetArmor: target.armor,
-      targetMaxArmor: target.maxArmor,
-      targetFlatReduction: target.flatArmorReduction,
-      isCrit: false,
-      isMarked: target.statusEffects.some((s) => s.type === 'marked'),
-      isInvulnerable: false,
-    });
-    target.armor = res.newArmor;
-    target.hull = Math.max(0, target.hull - res.hullDamage);
-    recordBossDamage(target, ent.id, res.totalDamageDealt);
-    provokeEnemy(world, target, ent.id);
-    target.armorRegenTimer = 0;
-    target.lastDamagedTick = world.tick;
-    target.hitFlashTimer = 0.12;
     world.events.push({
       type: 'projectile_fired', shooterId: ent.id, pos: { ...ent.pos },
       angle: Math.atan2(target.pos.y - ent.pos.y, target.pos.x - ent.pos.x), speed: 900, range: ent.mgRange, ammoType: 'STANDARD', isSecondary: true,
     });
-    world.events.push({
-      type: 'damage_dealt', attackerId: ent.id, targetId: target.id, rawDamage: res.rawDamage, finalDamage: res.totalDamageDealt,
-      armorDamage: res.armorDamage, hullDamage: res.hullDamage, isCrit: res.isCrit, isRearHit: res.isRearHit, isFrontHit: res.isFrontHit,
-      ammoType: 'STANDARD', pos: { ...target.pos },
-    });
-    if (target.hull <= 0) {
-      world.events.push({ type: 'entity_killed', victimId: target.id, killerId: ent.id, pos: { ...target.pos }, level: target.level, scrapReward: 25 * target.level, xpReward: 80 * target.level });
-    }
+    dealDirectDamage(world, ent, target, ent.kind === 'player' && target.kind === 'player' ? ent.mgDamage * PVP_DAMAGE_MULT : ent.mgDamage);
+  }
+}
+
+/** Hitscan damage with the normal armor / angle rules (machine guns, drone guns, mines). Emits the damage and kill events. */
+export function dealDirectDamage(world: World, attacker: SimEntity, target: SimEntity, rawDamage: number): void {
+  const res = resolveDamage({
+    rawDamage,
+    attackerPos: attacker.pos,
+    targetPos: target.pos,
+    targetChassisAngle: target.chassisAngle,
+    targetArmor: target.armor,
+    targetMaxArmor: target.maxArmor,
+    targetFlatReduction: target.flatArmorReduction,
+    isCrit: false,
+    isMarked: target.statusEffects.some((s) => s.type === 'marked'),
+    isInvulnerable: false,
+  });
+  target.armor = res.newArmor;
+  target.hull = Math.max(0, target.hull - res.hullDamage);
+  droneAbsorb(world, target, res.armorDamage, res.hullDamage);
+  recordBossDamage(target, attacker.id, res.totalDamageDealt);
+  provokeEnemy(world, target, attacker.id);
+  target.armorRegenTimer = 0;
+  target.lastDamagedTick = world.tick;
+  target.hitFlashTimer = 0.12;
+  world.events.push({
+    type: 'damage_dealt', attackerId: attacker.id, targetId: target.id, rawDamage: res.rawDamage, finalDamage: res.totalDamageDealt,
+    armorDamage: res.armorDamage, hullDamage: res.hullDamage, isCrit: res.isCrit, isRearHit: res.isRearHit, isFrontHit: res.isFrontHit,
+    ammoType: 'STANDARD', pos: { ...target.pos },
+  });
+  if (target.hull <= 0) {
+    world.events.push({ type: 'entity_killed', victimId: target.id, killerId: attacker.id, pos: { ...target.pos }, level: target.level, scrapReward: 25 * target.level, xpReward: 80 * target.level });
   }
 }
 
@@ -753,6 +764,7 @@ function applyHit(world: World, proj: SimEntity, primaryTarget: SimEntity, splas
 
     victim.armor = result.newArmor;
     victim.hull = Math.max(0, victim.hull - result.hullDamage);
+    droneAbsorb(world, victim, result.armorDamage, result.hullDamage);
     recordBossDamage(victim, sourceId, result.totalDamageDealt);
     provokeEnemy(world, victim, sourceId);
     victim.armorRegenTimer = 0; // Reset out of combat regen timer

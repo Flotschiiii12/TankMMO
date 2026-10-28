@@ -125,14 +125,22 @@ export type EntityKind =
   | 'gate'
   | 'telegraph'
   | 'resource_node'
-  | 'wreck';
+  | 'wreck'
+  | 'mine';
 
 // ==========================================
 // 3. Entity Representation
 // ==========================================
 
+/** One equipped drone of a vehicle (see shared/sim/drones.ts). Positions are a pure function of owner + time, never sent. */
+export interface DroneSpec { type: string; tier: number; slot: number; power: number }
+
 export interface SimEntity {
   id: number;
+  /** companion drones of a player vehicle */
+  drones?: DroneSpec[];
+  /** radar range multiplier (recon drone) */
+  radarMult?: number;
   kind: EntityKind;
   name: string;
   clanTag?: string;
@@ -335,6 +343,7 @@ export type SimEvent =
   | LootCollectedEvent
   | AbilityUsedEvent
   | ProjectileFiredEvent
+  | { type: 'drone_fx'; ownerId: number; kind: 'shot' | 'arc' | 'absorb' | 'repair' | 'intercept' | 'aegis' | 'mine'; slot: number; pos: Vec2; to?: Vec2; points?: Vec2[]; duration?: number }
   | { type: 'gate_used'; entityId: number; gateId: string; targetMapId: string }
   | { type: 'status_applied'; entityId: number; status: StatusEffectType; duration: number }
   | { type: 'player_died'; entityId: number }

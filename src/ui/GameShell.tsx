@@ -251,6 +251,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           break;
         }
 
+        case 'drone_fx': { rendererRef.current?.drones.onEvent(event, performance.now() / 1000); break; }
         case 'event_started': { showBanner(`${tr('Event')}: ${nm(`event.${event.kind}.name`, tr(event.kind.replace(/_/g, ' ')))}`); break; }
         case 'dungeon_wave': { showBanner(`${tr('Wave')} ${event.wave} / ${event.total}`); gateRef.current = { wave: event.wave, total: event.total, endsAt: event.timeLeft != null ? Date.now() + event.timeLeft * 1000 : 0 }; setProgress('gate'); break; }
         case 'dungeon_cleared': { showBanner(tr('Gate cleared!')); setProgress(null); gateRef.current = null; break; }
@@ -717,7 +718,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
     for (const ent of snapshot.entities) {
       if (ent.id === player.id || ent.hull <= 0 || !isAttackable(player, ent)) continue;
-      if (ent.kind === 'gate' || ent.kind === 'loot_crate' || ent.kind === 'projectile') continue;
+      if (ent.kind === 'gate' || ent.kind === 'loot_crate' || ent.kind === 'projectile' || ent.kind === 'mine') continue;
       const d = dist(player.pos, ent.pos);
       if (d < minD) {
         minD = d;

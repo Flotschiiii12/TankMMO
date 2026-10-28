@@ -188,7 +188,7 @@ describe('Inventory and workshop', () => {
 });
 
 describe('Modules and drones affect stats', () => {
-  it('an auto-repair module raises hull, a drone adds damage and hull', () => {
+  it('an auto-repair module raises hull, a drone adds hull and appears as a companion with its own power', () => {
     const ch = rich(C.createCharacter('M')); ch.level = 40;
     const base = C.computeLoadoutStats(ch)!;
     const mod = (C.createItem(ch, 'mod_plating_hardener', 'Rare', new SimRNG(1)) as any).item;
@@ -198,7 +198,9 @@ describe('Modules and drones affect stats', () => {
     expect(C.equipItem(ch, 'veh_medium_t1', 'drone0', d.uid).ok).toBe(true);
     const s = C.computeLoadoutStats(ch)!;
     expect(s.maxHull).toBeGreaterThan(base.maxHull);
-    expect(s.mainDamage).toBeGreaterThan(base.mainDamage);
+    expect(s.mainDamage).toBe(base.mainDamage); // the drone's own gun / effect replaces the old flat damage bonus
+    expect(s.drones).toEqual([{ type: 'guardian', tier: 1, slot: 0, power: expect.any(Number) }]);
+    expect(s.drones[0].power).toBeGreaterThan(40); // Rare multiplier
   });
 });
 

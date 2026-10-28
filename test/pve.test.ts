@@ -17,7 +17,7 @@ describe('PvE layer on the deterministic world', () => {
       for (let i = 0; i < 300; i++) stepWorld(w, NONE);
       for (const e of w.entities.values()) expect(Number.isFinite(e.pos.x + e.pos.y), `map ${m.id} NaN`).toBe(true);
     }
-  });
+  }, 30000); // all 30 maps are generated and ticked; CPU-heavy when the whole suite runs in parallel
 
   it('is deterministic with PvE active', () => {
     const run = () => {

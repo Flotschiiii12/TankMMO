@@ -16,6 +16,7 @@ import {
   TimeOfDay,
 } from '../types.ts';
 import { getMapById } from '../data/maps.ts';
+import { BIOME_PROPS, MAP_EXTRA_PROPS } from '../data/biomeProps.ts';
 
 export interface GeneratedMapInstance {
   mapDef: MapDef;
@@ -117,6 +118,12 @@ export function generateProceduralMap(mapInput: MapDef | number | string): Gener
   }
   for (const g of mapDef.gates) {
     clearAreas.push({ x: g.x, y: g.y, radius: g.radius + 100 });
+  }
+
+  // The painted landmark scene (maps 2-30) is drawn under the props: keep random decoration off it.
+  const landmarkSpot = mapDef.secrets?.[0];
+  if (landmarkSpot && Number(mapDef.numericId ?? mapDef.id) !== 1) {
+    clearAreas.push({ x: landmarkSpot.x, y: landmarkSpot.y, radius: 520 });
   }
 
   function isClearArea(x: number, y: number, extraRadius = 30): boolean {
@@ -266,6 +273,23 @@ export function generateProceduralMap(mapInput: MapDef | number | string): Gener
           blocks: false,
         });
       }
+    }
+  }
+
+  // 6b. Painted biome decoration (drawn at the image's own aspect ratio; `width` is the longest side).
+  // Placed after every other random draw so the layout of the classic obstacles above is unchanged.
+  const propTable = [...(BIOME_PROPS[biome] ?? []), ...(MAP_EXTRA_PROPS[Number(mapDef.numericId ?? mapDef.id)] ?? [])];
+  if (propTable.length > 0) {
+    const totalWeight = propTable.reduce((s, p) => s + p[3], 0);
+    const propCount = Math.round(width * height / 350000);
+    for (let i = 0; i < propCount; i++) {
+      const x = rng.rangeFloat(220, width - 220);
+      const y = rng.rangeFloat(220, height - 220);
+      let pick = rng.rangeFloat(0, totalWeight);
+      let spec = propTable[0];
+      for (const p of propTable) { pick -= p[3]; if (pick <= 0) { spec = p; break; } }
+      if (isClearArea(x, y, spec[1] * 0.4)) continue;
+      obstacles.push({ x, y, radius: spec[2] || 12, type: 'prop', propId: spec[0], blocks: spec[2] > 0, width: spec[1] });
     }
   }
 

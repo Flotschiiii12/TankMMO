@@ -55,7 +55,7 @@ export class WorldRenderer {
     const worldY = cy * CHUNK_SIZE;
 
     // 1. Base Ground (meadow.png for Green Valley, biome texture for others)
-    const baseGroundName = mapDef.biome === 'green_valley' ? 'meadow' : mapDef.biome;
+    const baseGroundName = spriteRegistry.groundForMap(mapDef.numericId) ?? (mapDef.biome === 'green_valley' ? 'meadow' : mapDef.biome);
     const baseImg = spriteRegistry.getImage(spriteRegistry.getGroundPath(baseGroundName));
     if (baseImg) {
       const pattern = cctx.createPattern(baseImg, 'repeat');
@@ -322,11 +322,23 @@ export class WorldRenderer {
       }
     }
 
+    // 7b. Painted landmark scene on the ground, under the props
+    const scene = mapDef.landmark ? spriteRegistry.landmarkScene(mapDef.numericId) : undefined;
+    if (scene && mapDef.landmark) {
+      const sceneImg = spriteRegistry.getImage(scene.path);
+      if (sceneImg) {
+        const sp = this.camera.worldToScreen({ x: mapDef.landmark.x, y: mapDef.landmark.y });
+        const k = scene.size * this.camera.zoom / Math.max(sceneImg.naturalWidth, sceneImg.naturalHeight);
+        const w = sceneImg.naturalWidth * k, h = sceneImg.naturalHeight * k;
+        if (sp.x + w / 2 > 0 && sp.x - w / 2 < width && sp.y + h / 2 > 0 && sp.y - h / 2 < height) ctx.drawImage(sceneImg, sp.x - w / 2, sp.y - h / 2, w, h);
+      }
+    }
+
     // 8. Render Props (Trees, Rocks, Ruins) with drop shadows and top-left lighting
     this.renderObstacles(ctx, mapDef);
 
     // 9. Render Landmark
-    if (mapDef.landmark) {
+    if (mapDef.landmark && !scene) {
       drawLandmark(ctx, mapDef.landmark, this.camera, time);
     }
 
@@ -661,6 +673,12 @@ export class WorldRenderer {
 
           let pw = (obs.width || obs.radius * 2.2) * zoom;
           let ph = (obs.height || obs.radius * 2.2) * zoom;
+          if (/^(hl|st|mt|eg)_/.test(obs.propId)) {
+            // painted biome props keep their own aspect ratio; width is the longest side
+            const k = obs.width ? obs.width * zoom / Math.max(propImg.naturalWidth, propImg.naturalHeight) : 1;
+            pw = propImg.naturalWidth * k;
+            ph = propImg.naturalHeight * k;
+          }
           if (obs.type === 'tree') {
             pw = 80 * zoom;
             ph = 80 * zoom;

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { FactionCrest } from './GameIcon.tsx';
 import { tr, currentLang, setLang } from '../i18n.ts';
 import { createGuest, clearCredential, detectServer, getCredential, recoverAccount, serverBase, setCredential } from '../net/connect.ts';
 import { OnlineGameClient } from '../net/onlineClient.ts';
@@ -98,7 +99,7 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
       <div className="text-xs text-slate-400">{tr('Choose your faction (your start region):')}</div>
       <div className="grid grid-cols-3 gap-1.5">
         {[['coastal', 'Coastal Union'], ['highland', 'Highland Union'], ['steppe', 'Steppe Caravan']].map(([k, n]) => (
-          <button key={k} onClick={() => setFaction(k)} className={`py-2 rounded-lg text-[11px] border ${faction === k ? 'border-orange-500 text-orange-300' : 'border-slate-800 text-slate-400'}`}>{n}</button>
+          <button key={k} onClick={() => setFaction(k)} className={`py-2 rounded-lg text-[11px] border flex flex-col items-center gap-1 ${faction === k ? 'border-orange-500 text-orange-300' : 'border-slate-800 text-slate-400'}`}><FactionCrest faction={k} size={44} />{n}</button>
         ))}
       </div>
       <label className="flex items-start gap-2 text-xs text-slate-300">

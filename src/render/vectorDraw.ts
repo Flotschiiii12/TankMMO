@@ -390,7 +390,9 @@ export function drawEnemy(
     }
   }
 
-  const enemyImg = spriteRegistry.getImage(spriteRegistry.getEnemyPath(ent.kind));
+  // painted sprite by sprite override (dungeon bosses), archetype id (flak_wagon, boss_*...) or kind
+  const enemyKey = [ent.spriteId, ent.archetypeId].find((k) => k && spriteRegistry.isListed(spriteRegistry.getEnemyPath(k))) ?? ent.kind;
+  const enemyImg = spriteRegistry.getImage(spriteRegistry.getEnemyPath(enemyKey));
   if (enemyImg) {
     ctx.save();
     ctx.rotate(ent.chassisAngle);

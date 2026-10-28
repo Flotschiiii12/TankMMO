@@ -8,6 +8,7 @@ import { describeItem, errorText } from '../game/actions.ts';
 import { ITEM_BY_ID } from '../../shared/data/items.ts';
 import { priceBandClient } from '../game/priceBand.ts';
 import { ACHIEVEMENTS_CATALOG } from '../../shared/data/achievements.ts';
+import { RankBadge, FactionCrest } from './GameIcon.tsx';
 import { getRankForHonor } from '../../shared/data/ranks.ts';
 import { codexProgress, progressOf } from '../../shared/rules/achievements.ts';
 
@@ -127,7 +128,11 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
             const rank = getRankForHonor(character.wallet.honor);
             return (
               <>
-                <div className="text-xs text-slate-300">Honor <b className="text-white">{character.wallet.honor}</b> · rank {rank.level} / 21 · season marks {character.wallet.seasonMarks} · faction <b className="capitalize text-white">{character.faction}</b></div>
+                <div className="flex items-center gap-2">
+                  <RankBadge level={rank.level} size={48} />
+                  <FactionCrest faction={character.faction} size={40} />
+                  <div className="text-xs text-slate-300">Honor <b className="text-white">{character.wallet.honor}</b> · rank {rank.level} / 21 · season marks {character.wallet.seasonMarks} · faction <b className="capitalize text-white">{character.faction}</b></div>
+                </div>
                 <div className="text-xs text-slate-400">Titles: {character.season.titles.join(', ') || 'none yet'}</div>
                 <div className="text-[11px] text-slate-400">Codex: {Object.entries(prog).map(([k, v]) => `${k} ${v.have}/${v.total}`).join(' · ')}</div>
                 {ACHIEVEMENTS_CATALOG.map((a) => {

@@ -136,6 +136,8 @@ export interface SimEntity {
   kind: EntityKind;
   name: string;
   clanTag?: string;
+  /** sprite override for enemies without an archetype id (dungeon bosses: the gate id) */
+  spriteId?: string;
   /** cosmetic skin id (see CharacterState.activeSkin) */
   skin?: string;
   level: number;

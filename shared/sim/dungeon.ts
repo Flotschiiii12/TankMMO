@@ -77,6 +77,7 @@ function spawnDungeonBoss(world: World, st: DungeonState): SimEntity {
     clanTag: 'BOSS',
     isHostile: true,
   });
+  boss.spriteId = st.def.id;
   boss.selectedAmmo = 'EXPLOSIVE';
   boss.aiState = 'attack';
   boss.homePos = { ...boss.pos };

@@ -27,6 +27,19 @@ export function drawVehicle(
     ctx.globalAlpha = wreckAlpha;
   }
 
+  // Cosmetic season skins: a glow under the hull
+  if (ent.skin && !ent.isWreck) {
+    const crown = ent.skin === 'skin_season_crown';
+    ctx.save();
+    ctx.globalAlpha = 0.35 + Math.sin(time * (crown ? 3 : 9)) * 0.15;
+    ctx.fillStyle = crown ? '#facc15' : '#f97316';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radius * 1.3, radius * 1.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (crown) { ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 2 * zoom; ctx.stroke(); }
+    ctx.restore();
+  }
+
   // Invulnerability shield shimmer
   if (ent.invulnerableTime > 0 && !ent.isWreck) {
     ctx.save();

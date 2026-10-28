@@ -83,6 +83,8 @@ export interface CharacterState {
   respecs: number;
   quests: QuestLog;
   season: SeasonState;
+  /** cosmetic: one of season.skins, shown to other players */
+  activeSkin?: string;
   /** faction/general reputation points by faction key */
   reputation: Record<string, number>;
   faction: PlayerFaction;
@@ -568,15 +570,23 @@ export function normalizeCharacter(raw: any, name: string): CharacterState {
 
 /** NPC vendors buy gear for a fraction of its base value (a scrap sink compared to the auction house). */
 export const NPC_SELL_RATE = 0.35;
-export function npcSellValue(item: ItemInstance): number {
+
+/**
+ * Reputation with your own faction (1000 points per level, max 7). Per level: 3 % off ammo,
+ * +2 points NPC sell rate, -0.2 points auction tax.
+ */
+export function reputationLevel(ch: CharacterState): number {
+  return Math.min(7, Math.floor((ch.reputation[ch.faction] ?? 0) / 1000));
+}
+export function npcSellValue(item: ItemInstance, ch: CharacterState): number {
   const def = ITEM_BY_ID.get(item.defId)!;
-  return Math.max(1, Math.round(def.scrapValue * NPC_SELL_RATE * RARITY_CONFIGS[item.rarity].multiplier * (1 + item.upgrade * 0.1)));
+  return Math.max(1, Math.round(def.scrapValue * (NPC_SELL_RATE + 0.02 * reputationLevel(ch)) * RARITY_CONFIGS[item.rarity].multiplier * (1 + item.upgrade * 0.1)));
 }
 export function sellItemToNpc(ch: CharacterState, uid: string): Result<{ scrap: number }> {
   const item = findItem(ch, uid);
   if (!item) return fail('item_not_found');
   if (isEquipped(ch, uid)) return fail('item_equipped');
-  const scrap = npcSellValue(item);
+  const scrap = npcSellValue(item, ch);
   ch.inventory = ch.inventory.filter((i) => i.uid !== uid);
   ch.wallet.scrap += scrap;
   return { ok: true, scrap };

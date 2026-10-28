@@ -6,7 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { FLAGS } from '../shared/flags.ts';
 import { ITEM_BY_ID } from '../shared/data/items.ts';
 import type { CharacterState, ItemInstance } from '../shared/rules/character.ts';
-import { inventoryCapacity, talentTotals } from '../shared/rules/character.ts';
+import { inventoryCapacity, reputationLevel, talentTotals } from '../shared/rules/character.ts';
 
 export const AUCTION_TAX = 0.05;
 export const AUCTION_MIN_ACCOUNT_AGE_MS = 3 * 86400_000;
@@ -29,7 +29,7 @@ export function priceBand(defId: string): { min: number; max: number } | undefin
 }
 
 export function auctionTax(price: number, seller: CharacterState, warDiscount = 0): number {
-  const rate = Math.max(0, AUCTION_TAX - (talentTotals(seller)['trade_tax_reduction'] ?? 0) - warDiscount);
+  const rate = Math.max(0, AUCTION_TAX - (talentTotals(seller)['trade_tax_reduction'] ?? 0) - warDiscount - 0.002 * reputationLevel(seller));
   return Math.floor(price * rate);
 }
 

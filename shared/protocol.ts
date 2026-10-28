@@ -116,7 +116,7 @@ export interface ServerSocialResultPacket {
 
 export interface ServerSocialEventPacket {
   type: 's_social_event';
-  kind: 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_result' | 'war_result' | 'trade_update' | 'mail' | 'achievement' | 'dungeon';
+  kind: 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_phase' | 'arena_result' | 'war_result' | 'trade_update' | 'mail' | 'achievement' | 'dungeon';
   data: any;
 }
 

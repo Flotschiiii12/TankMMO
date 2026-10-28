@@ -55,6 +55,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [notices, setNotices] = useState<string[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
   const lastEmoteTs = useRef(0);
+  const arenaRef = useRef<{ phase: string; round: number; wins: number[]; endsAt: number } | null>(null);
   const gateRef = useRef<{ wave: number; total: number; endsAt: number } | null>(null);
   const moveTargetRef = useRef<{ x: number; y: number } | null>(null);
   const lastMoveSend = useRef(0);
@@ -112,9 +113,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         if (kind === 'party_update') setPartyNames(d ? d.members.map((m: any) => m.name) : []);
         const text = kind === 'friend_request' ? `${d.from} sent you a friend request` : kind === 'friend_accepted' ? `${d.from} is now your friend` : kind === 'party_invite' ? `${d.from} invited you to a party` : kind === 'clan_invite' ? `${d.from} invited you to ${d.clan}` : kind === 'announcement' ? `Announcement: ${d.text}` : kind === 'achievement' ? `Achievement unlocked: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `Gate ${d.result}` : kind === 'arena_start' ? 'Arena match starting' : kind === 'arena_round' ? `Round over: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `Arena ${d.won ? 'won' : 'lost'} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
         if (text) setNotices((n) => [...n.slice(-4), text]);
-        if (kind === 'arena_start') setProgress('Arena · Round 1');
-        else if (kind === 'arena_round') setProgress(`Arena · ${d.wins?.join(' - ')}`);
-        else if (kind === 'arena_result') setProgress(null);
+        if (kind === 'arena_phase') { arenaRef.current = { phase: d.phase, round: d.round, wins: d.wins, endsAt: Date.now() + d.secondsLeft * 1000 }; setProgress('arena'); }
+        else if (kind === 'arena_start') setProgress('Arena · Round 1');
+        else if (kind === 'arena_round' && !arenaRef.current) setProgress(`Arena · ${d.wins?.join(' - ')}`);
+        else if (kind === 'arena_result') { arenaRef.current = null; setProgress(null); }
         if (text && (kind.startsWith('arena') || kind === 'dungeon' || kind === 'achievement' || kind === 'announcement')) showBanner(text);
       });
     }
@@ -884,7 +886,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} character={profile.character} />}
       {online && gameState === 'PLAYING' && <ChatInput client={online} />}
       {gameState === 'PLAYING' && <Banner text={banner} />}
-      {gameState === 'PLAYING' && <ProgressChip text={progress === 'gate' && gateRef.current ? `Gate · Wave ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
+      {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `Arena · Round ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? 'Break ' : 'Start in '}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `Gate · Wave ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}
 
       <QuestModal

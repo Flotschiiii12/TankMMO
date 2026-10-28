@@ -76,6 +76,12 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
           {(['gear', 'craft'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{t === 'gear' ? tr('Gear') : tr('Craft')}</button>
           ))}
+          {ch.season.skins.length > 0 && (
+            <select value={ch.activeSkin ?? ''} onChange={(e) => void run({ kind: 'set_skin', skin: e.target.value || null }, 'Skin changed')} className="px-2 py-1 rounded bg-slate-800 text-slate-200">
+              <option value="">{tr('No skin')}</option>
+              {ch.season.skins.map((k) => <option key={k} value={k}>{k.replace('skin_season_', '')}</option>)}
+            </select>
+          )}
           {msg && <span className="ml-auto text-[11px] text-orange-300 self-center">{msg}</span>}
         </div>
 
@@ -173,7 +179,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                         </>
                       );
                     })()}
-                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { void run({ kind: 'sell_item', uid: sel.uid }, 'Sold to vendor'); setSelected(null); }} className="px-2 py-1 rounded bg-slate-700 text-white">Sell ({C.npcSellValue(sel)})</button>}
+                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { void run({ kind: 'sell_item', uid: sel.uid }, 'Sold to vendor'); setSelected(null); }} className="px-2 py-1 rounded bg-slate-700 text-white">Sell ({C.npcSellValue(sel, ch)})</button>}
                     {!C.isEquipped(ch, sel.uid) && <button onClick={() => { run({ kind: 'dismantle', uid: sel.uid }, 'Dismantled'); setSelected(null); }} className="px-2 py-1 rounded bg-rose-700/70 text-white">{tr('Dismantle')}</button>}
                   </div>
                   {fusionCandidates.length >= 3 && (

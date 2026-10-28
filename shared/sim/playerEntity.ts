@@ -35,6 +35,7 @@ export function refreshPlayerStats(ent: SimEntity, ch: CharacterState): void {
   if (!s) return;
   const hullRatio = ent.maxHull > 0 ? ent.hull / ent.maxHull : 1;
   const armorRatio = ent.maxArmor > 0 ? ent.armor / ent.maxArmor : 1;
+  ent.skin = ch.activeSkin;
   Object.assign(ent, {
     maxHull: s.maxHull, maxArmor: s.maxArmor, maxSpeed: s.maxSpeed, turnRate: s.turnRate, turretTurnRate: s.turretTurnRate,
     mainReloadTime: s.mainReloadTime, mainDamage: s.mainDamage, mainRange: s.mainRange, mgDamage: s.mgDamage, mgRange: s.mgRange,

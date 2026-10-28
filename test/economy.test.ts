@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { createApp } from '../server/app.ts';
-import { AUCTION_MAX_LISTINGS, priceBand, SHOP_CATALOG, PremiumWallet } from '../server/market.ts';
+import { AUCTION_MAX_LISTINGS, priceBand, auctionTax, SHOP_CATALOG, PremiumWallet } from '../server/market.ts';
 import { PROTOCOL_VERSION } from '../shared/protocol.ts';
 import { FLAGS } from '../shared/flags.ts';
 import { ITEM_CATALOG } from '../shared/data/items.ts';
@@ -153,14 +153,30 @@ describe('Direct trade, NPC vendors, fast travel', () => {
     a.close(); b.close(); c.close();
   });
 
+  it('reputation raises the NPC sell value and cuts the auction tax; skins need to be owned', async () => {
+    const a = await P.make();
+    const ch = a.st().character;
+    const it = give(a, 'wpn_cannon_t2', 'Common');
+    const base = C.npcSellValue(it, ch);
+    ch.reputation[ch.faction] = 7000;
+    expect(C.npcSellValue(it, ch)).toBeGreaterThan(base);
+    expect(auctionTax(10000, ch)).toBeLessThan(auctionTax(10000, { ...ch, reputation: {} }));
+    expect((await a.act({ kind: 'set_skin', skin: 'skin_season_ember' })).error).toBe('skin_not_owned');
+    ch.season.skins.push('skin_season_ember');
+    expect((await a.act({ kind: 'set_skin', skin: 'skin_season_ember' })).ok).toBe(true);
+    expect(a.st().character.activeSkin).toBe('skin_season_ember');
+    expect(a.st().entity.skin).toBe('skin_season_ember');
+    a.close();
+  });
+
   it('NPC vendor pays a fraction in a safe zone only; fast travel only to visited maps, costs scrap by distance, refuses outside safe zones', async () => {
     const a = await P.make();
     const it = give(a, 'wpn_cannon_t2', 'Common');
     const before = a.st().character.wallet.scrap;
     const r = await a.act({ kind: 'sell_item', uid: it.uid });
     expect(r.ok).toBe(true);
-    expect(a.st().character.wallet.scrap).toBe(before + C.npcSellValue({ ...it }));
-    expect(C.npcSellValue(it)).toBeLessThan(ITEM_CATALOG.find((i) => i.id === 'wpn_cannon_t2')!.scrapValue);
+    expect(a.st().character.wallet.scrap).toBe(before + C.npcSellValue({ ...it }, a.st().character));
+    expect(C.npcSellValue(it, a.st().character)).toBeLessThan(ITEM_CATALOG.find((i) => i.id === 'wpn_cannon_t2')!.scrapValue);
     const eq = a.st().character.inventory.find((i) => C.isEquipped(a.st().character, i.uid))!;
     expect((await a.act({ kind: 'sell_item', uid: eq.uid })).error).toBe('item_equipped');
 

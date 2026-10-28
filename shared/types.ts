@@ -136,6 +136,8 @@ export interface SimEntity {
   kind: EntityKind;
   name: string;
   clanTag?: string;
+  /** cosmetic skin id (see CharacterState.activeSkin) */
+  skin?: string;
   level: number;
   vehicleClass?: VehicleClass;
   tier?: number;

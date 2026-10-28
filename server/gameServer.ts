@@ -62,7 +62,7 @@ interface Instance {
   world: World;
   sessions: Set<Session>;
   chatSent: number;
-  arena?: { state: AR.MatchState; teams: [Session[], Session[]]; forfeits: Set<string>; mode: AR.ArenaMode; ratings: Map<string, number>; returnTo: Map<string, { mapId: number }>; };
+  arena?: { state: AR.MatchState; teams: [Session[], Session[]]; forfeits: Set<string>; mode: AR.ArenaMode; ratings: Map<string, number>; returnTo: Map<string, { mapId: number }>; lastPhase?: string; };
 }
 
 interface Session {
@@ -686,7 +686,7 @@ export class GameServer {
       s.dirty = true;
       this.sendCharacter(s);
       // value-changing operations are persisted immediately, not on the 30 s autosave
-      if (['craft', 'upgrade', 'fuse', 'dismantle', 'buy_vehicle', 'sell_item', 'claim_quest', 'claim_season_tier', 'change_faction'].includes(p.action.kind)) this.save(s);
+      if (['craft', 'upgrade', 'fuse', 'dismantle', 'buy_vehicle', 'sell_item', 'claim_quest', 'claim_season_tier', 'change_faction', 'set_skin'].includes(p.action.kind)) this.save(s);
     }
   }
 
@@ -1271,6 +1271,11 @@ export class GameServer {
     if (res === 'round_started') for (const s of a.teams.flat()) { const e = inst.world.entities.get(s.entityId); if (e) e.invulnerableTime = 0; }
     if (a.state.phase === 'countdown' && a.state.phaseEndsAt - inst.world.time > 2.9 && a.state.round > 1 && !a.state.resetDone) { a.state.resetDone = true; this.resetArenaRound(inst); }
     if (a.state.phase === 'fighting') a.state.resetDone = false;
+    if (a.state.phase !== a.lastPhase) {
+      a.lastPhase = a.state.phase;
+      const secondsLeft = a.state.phase === 'fighting' ? Math.max(0, AR.ROUND_TIME_LIMIT_SECONDS - (inst.world.time - a.state.roundStartedAt)) : Math.max(0, a.state.phaseEndsAt - inst.world.time);
+      for (const s of inst.sessions) this.send(s, { type: 's_social_event', kind: 'arena_phase', data: { phase: a.state.phase, round: a.state.round, wins: a.state.wins, secondsLeft } });
+    }
     if (res === 'round_over' || res === 'match_over') {
       for (const s of inst.sessions) this.send(s, { type: 's_social_event', kind: 'arena_round', data: { wins: a.state.wins, round: a.state.round } });
     }

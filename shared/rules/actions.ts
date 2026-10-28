@@ -27,6 +27,7 @@ export type ClientAction =
   | { kind: 'claim_season_tier'; tier: number }
   | { kind: 'buy_ammo'; ammo: AmmoType; packs: number }
   | { kind: 'tutorial'; step: string }
+  | { kind: 'set_skin'; skin: string | null }
   | { kind: 'change_faction'; faction: C.PlayerFaction }
   | { kind: 'sell_item'; uid: string };
 
@@ -42,11 +43,7 @@ export const AMMO_PRICES: Record<string, { pack: number; cost: number }> = {
   REINFORCED: { pack: 20, cost: 45 }, ARMOR_PIERCING: { pack: 20, cost: 65 }, SHAPED_CHARGE: { pack: 10, cost: 120 }, EXPLOSIVE: { pack: 20, cost: 75 },
 };
 
-/** Reputation with your own faction (1000 points per level, max 7) gives 3 % off ammo per level. */
-export function reputationLevel(ch: C.CharacterState): number {
-  const key = ch.faction;
-  return Math.min(7, Math.floor((ch.reputation[key] ?? 0) / 1000));
-}
+export const reputationLevel = C.reputationLevel;
 
 export function ammoCost(ch: C.CharacterState, ammo: string, packs: number): number | undefined {
   const price = AMMO_PRICES[ammo];
@@ -77,6 +74,11 @@ export function executeAction(ch: C.CharacterState, a: ClientAction, rng: SimRNG
     case 'abandon_quest': return Q.abandonQuest(ch, a.questId);
     case 'claim_season_tier': return Q.claimSeasonTier(ch, a.tier, ctx.nowSeconds);
     case 'buy_ammo': return ctx.buyAmmo(a.ammo, a.packs);
+    case 'set_skin': {
+      if (a.skin !== null && !ch.season.skins.includes(a.skin)) return { ok: false, error: 'skin_not_owned' };
+      ch.activeSkin = a.skin ?? undefined;
+      return { ok: true, value: undefined };
+    }
     case 'change_faction': return C.changeFaction(ch, a.faction, ctx.nowSeconds);
     case 'sell_item': return C.sellItemToNpc(ch, a.uid);
     case 'tutorial': Q.onQuestEvent(ch, { type: 'tutorial', step: a.step }); return { ok: true };

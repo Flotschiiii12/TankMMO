@@ -31,12 +31,14 @@ import { MarketWindow } from './items/MarketWindow.tsx';
 import { useTouchLayout } from './useTouchLayout.ts';
 import { Banner, BossBar, ProgressChip } from './Overlays.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
+import { distanceVolume, mixFromSettings, weaponSoundFor } from '../audio/mixer.ts';
+import type { MusicInputs } from '../audio/music.ts';
 import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts';
 import { HUD } from './HUD.tsx';
 import { ControlsOverlay } from './ControlsOverlay.tsx';
 import { SpectateBar } from './SpectateBar.tsx';
 import { DialogueModal } from './Dialogue.tsx';
-import { pendingScene } from '../../shared/rules/quests.ts';
+import { pendingScene, seasonTier } from '../../shared/rules/quests.ts';
 import type { StoryScene } from '../../shared/data/story.ts';
 import { HintToast, HowToPlay, TutorialChip } from './Guidance.tsx';
 import { markShown, newHintMemory, nextHint, type HintState } from '../../shared/rules/hints.ts';
@@ -60,6 +62,10 @@ import { TutorialOverlay } from './TutorialOverlay.tsx';
 import { DebugPanel } from './DebugPanel.tsx';
 import { TitleScreen } from './TitleScreen.tsx';
 import { ZoneTransition } from './title/ZoneTransition.tsx';
+import { AnnounceHost, announcements } from './motion/AnnounceHost.tsx';
+import { diffAnnouncements, type ProgressSnapshot } from './motion/announce.ts';
+import { isRevealRarity } from './motion/motion.ts';
+import { MAP_METADATA_TABLE } from '../../shared/data/maps.ts';
 import { PortraitWarning } from './PortraitWarning.tsx';
 import { WorldMapModal } from './WorldMapModal.tsx';
 import { isInSafeZone, spawnDebugTargetEnemies } from '../sim/world.ts';
@@ -196,8 +202,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     }
     rendererRef.current = new WorldRenderer(cameraRef.current, particlesRef.current);
 
-    soundEngine.setSoundEnabled(profile.settings.soundEnabled);
-    soundEngine.setVolume(profile.settings.masterVolume);
+    soundEngine.applyMix(mixFromSettings(profile.settings));
 
     // Apply saved user zoom
     if (profile.settings.zoom !== undefined) {
@@ -334,6 +339,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     if (rendererRef.current) { rendererRef.current.reducedEffects = lowFx; rendererRef.current.plainGround = !!profile.settings.performanceMode; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
   }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.uiScale, profile.settings.colorBlind]);
+  const ambientMapId = online ? online.mapId : Number(profile.currentMapId) || 1;
+  useEffect(() => { soundEngine.setAmbient(gameState === 'PLAYING' ? MAP_METADATA_TABLE[ambientMapId]?.biome : undefined); }, [ambientMapId, gameState]);
   useEffect(() => { document.documentElement.classList.toggle('reduced-motion', !!profile.settings.reduceMotion); }, [profile.settings.reduceMotion]);
   useEffect(() => { window.dispatchEvent(new Event('resize')); }, [profile.settings.performanceMode]); // re-applies the DPR cap
 
@@ -350,6 +357,12 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     if (profile.character.level > 1) questEvent({ type: 'tutorial', step: 'levelup' });
   }, [profile.character.level]);
 
+  const lastCombatAt = useRef(-1e9);
+  const musicAcc = useRef(0);
+  const distToPlayer = (pos: { x: number; y: number }): number => {
+    const me = clientRef.current?.getEntity(clientRef.current.playerId);
+    return me ? Math.hypot(me.pos.x - pos.x, me.pos.y - pos.y) : 0;
+  };
   // Handle Simulation Events
   const handleSimEvent = useCallback(
     (event: SimEvent) => {
@@ -362,7 +375,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           if (!event.isSecondary) {
             const family = clientRef.current?.getEntity(event.shooterId)?.weaponFamily;
             particles.emitMuzzleFlash(event.pos, event.angle, family);
-            soundEngine.playCannonShot(isPlayer);
+            soundEngine.playWeapon(weaponSoundFor(family), isPlayer, isPlayer ? 1 : distanceVolume(distToPlayer(event.pos)));
           }
           // Tutorial auto-advance: Player fired cannon!
           if (isPlayer && !event.isSecondary) questEvent({ type: 'tutorial', step: 'fire' });
@@ -382,7 +395,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         case 'explosion': {
           particles.emitExplosion(event.pos, true);
           particles.emitRing(event.pos, Math.min(160, event.radius ?? 80), '#f97316');
-          soundEngine.playExplosion(true);
+          soundEngine.playExplosion(true, distanceVolume(distToPlayer(event.pos)));
           camera.addShake(8);
           break;
         }
@@ -397,7 +410,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             if (event.armorDamage > 0 && victim && victim.armor <= 1 && victim.maxArmor > 0) { particles.emitRing(event.pos, 44, '#38bdf8'); particles.emitDamageText(event.pos, tr('ARMOR BREAK'), '#38bdf8', true); }
             if (event.isRearHit) particles.emitDamageText({ x: event.pos.x, y: event.pos.y + 14 }, tr('REAR'), '#fb923c');
           }
-          soundEngine.playImpact(event.armorDamage > 0);
+          soundEngine.playImpact(event.armorDamage > 0, distanceVolume(distToPlayer(event.pos)));
+          if (event.attackerId === clientRef.current?.playerId || event.targetId === clientRef.current?.playerId) lastCombatAt.current = performance.now();
           if (event.finalDamage > 0) mergerRef.current.add(event.targetId, event.pos, event.finalDamage, { crit: event.isCrit || event.isRearHit, armor: event.armorDamage > 0 }, performance.now());
           if (clientRef.current && event.targetId === clientRef.current.playerId) {
             camera.addShake(event.finalDamage > 400 ? 14 : 6);
@@ -413,7 +427,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             if (fe) setKillFeed((f) => [...f.filter((x) => x.until > performance.now()), fe].slice(-4));
           }
           particles.emitExplosion(event.pos, true);
-          soundEngine.playExplosion(true);
+          soundEngine.playExplosion(true, distanceVolume(distToPlayer(event.pos)));
           camera.addShake(10);
           if (!clientRef.current || event.killerId !== clientRef.current.playerId || clientRef.current.sendAction) break;
           const victim = clientRef.current.getEntity(event.victimId);
@@ -588,6 +602,18 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             const speed = Math.hypot(player.vel.x, player.vel.y);
             const speedRatio = player.maxSpeed > 0 ? speed / player.maxSpeed : 0;
             soundEngine.updateEngine(speedRatio);
+            musicAcc.current += dt;
+            if (musicAcc.current >= 0.25) { // adaptive music: a few updates per second are plenty
+              let hostilesNear = 0; let bossNear = false;
+              for (const e of entities) {
+                if (!e.isHostile || e.hull <= 0) continue;
+                const d = Math.hypot(e.pos.x - player.pos.x, e.pos.y - player.pos.y);
+                if (d < 900) hostilesNear++;
+                if (e.kind === 'boss' && d < 1600) bossNear = true;
+              }
+              const inputs: MusicInputs = { inSafeZone: !!client['clientWorld']?.mapDef && isInClientSafeZone(client['clientWorld'].mapDef, player.pos), hostilesNear, inCombat: performance.now() - lastCombatAt.current < 2500, bossNear };
+              soundEngine.updateMusic(inputs, musicAcc.current); musicAcc.current = 0;
+            }
 
             // Emit dust trails and tread marks when driving
             if (speed > 15) {
@@ -791,6 +817,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   // HUD opacity as a CSS variable (panels read it), notices derived from character changes (loot, XP, level-ups, ready quests)
   useEffect(() => { document.documentElement.style.setProperty('--hud-opacity', String(profile.settings.hudOpacity ?? 0.7)); }, [profile.settings.hudOpacity]);
   const prevChar = useRef<CharSnapshot | null>(null);
+  const prevProgress = useRef<ProgressSnapshot | null>(null);
   useEffect(() => {
     const ch = profile.character;
     const snap: CharSnapshot = { xp: ch.xp, level: ch.level, scrap: ch.wallet.scrap, fragments: ch.wallet.fragments, ore: Object.values(ch.wallet.ore).reduce((a, b) => a + b, 0), itemUids: ch.inventory.map((i) => i.uid), readyQuests: Object.values(ch.quests.active).filter((q) => q.ready).map((q) => q.id), honor: ch.wallet.honor };
@@ -798,7 +825,15 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     if (!prev || gameState !== 'PLAYING') return;
     const itemName = (uid: string) => { const it = ch.inventory.find((i) => i.uid === uid); return it ? describeItem(it).name : uid; };
     const questName = (id: string) => { const d = QUEST_BY_ID.get(id); return d ? nm(d.nameKey, d.name) : id; };
-    for (const n of diffCharacter(prev, snap, itemName, questName, { levelUp: (lv) => tr('Level up! You are now level {n}', { n: lv }), xp: 'XP', scrap: tr('scrap'), fragments: tr('fragments'), ore: tr('ore'), honor: tr('honor'), questReady: tr('Quest ready') })) notifications.push(n);
+    const prog: ProgressSnapshot = { level: ch.level, tier: seasonTier(ch), readyQuests: snap.readyQuests };
+    const prevProg = prevProgress.current; prevProgress.current = prog;
+    if (prevProg) for (const a of diffAnnouncements(prevProg, prog)) {
+      if (a.kind === 'levelup') announcements.push({ kind: 'levelup', title: tr('Level up!'), sub: tr('You are now level {n}', { n: a.value }) });
+      else if (a.kind === 'rankup') announcements.push({ kind: 'rankup', title: tr('Season rank up!'), sub: tr('Tier {n} reached', { n: a.value }) });
+      else announcements.push({ kind: 'quest', title: tr('Quest complete'), sub: questName(String(a.value)) });
+    }
+    const itemRarity = (uid: string) => ch.inventory.find((i) => i.uid === uid)?.rarity;
+    for (const n of diffCharacter(prev, snap, itemName, questName, { levelUp: (lv) => tr('Level up! You are now level {n}', { n: lv }), xp: 'XP', scrap: tr('scrap'), fragments: tr('fragments'), ore: tr('ore'), honor: tr('honor'), questReady: tr('Quest ready') }, itemRarity)) { const made = notifications.push(n); if (made.rarity && made.count === 1 && isRevealRarity(made.rarity)) soundEngine.playLootReveal(made.rarity); }
   }, [profile.character, gameState]); // eslint-disable-line react-hooks/exhaustive-deps
   // opening the garage by any route (menu, G key) completes the garage lesson of the guided start
   useEffect(() => { if (garageOpen) questEvent({ type: 'tutorial', step: 'garage' }); }, [garageOpen]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1045,6 +1080,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       <ChatWindow client={online ?? null} character={profile.character} myName={profile.character.name} />
       <ProfileWindow client={online ?? null} myName={profile.character.name} />
       {gameState === 'PLAYING' && <Banner text={banner} />}
+      {gameState === 'PLAYING' && <AnnounceHost />}
       <ZoneTransition mapId={online ? online.mapId : Number(profile.currentMapId) || 1} playing={gameState === 'PLAYING'} />
       {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `${tr('Arena')} · ${tr('Round')} ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? `${tr('Break')} ` : `${tr('Start in')} `}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `${tr('Gate')} · ${tr('Wave')} ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}

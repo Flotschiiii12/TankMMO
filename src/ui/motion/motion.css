@@ -1,0 +1,30 @@
+/* Motion: transform and opacity only. Durations come from the --m-* tokens, which are 0ms under reduced motion. */
+/* Floating windows are centred with an inline transform, so they only fade; phone sheets have no transform and slide up. */
+@keyframes k-win-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes k-win-sheet-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+[data-window] { animation: k-win-in var(--m-med, 160ms) var(--ease-out, ease-out) backwards; }
+@media (max-width: 899px), (max-height: 559px) { [data-window] { animation-name: k-win-sheet-in; } }
+
+.mo-announce { position: fixed; left: 50%; top: 24%; z-index: 92; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 12px 22px; border-radius: 14px; pointer-events: none;
+  background: color-mix(in srgb, var(--c-bg-0) 88%, transparent); border: 1px solid var(--accent-line); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 8px 28px rgba(0, 0, 0, 0.55);
+  animation: mo-announce 2800ms var(--ease-out, ease-out) both; max-width: min(92vw, 520px); }
+.mo-announce__icon { font-size: 28px; color: var(--accent); line-height: 1; }
+.mo-announce__title { font-size: clamp(18px, 3.4vw, 26px); font-weight: 800; letter-spacing: 0.04em; color: var(--c-text); }
+.mo-announce__sub { font-size: 12px; color: var(--c-text-2); letter-spacing: 0.1em; text-transform: uppercase; }
+.mo-announce--rankup .mo-announce__icon { color: var(--c-xp); }
+.mo-announce--quest .mo-announce__icon { color: var(--c-good); }
+@keyframes mo-announce { 0% { opacity: 0; transform: translate(-50%, 14px) scale(0.92); } 10% { opacity: 1; transform: translate(-50%, 0) scale(1.03); } 16% { transform: translate(-50%, 0) scale(1); } 82% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -6px); } }
+
+/* loot reveal: a rare drop pops in with a short glow ring */
+.k-reveal { position: relative; animation: mo-reveal 520ms var(--ease-out, ease-out) both; }
+.k-reveal::after { content: ""; position: absolute; inset: -2px; border-radius: inherit; border: 2px solid var(--rc, var(--accent)); opacity: 0; animation: mo-ring 900ms var(--ease-out, ease-out) 120ms both; pointer-events: none; }
+@keyframes mo-reveal { 0% { opacity: 0; transform: scale(0.7); } 60% { opacity: 1; transform: scale(1.08); } 100% { transform: none; } }
+@keyframes mo-ring { 0% { opacity: 0.9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.35); } }
+
+:root.reduced-motion .mo-announce { animation: mo-announce-still 2800ms linear both; }
+:root.reduced-motion [data-window], :root.reduced-motion .k-reveal, :root.reduced-motion .k-reveal::after { animation: none; }
+@keyframes mo-announce-still { 0%, 85% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .mo-announce { animation: mo-announce-still 2800ms linear both; }
+  [data-window], .k-reveal, .k-reveal::after { animation: none; }
+}

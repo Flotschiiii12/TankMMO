@@ -3,6 +3,7 @@
 @import "./ui/kit/kit.css";
 @import "./ui/title/title.css";
 @import "./ui/settings/settings.css";
+@import "./ui/motion/motion.css";
 
 @layer base {
   html, body, #root {

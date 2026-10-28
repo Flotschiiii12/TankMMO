@@ -18,6 +18,22 @@ export function getLang(): Lang {
 export function setLang(l: Lang): void { try { localStorage.setItem(KEY, l); } catch { /* ignore */ } window.location.reload(); }
 
 const DE: Record<string, string> = {
+  'Level up!': 'Level aufgestiegen!',
+  'You are now level {n}': 'Du bist jetzt Level {n}',
+  'Season rank up!': 'Saison-Rang gestiegen!',
+  'Tier {n} reached': 'Stufe {n} erreicht',
+  'Quest complete': 'Quest abgeschlossen',
+  'Music': 'Musik',
+  'Ambience': 'Umgebungsklang',
+  'Wind, surf and rumble that match the zone.': 'Wind, Brandung und Grollen passend zur Zone.',
+  'Test sounds': 'Töne testen',
+  'Weapon': 'Waffe',
+  'Fanfare': 'Fanfare',
+  'Effects': 'Effekte',
+  'Interface sounds': 'Oberflächentöne',
+  'Calm in safe zones, drums and bass in a fight. Quiet by default.': 'Ruhig in Sicherheitszonen, Drums und Bass im Kampf. Standardmäßig leise.',
+  'Weapons, hits, explosions, engine and ambience.': 'Waffen, Treffer, Explosionen, Motor und Umgebung.',
+  'Clicks, windows, loot chimes and level-up fanfares.': 'Klicks, Fenster, Beute-Klänge und Level-Fanfaren.',
   'Harbours, dunes and salt marshes: open ground to learn on.': 'Häfen, Dünen und Salzmarschen: offenes Gelände zum Lernen.',
   'Stone passes and cold ridges: terrain gives you cover.': 'Steinpässe und kalte Grate: das Gelände bietet dir Deckung.',
   'Wide grass plains and caravan roads: room to move.': 'Weite Grasebenen und Karawanenstraßen: viel Platz zum Fahren.',

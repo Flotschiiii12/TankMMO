@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { keybinds, windowForBoundCode } from '../title/keybinds.ts';
 import { windowForCode } from './defs.ts';
 import { windows } from './windowStore.ts';
+import { soundEngine } from '../../audio/soundEngine.ts';
 
 const typing = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || (t instanceof HTMLElement && t.isContentEditable);
 
@@ -25,6 +26,11 @@ export function WindowKeys({ enabled = true }: { enabled?: boolean }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [enabled]);
+
+  useEffect(() => { // soft open / close sounds follow the stack size
+    let n = windows.size;
+    return windows.subscribe(() => { const m = windows.size; if (m > n) soundEngine.playUI('open'); else if (m < n) soundEngine.playUI('close'); n = m; });
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;

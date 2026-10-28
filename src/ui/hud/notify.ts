@@ -3,13 +3,13 @@
  * Events of the same group and key that arrive within MERGE_MS are folded into one entry ("+120 scrap" instead of five toasts).
  */
 export type NotifyGroup = 'loot' | 'xp' | 'quest' | 'system';
-export interface Notice { id: number; group: NotifyGroup; key: string; title: string; amount: number; count: number; unit?: string; kind: 'info' | 'success' | 'warn'; at: number; icon?: string }
+export interface Notice { id: number; group: NotifyGroup; key: string; title: string; amount: number; count: number; unit?: string; kind: 'info' | 'success' | 'warn'; at: number; icon?: string; rarity?: string }
 export const MERGE_MS = 2500;
 export const TOAST_MS = 4500;
 export const MAX_ACTIVE = 3;
 export const MAX_HISTORY = 40;
 
-export interface NotifyInput { group: NotifyGroup; key?: string; title: string; amount?: number; unit?: string; kind?: Notice['kind']; icon?: string }
+export interface NotifyInput { group: NotifyGroup; key?: string; title: string; amount?: number; unit?: string; kind?: Notice['kind']; icon?: string; rarity?: string }
 
 export class NotifyStore {
   private nextId = 1;
@@ -33,7 +33,7 @@ export class NotifyStore {
     if (last && t - last.at < MERGE_MS) {
       last.amount += input.amount ?? 0; last.count += 1; last.at = t; last.kind = input.kind ?? last.kind; this.emit(); return last;
     }
-    const n: Notice = { id: this.nextId++, group: input.group, key, title: input.title, amount: input.amount ?? 0, count: 1, unit: input.unit, kind: input.kind ?? 'info', at: t, icon: input.icon };
+    const n: Notice = { id: this.nextId++, group: input.group, key, title: input.title, amount: input.amount ?? 0, count: 1, unit: input.unit, kind: input.kind ?? 'info', at: t, icon: input.icon, rarity: input.rarity };
     this.list.push(n); if (this.list.length > MAX_HISTORY) this.list.shift();
     this.emit(); return n;
   }
@@ -57,7 +57,7 @@ export interface CharSnapshot { xp: number; level: number; scrap: number; fragme
 
 export interface DiffNotice extends NotifyInput { amount?: number }
 /** What changed between two character snapshots, as notices. Spending (negative scrap) is not announced. */
-export function diffCharacter(prev: CharSnapshot, next: CharSnapshot, itemName: (uid: string) => string, questName: (id: string) => string, t: { levelUp: (lv: number) => string; xp: string; scrap: string; fragments: string; ore: string; honor: string; questReady: string }): DiffNotice[] {
+export function diffCharacter(prev: CharSnapshot, next: CharSnapshot, itemName: (uid: string) => string, questName: (id: string) => string, t: { levelUp: (lv: number) => string; xp: string; scrap: string; fragments: string; ore: string; honor: string; questReady: string }, itemRarity?: (uid: string) => string | undefined): DiffNotice[] {
   const out: DiffNotice[] = [];
   if (next.level > prev.level) out.push({ group: 'xp', key: 'level', title: t.levelUp(next.level), kind: 'success' });
   else if (next.xp > prev.xp) out.push({ group: 'xp', key: 'xp', title: '', amount: next.xp - prev.xp, unit: t.xp });
@@ -66,7 +66,7 @@ export function diffCharacter(prev: CharSnapshot, next: CharSnapshot, itemName: 
   if (next.ore > prev.ore) out.push({ group: 'loot', key: 'ore', title: '', amount: next.ore - prev.ore, unit: t.ore });
   if (next.honor > prev.honor) out.push({ group: 'xp', key: 'honor', title: '', amount: next.honor - prev.honor, unit: t.honor });
   const had = new Set(prev.itemUids);
-  for (const uid of next.itemUids) if (!had.has(uid)) out.push({ group: 'loot', key: `item:${itemName(uid)}`, title: itemName(uid), kind: 'success' });
+  for (const uid of next.itemUids) if (!had.has(uid)) out.push({ group: 'loot', key: `item:${itemName(uid)}`, title: itemName(uid), kind: 'success', rarity: itemRarity?.(uid) });
   const was = new Set(prev.readyQuests);
   for (const id of next.readyQuests) if (!was.has(id)) out.push({ group: 'quest', key: `ready:${id}`, title: `${t.questReady}: ${questName(id)}`, kind: 'success' });
   return out;

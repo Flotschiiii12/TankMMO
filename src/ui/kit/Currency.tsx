@@ -1,5 +1,6 @@
 import React from 'react';
 import { CurrencyIcon } from '../GameIcon.tsx';
+import { CountUp } from '../motion/CountUp.tsx';
 import { compactNumber, formatDelta } from './logic.ts';
 
 /** Wallet chip with the painted icon: <CurrencyChip kind="scrap" value={1234} />. */
@@ -7,7 +8,7 @@ export const CurrencyChip: React.FC<{ kind: string; value: number; label?: strin
   <span className="k-chip" title={title ?? label ?? kind.replace(/_/g, ' ')}>
     <CurrencyIcon kind={kind} size={16} label={label ?? kind} />
     {label && <span className="k-chip__label">{label}</span>}
-    <span>{compact ? compactNumber(value) : Math.round(value).toLocaleString('en-US')}</span>
+    {compact ? <span>{compactNumber(value)}</span> : <CountUp value={Math.round(value)} />}
   </span>
 );
 

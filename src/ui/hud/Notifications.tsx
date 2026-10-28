@@ -6,6 +6,7 @@ import { useShortScreen } from '../useShortScreen.ts';
 import { EmptyState } from '../kit/States.tsx';
 import { windows } from '../wm/windowStore.ts';
 import { notifications, noticeText, type Notice } from './notify.ts';
+import { isRevealRarity } from '../motion/motion.ts';
 
 export function useNotifications() { return useSyncExternalStore(notifications.subscribe, notifications.getSnapshot, notifications.getSnapshot); }
 
@@ -21,7 +22,7 @@ export const NotificationHost: React.FC<{ leftHanded?: boolean; touchLayout: boo
   const place: React.CSSProperties = touchLayout ? controlStrip(leftHanded, 'calc(max(0.75rem, var(--safe-bottom)) + 3.4rem)') : { left: 'max(0.75rem, var(--safe-left))', bottom: 'calc(max(0.75rem, var(--safe-bottom)) + 3.4rem)' };
   return (
     <div data-hud="notices" style={place} className="absolute z-20 flex flex-col items-start gap-1 pointer-events-none" role="log" aria-live="polite">
-      {active.filter((n) => !minimal || n.kind !== 'info').map((n) => <div key={n.id} className="k-notice" data-group={n.group} data-kind={n.kind}><span aria-hidden>{n.icon ?? GROUP_ICON[n.group]}</span>{noticeText(n)}</div>)}
+      {active.filter((n) => !minimal || n.kind !== 'info').map((n) => <div key={n.id} className={`k-notice ${isRevealRarity(n.rarity) ? 'k-reveal' : ''}`} style={n.rarity ? ({ '--rc': `var(--r-${n.rarity.toLowerCase()}, var(--accent))` } as React.CSSProperties) : undefined} data-group={n.group} data-kind={n.kind} data-rarity={n.rarity}><span aria-hidden>{n.icon ?? GROUP_ICON[n.group]}</span>{noticeText(n)}</div>)}
     </div>
   );
 };

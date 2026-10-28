@@ -1,3 +1,4 @@
+import { soundEngine } from '../../audio/soundEngine.ts';
 import React from 'react';
 
 export interface TabItem { id: string; label: React.ReactNode; pip?: boolean | number; disabled?: boolean }
@@ -14,7 +15,7 @@ export const Tabs: React.FC<{ tabs: TabItem[]; value: string; onChange: (id: str
   return (
     <div role="tablist" aria-label={label} className={`k-tabs ${className}`} onKeyDown={onKey}>
       {tabs.map((t) => (
-        <button key={t.id} role="tab" type="button" aria-selected={t.id === value} tabIndex={t.id === value ? 0 : -1} disabled={t.disabled} className="k-tab" onClick={() => onChange(t.id)}>
+        <button key={t.id} role="tab" type="button" aria-selected={t.id === value} tabIndex={t.id === value ? 0 : -1} disabled={t.disabled} className="k-tab" onClick={() => { if (t.id !== value) soundEngine.playUI('tab'); onChange(t.id); }}>
           {t.label}
           {t.pip ? (typeof t.pip === 'number' ? <span className="k-counter">{t.pip > 99 ? '99+' : t.pip}</span> : <span className="k-pip" />) : null}
         </button>

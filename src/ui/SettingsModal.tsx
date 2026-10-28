@@ -6,6 +6,7 @@ import { tr, currentLang, setLang } from '../i18n.ts';
 import { UserProfile } from '../save/profile.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { getCredential } from '../net/connect.ts';
+import { DEFAULT_MIX } from '../audio/mixer.ts';
 import { Row, Slider, Toggle } from './settings/parts.tsx';
 import { KeysTab } from './settings/KeysTab.tsx';
 import { AccountTab } from './settings/AccountTab.tsx';
@@ -57,10 +58,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, o
       {tab === 'audio' && (
         <div className="st-body" data-testid="tab-audio">
           <Row title={tr('Audio Effects & Engine Hum')}>
-            <Toggle setting="soundEnabled" label={tr('Audio Effects & Engine Hum')} on={s.soundEnabled} onText={tr('Enabled')} offText={tr('Muted')} onChange={(v) => { soundEngine.setSoundEnabled(v); set({ soundEnabled: v }); }} />
+            <Toggle setting="soundEnabled" label={tr('Audio Effects & Engine Hum')} on={s.soundEnabled} onText={tr('Enabled')} offText={tr('Muted')} onChange={(v) => { set({ soundEnabled: v }); }} />
           </Row>
-          <Row title={tr('Master Volume')}>
-            <Slider setting="masterVolume" label={tr('Master Volume')} min={0} max={1} step={0.05} value={s.masterVolume} onChange={(v) => { soundEngine.setVolume(v); set({ masterVolume: v }); }} format={pct} />
+          {([
+            ['masterVolume', 'Master Volume', s.masterVolume, undefined],
+            ['musicVolume', 'Music', s.musicVolume ?? DEFAULT_MIX.music, 'Calm in safe zones, drums and bass in a fight. Quiet by default.'],
+            ['effectsVolume', 'Effects', s.effectsVolume ?? DEFAULT_MIX.effects, 'Weapons, hits, explosions, engine and ambience.'],
+            ['interfaceVolume', 'Interface sounds', s.interfaceVolume ?? DEFAULT_MIX.interface, 'Clicks, windows, loot chimes and level-up fanfares.'],
+          ] as const).map(([key, title, val, hint]) => (
+            <Row key={key} title={tr(title)} hint={hint ? tr(hint) : undefined}>
+              <Slider setting={key} label={tr(title)} min={0} max={1} step={0.05} value={val} onChange={(v) => set({ [key]: v })} format={pct} />
+            </Row>
+          ))}
+          <Row title={tr('Music')}><Toggle setting="musicEnabled" label={tr('Music')} on={s.musicEnabled !== false} onChange={(v) => set({ musicEnabled: v })} /></Row>
+          <Row title={tr('Ambience')} hint={tr('Wind, surf and rumble that match the zone.')}><Toggle setting="ambientEnabled" label={tr('Ambience')} on={s.ambientEnabled !== false} onChange={(v) => set({ ambientEnabled: v })} /></Row>
+          <Row title={tr('Test sounds')}>
+            <Button onClick={() => soundEngine.playWeapon('cannon', true)}>{tr('Weapon')}</Button>
+            <Button onClick={() => soundEngine.playUI('confirm')}>{tr('Interface')}</Button>
+            <Button onClick={() => soundEngine.playFanfare('levelup')}>{tr('Fanfare')}</Button>
           </Row>
         </div>
       )}

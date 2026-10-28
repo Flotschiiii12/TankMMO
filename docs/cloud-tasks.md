@@ -1,6 +1,6 @@
 # Ready-to-paste tasks for cloud sessions
 
-Shortcut: start a session at https://claude.ai/code on branch `claude/unify-client` and just type `start` — see `docs/cloud-master.md` (runs tasks 1, 2, 4, 3 and optionally 5 below in one go).
+Shortcut: start a session at https://claude.ai/code on branch `claude/unify-client` and type `start` (round 1, done: `docs/cloud-master.md`) or `start2` (round 2, 10 tasks: `docs/cloud-master-2.md`).
 
 Manual way: start a session at https://claude.ai/code, pick repo `Flotschiiii12/TankMMO`, branch `claude/unify-client`, and paste ONE task per session.
 Each task is independent (separate branch, small overlap), so they can run in parallel. The session reads `CLAUDE.md` by itself.

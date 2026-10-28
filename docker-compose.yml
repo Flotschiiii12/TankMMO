@@ -8,5 +8,6 @@ services:
     environment:
       ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
       BACKUP_DIR: /data/backups   # daily consistent backups, newest 14 kept
+      TRUST_PROXY: "1"           # one reverse proxy hop (Caddy): per-IP REST limits use X-Forwarded-For
     volumes:
       - ./data:/data

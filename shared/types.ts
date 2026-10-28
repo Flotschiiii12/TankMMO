@@ -256,6 +256,9 @@ export interface SimEntity {
   provokedBy?: number;
   /** spawned by the invasion event: removed when the event ends */
   fromInvasion?: boolean;
+  /** spawned by a world event (convoy race, meteor shower...): removed when the event ends */
+  fromEvent?: boolean;
+  eventId?: string;
   isWorldBoss?: boolean;
   damageBy?: Record<number, number>;
 }

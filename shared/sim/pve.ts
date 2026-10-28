@@ -21,7 +21,7 @@ import {
   vec2,
 } from '../types.ts';
 import { stepDungeon } from './dungeon.ts';
-import { activeEvents, eventAppliesToMap, WORLD_BOSS_PERIOD_SECONDS } from './events.ts';
+import { activeEvents, CONVOY_RACE_CONVOYS, eventAppliesToMap, STORM_ORE_BONUS, STORM_STRIKE_RADIUS, STORM_STRIKE_SECONDS, stormStrikeDamage, WORLD_BOSS_PERIOD_SECONDS } from './events.ts';
 import { getNextEntityId, isPosInSafeZone, spawnVehicle, World, fireMainCannon } from './world.ts';
 import { droneAbsorb } from './drones.ts';
 
@@ -47,6 +47,7 @@ export interface PveState {
   bossTimer: number;
   bossId?: number;
   activeEvents: string[];
+  nextStormStrike?: number;
   nextInvasionWave: number;
 }
 
@@ -264,27 +265,71 @@ function stepEvents(world: World): void {
     world.events.push({ type: 'event_started', eventId: e.id, kind: e.kind });
     pushChat(world, 'EVENT', 'EVT', 'S', `Event started: ${e.kind.replace('_', ' ')}`);
     if (e.kind === 'meteor_shower') spawnMeteorNodes(world);
+    if (e.kind === 'convoy_race') spawnRaceConvoys(world);
     if (e.kind === 'invasion') world.pve.nextInvasionWave = world.time;
   }
   for (const old of world.pve.activeEvents) {
     if (!ids.includes(old)) {
       world.events.push({ type: 'event_ended', eventId: old, kind: old.split('@')[0] });
       if (old.startsWith('invasion')) for (const e of [...world.entities.values()]) if (e.fromInvasion) world.entities.delete(e.id);
+      for (const e of [...world.entities.values()]) if (e.fromEvent && e.eventId === old) world.entities.delete(e.id); // meteor crystals, race convoys: nothing is left behind
     }
   }
   world.pve.activeEvents = ids;
+  if (active.some((e) => e.kind === 'storm_event') && world.time >= (world.pve.nextStormStrike ?? 0)) { world.pve.nextStormStrike = world.time + STORM_STRIKE_SECONDS; stormStrike(world); }
   if (active.some((e) => e.kind === 'invasion') && world.time >= world.pve.nextInvasionWave) {
     world.pve.nextInvasionWave = world.time + INVASION_WAVE_SECONDS;
     spawnInvasionWave(world);
   }
 }
 
+/** A random spot on the map that is not inside (or right next to) a safe zone. */
+function openSpot(world: World, margin = 300): Vec2 {
+  let p: Vec2 = { x: world.width / 2, y: world.height / 2 };
+  for (let i = 0; i < 40; i++) {
+    p = { x: world.rng.range(300, world.width - 300), y: world.rng.range(300, world.height - 300) };
+    if (!world.safeZones.some((z) => dist(p, z) < z.radius + margin)) return p;
+  }
+  return p;
+}
+
 function spawnMeteorNodes(world: World): void {
   for (let i = 0; i < 4; i++) {
-    const n = makeInert(world, 'resource_node', 'METEOR Crystal', { x: world.rng.range(300, world.width - 300), y: world.rng.range(300, world.height - 300) }, 32, 999999);
+    const n = makeInert(world, 'resource_node', 'METEOR Crystal', openSpot(world), 32, 999999);
     n.nodeType = 'crystal';
     n.nodeOreRemaining = 150;
+    n.fromEvent = true;
+    n.eventId = currentEventId(world, 'meteor_shower');
   }
+}
+
+function currentEventId(world: World, kind: string): string | undefined {
+  const now = world.clockOffset + world.time;
+  return activeEvents(now).find((e) => e.kind === kind)?.id;
+}
+
+/** Convoy race: a couple of loot convoys cross the map; whoever destroys them first gets the cargo. They vanish when the race ends. */
+function spawnRaceConvoys(world: World): void {
+  const lvl = world.map ? world.map.levelRange[1] : 5;
+  for (let i = 0; i < CONVOY_RACE_CONVOYS; i++) {
+    const c = spawnEnemy(world, 'loot_convoy', lvl, openSpot(world, 500));
+    c.temporary = true; c.fromEvent = true; c.eventId = currentEventId(world, 'convoy_race');
+  }
+}
+
+/** Storm: lightning marks a spot near a random player; a hostile telegraph ring warns first. Never inside safe zones. */
+function stormStrike(world: World): void {
+  const players = Array.from(world.entities.values()).filter((e) => e.kind === 'player' && e.hull > 0 && !isPosInSafeZone(world, e.pos));
+  if (!players.length) return;
+  const target = players[world.rng.rangeInt(0, players.length - 1)];
+  const a = world.rng.next() * Math.PI * 2; const r = world.rng.range(30, 220);
+  const pos = { x: clamp(target.pos.x + Math.cos(a) * r, 50, world.width - 50), y: clamp(target.pos.y + Math.sin(a) * r, 50, world.height - 50) };
+  if (isPosInSafeZone(world, pos)) return;
+  const bolt = makeInert(world, 'telegraph', 'Lightning', pos, STORM_STRIKE_RADIUS);
+  bolt.isHostile = true; bolt.sourceEntityId = undefined;
+  bolt.telegraphRadius = STORM_STRIKE_RADIUS; bolt.telegraphDuration = 1.4; bolt.telegraphMaxDuration = 1.4;
+  bolt.telegraphDamage = stormStrikeDamage(target.level);
+  bolt.fromEvent = true; bolt.eventId = currentEventId(world, 'storm_event');
 }
 
 const INVASION_WAVE_SECONDS = 90;
@@ -322,7 +367,7 @@ function announceBossRewards(world: World, boss: SimEntity): void {
 
 function dropLoot(world: World, victim: SimEntity): void {
   const arch = archetypeFor(victim.archetypeId || victim.kind);
-  const scrap = Math.round((12 + victim.level * 6) * arch.dropsScrapMultiplier * world.rng.range(0.8, 1.25));
+  const scrap = Math.round((12 + victim.level * 6) * arch.dropsScrapMultiplier * world.rng.range(0.8, 1.25) * (victim.fromInvasion ? 1.5 : 1));
   const parts = world.rng.rangeInt(1, 4);
   const hasAmmo = world.rng.chance(0.6);
   const ammoType: AmmoType = world.rng.chance(0.5) ? 'ARMOR_PIERCING' : 'EXPLOSIVE';
@@ -617,7 +662,8 @@ function updateMining(world: World, dt: number): void {
       p.miningTimer = 0;
       const mined = Math.min(25, node.nodeOreRemaining ?? 0);
       node.nodeOreRemaining = (node.nodeOreRemaining ?? 0) - mined;
-      world.events.push({ type: 'loot_collected', collectorId: p.id, crateType: `ore:${node.nodeType}`, amount: mined, pos: { ...node.pos } });
+      const stormy = world.pve.activeEvents.some((id) => id.startsWith('storm_event'));
+      world.events.push({ type: 'loot_collected', collectorId: p.id, crateType: `ore:${node.nodeType}`, amount: stormy ? Math.round(mined * STORM_ORE_BONUS) : mined, pos: { ...node.pos } });
     }
   }
 }

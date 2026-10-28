@@ -26,7 +26,7 @@ function keysInUse(): Array<{ key: string; what: string }> {
   for (const x of TALENTS_CATALOG) k.push({ key: x.nameKey, what: x.id }, { key: x.descKey, what: x.id });
   for (const a of ACHIEVEMENTS_CATALOG) k.push({ key: a.nameKey, what: a.id }, { key: a.descKey, what: a.id });
   for (const r of RANKS_CATALOG) k.push({ key: r.nameKey, what: `rank ${r.level}` }, { key: r.titleKey, what: `rank ${r.level}` });
-  for (const ev of EVENT_KINDS) k.push({ key: `event.${ev}.name`, what: ev }, { key: `event.${ev}.notice`, what: ev });
+  for (const ev of EVENT_KINDS) k.push({ key: `event.${ev}.name`, what: ev }, { key: `event.${ev}.notice`, what: ev }, { key: `event.${ev}.reward`, what: ev });
   return k;
 }
 

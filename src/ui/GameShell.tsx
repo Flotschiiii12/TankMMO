@@ -29,6 +29,7 @@ import { HintToast, HowToPlay, TutorialChip } from './Guidance.tsx';
 import { markShown, newHintMemory, nextHint, type HintState } from '../../shared/rules/hints.ts';
 import { tutorialStatus, tutorialFlag, questMarkers } from '../../shared/rules/quests.ts';
 import { TUTORIAL_STEPS } from '../../shared/data/quests.ts';
+import { activeEvents, eventAppliesToMap, worldBossSlot, WORLD_BOSS_PERIOD_SECONDS } from '../../shared/sim/events.ts';
 import { KillFeed, LowHealthVignette, TargetPanel } from './CombatHud.tsx';
 import { DamageNumberMerger, killFeedEntry, type KillFeedEntry } from './combatLogic.ts';
 import { impactLevel, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../render/combatFx.ts';
@@ -47,6 +48,18 @@ function isInClientSafeZone(def: { safeZones?: Array<{ x: number; y: number; rad
   return zones.some((z) => (pos.x - z.x) ** 2 + (pos.y - z.y) ** 2 <= z.radius * z.radius);
 }
 
+/** "Invasion · 12:30" for every world event that is running on this map right now (schedule only, no server state needed). */
+function runningEventLines(mapId: number): string[] {
+  const now = Date.now() / 1000;
+  const lines: string[] = [];
+  for (const e of activeEvents(now)) {
+    if (!eventAppliesToMap(e.kind, mapId)) continue;
+    lines.push(`${nm(`event.${e.kind}.name`, e.kind.replace(/_/g, ' '))} · ${fmtClock(e.endsAt - now)}`);
+  }
+  const wb = worldBossSlot(now);
+  if (wb.mapId === mapId) lines.push(`${nm('event.world_boss.name', 'World Boss')} · ${fmtClock(wb.startsAt + WORLD_BOSS_PERIOD_SECONDS - now)}`);
+  return lines;
+}
 const fmtClock = (sec: number) => { const s = Math.max(0, Math.floor(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ online }) => {
@@ -131,13 +144,13 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       refreshParty();
       online.onSocialEvent((kind, d) => {
         if (kind === 'party_update') setPartyNames(d ? d.members.map((m: any) => m.name) : []);
-        const text = kind === 'friend_request' ? tr('{from} sent you a friend request', { from: d.from }) : kind === 'friend_accepted' ? tr('{from} is now your friend', { from: d.from }) : kind === 'party_invite' ? tr('{from} invited you to a party', { from: d.from }) : kind === 'clan_invite' ? tr('{from} invited you to {clan}', { from: d.from, clan: d.clan }) : kind === 'announcement' ? `${tr('Announcement')}: ${d.text}` : kind === 'achievement' ? `${tr('Achievement unlocked')}: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `${tr('Gate')} ${tr(String(d.result))}` : kind === 'arena_start' ? tr('Arena match starting') : kind === 'arena_round' ? `${tr('Round over')}: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `${d.won ? tr('Arena won') : tr('Arena lost')} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
+        const text = kind === 'friend_request' ? tr('{from} sent you a friend request', { from: d.from }) : kind === 'friend_accepted' ? tr('{from} is now your friend', { from: d.from }) : kind === 'party_invite' ? tr('{from} invited you to a party', { from: d.from }) : kind === 'clan_invite' ? tr('{from} invited you to {clan}', { from: d.from, clan: d.clan }) : kind === 'event_reward' ? tr('{event} reward: +{scrap} scrap for {kills} kills', { event: nm(`event.${d.event}.name`, d.event), scrap: d.scrap, kills: d.kills }) : kind === 'announcement' ? `${tr('Announcement')}: ${d.text}` : kind === 'achievement' ? `${tr('Achievement unlocked')}: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `${tr('Gate')} ${tr(String(d.result))}` : kind === 'arena_start' ? tr('Arena match starting') : kind === 'arena_round' ? `${tr('Round over')}: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `${d.won ? tr('Arena won') : tr('Arena lost')} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
         if (text) setNotices((n) => [...n.slice(-4), text]);
         if (kind === 'arena_phase') { arenaRef.current = { phase: d.phase, round: d.round, wins: d.wins, endsAt: Date.now() + d.secondsLeft * 1000 }; setProgress('arena'); }
         else if (kind === 'arena_start') setProgress(`${tr('Arena')} · ${tr('Round')} 1`);
         else if (kind === 'arena_round' && !arenaRef.current) setProgress(`${tr('Arena')} · ${d.wins?.join(' - ')}`);
         else if (kind === 'arena_result') { arenaRef.current = null; setProgress(null); }
-        if (text && (kind.startsWith('arena') || kind === 'dungeon' || kind === 'achievement' || kind === 'announcement')) showBanner(text);
+        if (text && (kind.startsWith('arena') || kind === 'dungeon' || kind === 'achievement' || kind === 'event_reward' || kind === 'announcement')) showBanner(text);
       });
     }
     rendererRef.current = new WorldRenderer(cameraRef.current, particlesRef.current);
@@ -290,6 +303,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         }
 
         case 'drone_fx': { rendererRef.current?.drones.onEvent(event, performance.now() / 1000); break; }
+        case 'event_ended': { showBanner(`${tr('Event over')}: ${nm(`event.${event.kind}.name`, tr(event.kind.replace(/_/g, ' ')))}`); break; }
         case 'event_started': { showBanner(`${tr('Event')}: ${nm(`event.${event.kind}.name`, tr(event.kind.replace(/_/g, ' ')))}`); break; }
         case 'dungeon_wave': { showBanner(`${tr('Wave')} ${event.wave} / ${event.total}`); gateRef.current = { wave: event.wave, total: event.total, endsAt: event.timeLeft != null ? Date.now() + event.timeLeft * 1000 : 0 }; setProgress('gate'); break; }
         case 'dungeon_cleared': { showBanner(tr('Gate cleared!')); setProgress(null); gateRef.current = null; break; }
@@ -887,6 +901,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             mapHeight={currentMapDef?.height || 4000}
             partyNames={partyNames}
             mapName={currentMapDef?.name || 'Green Valley'}
+            eventLines={runningEventLines(online ? online.mapId : Number(profile.currentMapId) || 1)}
             isSafeZone={inSafeZone}
             profile={profile}
             chatMessages={activeSnapshot?.chatHistory || []}

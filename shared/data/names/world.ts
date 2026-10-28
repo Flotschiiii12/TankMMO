@@ -70,15 +70,22 @@ const GATE_DE: Record<string, [string, string]> = {
   gate_iron_crown_vault: ['Tresor der Eisernen Krone', 'Herrscher des Tresors'],
 };
 
-const EVENTS: Record<string, { name: Pair; notice: Pair }> = {
-  invasion: { name: { en: 'Invasion', de: 'Invasion' }, notice: { en: 'Raiders are attacking the starter zones!', de: 'Plünderer greifen die Startgebiete an!' } },
-  convoy_race: { name: { en: 'Convoy Race', de: 'Konvoi-Rennen' }, notice: { en: 'Supply convoys are racing across the central roads.', de: 'Versorgungskonvois rasen über die zentralen Straßen.' } },
-  storm_event: { name: { en: 'Storm', de: 'Sturm' }, notice: { en: 'A violent storm sweeps the frozen lands.', de: 'Ein heftiger Sturm fegt über die Frostlande.' } },
-  meteor_shower: { name: { en: 'Meteor Shower', de: 'Meteoritenschauer' }, notice: { en: 'Meteors are falling. Rare ore is up for grabs!', de: 'Meteoriten schlagen ein. Seltenes Erz liegt bereit!' } },
-  weekend_xp: { name: { en: 'Weekend XP', de: 'Wochenend-EP' }, notice: { en: 'Weekend bonus: 50 % more experience.', de: 'Wochenend-Bonus: 50 % mehr Erfahrung.' } },
+const EVENTS: Record<string, { name: Pair; notice: Pair; reward: Pair }> = {
+  invasion: { name: { en: 'Invasion', de: 'Invasion' }, notice: { en: 'Raiders are attacking the starter zones!', de: 'Plünderer greifen die Startgebiete an!' },
+    reward: { en: 'Destroy raiders: 3 or more kills pay 40 scrap each (max 400) when the invasion ends, and raiders drop 50 % more scrap.', de: 'Zerstöre Plünderer: ab 3 Abschüssen gibt es am Ende 40 Schrott pro Plünderer (max. 400), außerdem lassen sie 50 % mehr Schrott fallen.' } },
+  convoy_race: { name: { en: 'Convoy Race', de: 'Konvoi-Rennen' }, notice: { en: 'Supply convoys are racing across the central roads.', de: 'Versorgungskonvois rasen über die zentralen Straßen.' },
+    reward: { en: 'Two armored convoys cross the map. Destroy them for their cargo; they leave when the race ends.', de: 'Zwei gepanzerte Konvois durchqueren die Karte. Zerstöre sie für ihre Fracht; wenn das Rennen endet, verschwinden sie.' } },
+  storm_event: { name: { en: 'Storm', de: 'Sturm' }, notice: { en: 'A violent storm sweeps the frozen lands.', de: 'Ein heftiger Sturm fegt über die Frostlande.' },
+    reward: { en: 'Lightning strikes near players (watch the warning rings). Mining yields 25 % more ore.', de: 'Blitze schlagen in der Nähe von Spielern ein (achte auf die Warnringe). Beim Abbau gibt es 25 % mehr Erz.' } },
+  meteor_shower: { name: { en: 'Meteor Shower', de: 'Meteoritenschauer' }, notice: { en: 'Meteors are falling. Rare ore is up for grabs!', de: 'Meteoriten schlagen ein. Seltenes Erz liegt bereit!' },
+    reward: { en: 'Four crystal deposits fall outside the safe zones. Mine them before the shower ends.', de: 'Vier Kristallvorkommen stürzen außerhalb der Sicherheitszonen ab. Baue sie ab, bevor der Schauer endet.' } },
+  weekend_xp: { name: { en: 'Weekend XP', de: 'Wochenend-EP' }, notice: { en: 'Weekend bonus: 50 % more experience.', de: 'Wochenend-Bonus: 50 % mehr Erfahrung.' },
+    reward: { en: '50 % more experience from kills, all weekend.', de: '50 % mehr Erfahrung aus Abschüssen, das ganze Wochenende.' } },
+  world_boss: { name: { en: 'World Boss', de: 'Weltboss' }, notice: { en: 'A world boss has appeared!', de: 'Ein Weltboss ist erschienen!' },
+    reward: { en: 'A world boss appears every 2 hours on the Old Highway or the Storm Coast. Top damage dealers receive gold, silver and bronze rewards.', de: 'Alle 2 Stunden erscheint ein Weltboss an der Alten Fernstraße oder der Sturmküste. Die größten Schadensverursacher erhalten Gold-, Silber- und Bronze-Belohnungen.' } },
 };
 
-export const EVENT_KINDS = [...EVENT_RULES.map((r) => r.kind as string), 'weekend_xp'];
+export const EVENT_KINDS = [...EVENT_RULES.map((r) => r.kind as string), 'weekend_xp', 'world_boss'];
 
 export function buildWorldNames(): Table {
   const out: Table = {};
@@ -102,6 +109,7 @@ export function buildWorldNames(): Table {
   for (const [kind, v] of Object.entries(EVENTS)) {
     out[`event.${kind}.name`] = v.name;
     out[`event.${kind}.notice`] = v.notice;
+    out[`event.${kind}.reward`] = v.reward;
   }
   return out;
 }

@@ -17,6 +17,8 @@ interface HUDProps {
   mapHeight: number;
   partyNames?: string[];
   mapName: string;
+  /** running world events on this map, already localized ("Invasion · 12:30") */
+  eventLines?: string[];
   isSafeZone: boolean;
   profile: UserProfile;
   chatMessages: ChatMessage[];
@@ -49,6 +51,7 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenSocial,
   onOpenInventory,
   onOpenWorldMap,
+  eventLines,
   onOpenSettings,
   onOpenTutorial,
 }) => {
@@ -88,6 +91,8 @@ export const HUD: React.FC<HUDProps> = ({
             {tr('Ammo')}: <span className="font-semibold text-orange-400">{player?.selectedAmmo.replace('_', ' ')}</span> (
             {player ? (player.ammoInventory[player.selectedAmmo] < 0 ? '∞' : player.ammoInventory[player.selectedAmmo]) : '∞'})
           </div>
+
+          {eventLines?.map((l) => <div key={l} className="text-[11px] font-semibold text-amber-300 truncate" data-testid="event-line">⚑ {l}</div>)}
 
           {/* Quest tracker */}
           {Object.values(profile.character.quests.active).sort((a, b) => Number(b.id.startsWith('tut_')) - Number(a.id.startsWith('tut_')) || Number(b.ready) - Number(a.ready)).slice(0, 3).map((aq) => {

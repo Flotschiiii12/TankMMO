@@ -6,6 +6,7 @@
  */
 
 import { tr, T, nm } from '../i18n.ts';
+import { EventCalendar } from './EventCalendar.tsx';
 import React, { useState, useMemo } from 'react';
 import {
   Compass,
@@ -401,6 +402,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
             <p className="text-xs text-slate-400 mt-3 leading-relaxed">
               {nm(`${selectedMeta.nameKey}.desc`, selectedMeta.description)}
             </p>
+            <EventCalendar />
 
             {/* Zone Telemetry */}
             <div className="mt-4 space-y-2 bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs">

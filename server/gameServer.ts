@@ -22,6 +22,7 @@ import { AccountService } from './accounts.ts';
 import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
 import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
 import { MatchRecorder, MAX_SPECTATORS_PER_MATCH, SPECTATE_DELAY_TICKS, SpectateHud, SpectateMatchInfo } from './spectate.ts';
+import { invasionReward, isWeekendXp, WEEKEND_XP_MULTIPLIER } from '../shared/sim/events.ts';
 import { NEWBIE_PROTECTION_LEVEL } from '../shared/rules/hints.ts';
 import { AllianceRepo, ClanStorageRepo, STORAGE_DAILY_WITHDRAW } from './clanStorage.ts';
 import { allianceKey } from '../shared/sim/pvp.ts';
@@ -137,6 +138,8 @@ interface Session {
   /** plausibility: where the vehicle was at the end of the previous tick, and when it last fired the main gun (sim time) */
   lastPos?: { x: number; y: number };
   lastShotAt?: number;
+  /** raiders destroyed during the running invasion on this map (reward when it ends) */
+  invasionKills?: number;
 }
 
 interface Party { id: number; leader: string; members: Set<string> }
@@ -1069,6 +1072,18 @@ export class GameServer {
       for (const s of inst.sessions) s.pendingEvents.push(ev);
       inst.arena?.rec.addEvent(ev);
       switch (ev.type) {
+        case 'event_started': if (ev.kind === 'invasion') for (const s of inst.sessions) s.invasionKills = 0; break;
+        case 'event_ended': {
+          if (ev.kind !== 'invasion') break;
+          for (const s of inst.sessions) {
+            const kills = s.invasionKills ?? 0; s.invasionKills = 0;
+            const scrap = invasionReward(kills);
+            if (scrap <= 0) continue;
+            s.character.wallet.scrap += scrap; s.dirty = true; this.sendCharacter(s);
+            this.send(s, { type: 's_social_event', kind: 'event_reward', data: { event: 'invasion', scrap, kills } });
+          }
+          break;
+        }
         case 'entity_killed': {
           const killer = ev.killerId !== undefined ? byEntity.get(ev.killerId) : undefined;
           const victim = world.entities.get(ev.victimId);
@@ -1155,7 +1170,8 @@ export class GameServer {
   private rewardKill(s: Session, victim: SimEntity): void {
     const ch = s.character;
     const isBoss = victim.kind === 'boss';
-    const xp = calculateKillXP(ch.level, victim.level, !!victim.isElite, isBoss);
+    const xp = Math.round(calculateKillXP(ch.level, victim.level, !!victim.isElite, isBoss) * (isWeekendXp(Math.floor(this.clock.nowMs() / 1000)) ? WEEKEND_XP_MULTIPLIER : 1));
+    if (victim.fromInvasion) s.invasionKills = (s.invasionKills ?? 0) + 1;
     const before = ch.level;
     const group = this.partyShare(s);
     if (group.length > 1) {

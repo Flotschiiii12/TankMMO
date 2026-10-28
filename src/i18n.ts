@@ -51,6 +51,7 @@ const DE: Record<string, string> = {
   'Spectating (stream is delayed)': 'Zuschauen (Übertragung verzögert)', 'Previous': 'Zurück', 'Next': 'Weiter', 'Free camera': 'Freie Kamera', 'Running matches': 'Laufende Matches', 'No match is running right now.': 'Gerade läuft kein Match.', 'watching': 'Zuschauer', 'Watch': 'Zuschauen',
   'That match is not running (any more)': 'Dieses Match läuft nicht (mehr)', 'This match has no free spectator slots': 'Dieses Match hat keine freien Zuschauerplätze', 'You are already watching a match': 'Du schaust schon ein Match', 'You are not watching a match': 'Du schaust kein Match',
   'Leave': 'Verlassen',
+  'Event over': 'Event vorbei', '{event} reward: +{scrap} scrap for {kills} kills': '{event}-Belohnung: +{scrap} Schrott für {kills} Abschüsse', 'Event calendar': 'Event-Kalender', 'running now': 'läuft jetzt', 'starts in': 'startet in', 'Maps': 'Karten', 'every map': 'alle Karten',
   'Getting started': 'Erste Schritte', 'Skip tutorial': 'Tutorial überspringen', 'How to play': 'So wird gespielt', 'Replay tutorial hints': 'Tutorial-Hinweise ansehen',
   'Drive around: drag the left stick or press WASD.': 'Fahre herum: Ziehe den linken Stick oder drücke WASD.',
   'Lock an enemy: tap the TARGET button or tap an enemy vehicle.': 'Erfasse einen Gegner: Tippe auf ZIEL oder direkt auf ein feindliches Fahrzeug.',

@@ -51,6 +51,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [socialOpen, setSocialOpen] = useState(false);
   const [notices, setNotices] = useState<string[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
+  const [, forceRender] = useState(0);
   const [partyNames, setPartyNames] = useState<string[]>([]);
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showBanner = useCallback((text: string) => {
@@ -182,6 +183,12 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       if (next !== prev) profileStoreRef.current.save(next);
       return next;
     });
+  }, []);
+
+  // The HUD (chat, boss bar, radar) reads the live snapshot at render time: refresh it 5 times a second.
+  useEffect(() => {
+    const id = setInterval(() => forceRender((n) => (n + 1) % 1e6), 200);
+    return () => clearInterval(id);
   }, []);
 
   // Accessibility: reduced effects and UI scale follow the settings

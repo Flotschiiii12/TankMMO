@@ -20,18 +20,21 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
   const [tab, setTab] = useState<Tab>('friends');
   const [msg, setMsg] = useState('');
   const [name, setName] = useState('');
-  const [data, setData] = useState<any>(null);
+  const [rankKind, setRankKind] = useState<'level' | 'clans'>('level');
+  const [rawData, setRawData] = useState<{ key: string; value: any } | null>(null);
+  const tabKey = `${tab}:${rankKind}`;
+  const data = rawData && rawData.key === tabKey ? rawData.value : null; // never render another tab's data
+  const setData = (value: any) => setRawData({ key: tabKey, value });
   const [clanName, setClanName] = useState('');
   const [clanTag, setClanTag] = useState('');
-  const [rankKind, setRankKind] = useState<'level' | 'clans'>('level');
 
-  const call = useCallback(async (req: SocialOp, refresh = true) => {
+  const call = async (req: SocialOp, refresh = true) => {
     soundEngine.playUIClick();
     const r = await client.social(req);
     setMsg(r.ok ? '' : errorText(r.error || 'failed'));
     if (r.ok && refresh) void load();
     return r;
-  }, [client]);
+  };
 
   const load = useCallback(async () => {
     const req: SocialOp = tab === 'gates' ? { op: 'dungeon_list' } : tab === 'career' ? { op: 'friend_list' } : tab === 'market' ? { op: 'ah_search' } : tab === 'arena' ? { op: 'arena_status' } : tab === 'friends' ? { op: 'friend_list' } : tab === 'party' ? { op: 'party_info' } : tab === 'clan' ? { op: 'clan_info' } : { op: 'ranking', kind: rankKind };

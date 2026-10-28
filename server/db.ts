@@ -112,7 +112,8 @@ CREATE TABLE IF NOT EXISTS clans (
   scrap INTEGER NOT NULL DEFAULT 0,
   research_json TEXT NOT NULL DEFAULT '{}',
   quest_json TEXT NOT NULL DEFAULT '{}',
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  emblem TEXT
 );
 CREATE TABLE IF NOT EXISTS clan_members (
   account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
@@ -201,6 +202,9 @@ export function openDatabase(path = ':memory:'): DatabaseSync {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  // Backwards-compatible column additions for databases created before the column existed.
+  const clanCols = db.prepare('PRAGMA table_info(clans)').all() as Array<{ name: string }>;
+  if (!clanCols.some((c) => c.name === 'emblem')) db.exec('ALTER TABLE clans ADD COLUMN emblem TEXT');
   return db;
 }
 

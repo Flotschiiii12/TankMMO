@@ -95,6 +95,7 @@ interface Session {
   partyId?: number;
   clanId?: number;
   clanTag?: string;
+  clanEmblem?: string;
 }
 
 interface Party { id: number; leader: string; members: Set<string> }
@@ -469,7 +470,7 @@ export class GameServer {
     s.chatTimes.push(now);
     const clean = text.replace(/\b(fuck|shit|nazi)\w*/gi, (m) => '*'.repeat(m.length));
     const channel = msg.channel;
-    const out: ServerMessage = { type: 's_chat', message: { id: `m${now}${s.accountId.slice(0, 4)}`, sender: s.name, clanTag: s.clanTag, channel: channel as any, text: clean, timestamp: now } };
+    const out: ServerMessage = { type: 's_chat', message: { id: `m${now}${s.accountId.slice(0, 4)}`, sender: s.name, clanTag: s.clanTag, clanEmblem: s.clanEmblem, channel: channel as any, text: clean, timestamp: now } };
     const blockedMe = new Set(this.deps.social.blockedBy(s.accountId)); // recipients who blocked the sender never see it
     const deliver = (o: Session) => { if (!blockedMe.has(o.accountId)) this.send(o, out); };
     switch (channel) {
@@ -514,6 +515,7 @@ export class GameServer {
     const c = this.deps.social.clanOf(s.accountId);
     s.clanId = c?.id;
     s.clanTag = c?.tag;
+    s.clanEmblem = c?.emblem;
     const e = s.instance?.world.entities.get(s.entityId);
     if (e) e.clanTag = c?.tag ?? 'CMD';
   }
@@ -609,8 +611,13 @@ export class GameServer {
 
       case 'clan_create': {
         if (s.character.wallet.scrap < CLAN_CREATE_COST) return reply({ ok: false, error: 'not_enough_scrap' });
-        const r = social.createClan(s.accountId, String(req.name ?? ''), String(req.tag ?? ''));
+        const r = social.createClan(s.accountId, String(req.name ?? ''), String(req.tag ?? ''), req.emblem === undefined || req.emblem === null || req.emblem === '' ? undefined : String(req.emblem));
         if (r.ok) { s.character.wallet.scrap -= CLAN_CREATE_COST; s.dirty = true; this.applyClanTag(s); this.sendCharacter(s); }
+        return reply(r);
+      }
+      case 'clan_emblem': {
+        const r = social.setEmblem(s.accountId, String(req.emblem ?? ''));
+        if (r.ok) for (const o of this.sessions.values()) if (o.clanId === s.clanId) this.applyClanTag(o);
         return reply(r);
       }
       case 'clan_invite': {
@@ -643,7 +650,7 @@ export class GameServer {
         const c = social.clanOf(target!.id);
         const stats = row ? C.computeLoadoutStats(row.character) : undefined;
         return reply({ ok: true, data: {
-          name: target!.name, level: row?.character.level ?? 1, clan: c ? { name: c.name, tag: c.tag } : null, online: !!live,
+          name: target!.name, level: row?.character.level ?? 1, clan: c ? { name: c.name, tag: c.tag, emblem: c.emblem ?? null } : null, online: !!live,
           vehicle: row?.character.activeVehicle, power: stats ? Math.round(Math.sqrt(stats.dps * (stats.maxHull + stats.maxArmor))) : 0,
           titles: row?.character.season.titles ?? [], isFriend: social.areFriends(s.accountId, target!.id), blocked: social.isBlocked(s.accountId, target!.id),
         } });

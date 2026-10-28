@@ -36,7 +36,7 @@ const DE: Record<string, string> = {
   // social
   'Social': 'Soziales', 'friends': 'Freunde', 'party': 'Gruppe', 'clan': 'Clan', 'ranking': 'Rangliste', 'market': 'Markt', 'arena': 'Arena', 'gates': 'Tore', 'career': 'Laufbahn',
   'Add friend': 'Freund hinzufügen', 'Invite to party': 'In Gruppe einladen', 'Remove': 'Entfernen', 'Block': 'Blockieren', 'Kick': 'Rauswerfen', 'Promote': 'Befördern', 'Invite': 'Einladen',
-  'Leave party': 'Gruppe verlassen', 'Leave clan': 'Clan verlassen', 'Create': 'Gründen', 'Join': 'Beitreten', 'Buy': 'Kaufen', 'Queue': 'Anstellen', 'Enter': 'Betreten',
+  'Leave party': 'Gruppe verlassen', 'Leave clan': 'Clan verlassen', 'Create': 'Gründen', 'Emblem': 'Wappen', 'Join': 'Beitreten', 'Buy': 'Kaufen', 'Queue': 'Anstellen', 'Enter': 'Betreten',
   'Donate 1,000': '1.000 spenden', 'Collect mail': 'Post abholen', 'My listings': 'Meine Angebote', 'List 24h': '24 h anbieten', 'No friends yet.': 'Noch keine Freunde.', 'No listings.': 'Keine Angebote.',
   'Faction war scores': 'Fraktionskrieg-Stand', 'Leave current gate': 'Aktuelles Tor verlassen', 'Create a clan (10,000 scrap) or accept an invite.': 'Gründe einen Clan (10.000 Schrott) oder nimm eine Einladung an.',
   // garage

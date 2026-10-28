@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ChatMessage } from '../sim/types.ts';
+import { ClanEmblemBadge } from './GameIcon.tsx';
 
 interface ChatLogProps {
   messages: ChatMessage[];
@@ -32,7 +33,7 @@ export const ChatLog: React.FC<ChatLogProps> = ({ messages }) => {
           >
             [{msg.channel}]
           </span>
-          {msg.clanTag && <span className="text-slate-400 shrink-0">[{msg.clanTag}]</span>}
+          {msg.clanTag && <span className="text-slate-400 shrink-0 inline-flex items-center gap-0.5"><ClanEmblemBadge emblem={msg.clanEmblem} size={12} />[{msg.clanTag}]</span>}
           <span
             className={`font-medium shrink-0 ${
               msg.channel === 'S' ? 'text-red-400' : 'text-blue-300'

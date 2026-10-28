@@ -8,7 +8,8 @@ import { describeItem, errorText } from '../game/actions.ts';
 import { ITEM_BY_ID } from '../../shared/data/items.ts';
 import { priceBandClient } from '../game/priceBand.ts';
 import { ACHIEVEMENTS_CATALOG } from '../../shared/data/achievements.ts';
-import { RankBadge, FactionCrest } from './GameIcon.tsx';
+import { RankBadge, FactionCrest, ClanEmblemBadge } from './GameIcon.tsx';
+import { CLAN_EMBLEMS } from '../../shared/data/emblems.ts';
 import { getRankForHonor } from '../../shared/data/ranks.ts';
 import { codexProgress, progressOf } from '../../shared/rules/achievements.ts';
 
@@ -28,6 +29,8 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
   const setData = (value: any) => setRawData({ key: tabKey, value });
   const [clanName, setClanName] = useState('');
   const [clanTag, setClanTag] = useState('');
+  const [clanEmblem, setClanEmblem] = useState('');
+  const [pickEmblem, setPickEmblem] = useState(false);
 
   const call = async (req: SocialOp, refresh = true) => {
     soundEngine.playUIClick();
@@ -94,7 +97,8 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
           {tab === 'clan' && (
             data && !data.none ? (
               <>
-                <div className="text-sm text-white font-semibold">[{data.tag}] {data.name} <span className="text-xs text-slate-400">storage {data.scrap?.toLocaleString()} scrap · you are {data.myRole}</span></div>
+                <div className="text-sm text-white font-semibold flex items-center gap-1.5"><ClanEmblemBadge emblem={data.emblem} size={28} />[{data.tag}] {data.name} <span className="text-xs text-slate-400">storage {data.scrap?.toLocaleString()} scrap · you are {data.myRole}</span>{data.myRole !== 'member' && <button className={ghost} onClick={() => setPickEmblem(!pickEmblem)}>{tr('Emblem')}</button>}</div>
+                {pickEmblem && <EmblemGrid value={data.emblem ?? ''} onPick={(id) => { setPickEmblem(false); void call({ op: 'clan_emblem', emblem: id }); }} />}
                 <div className="flex gap-1.5"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Invite player" className="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><button className={btn} onClick={() => call({ op: 'clan_invite', name })}>{tr('Invite')}</button><button className={ghost} onClick={() => call({ op: 'clan_donate', amount: 1000 })}>{tr('Donate 1,000')}</button></div>
                 {data.members.map((m: any) => (
                   <div key={m.id} className={row}><span><b className="text-white">{m.name}</b> Lv {m.level} <span className="text-slate-500">{m.role}</span></span>
@@ -106,8 +110,9 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
             ) : (
               <>
                 <div className="text-xs text-slate-400">{tr('Create a clan (10,000 scrap) or accept an invite.')}</div>
-                <div className="flex gap-1.5"><input value={clanName} onChange={(e) => setClanName(e.target.value)} placeholder="Clan name" className="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><input value={clanTag} onChange={(e) => setClanTag(e.target.value)} placeholder="TAG" className="w-16 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><button className={btn} onClick={() => call({ op: 'clan_create', name: clanName, tag: clanTag })}>{tr('Create')}</button></div>
-                {(data?.invites ?? []).map((i: any) => <div key={i.clanId} className={row}><span>[{i.tag}] {i.name}</span><button className={btn} onClick={() => call({ op: 'clan_accept', clanId: i.clanId })}>{tr('Join')}</button></div>)}
+                <div className="flex gap-1.5"><input value={clanName} onChange={(e) => setClanName(e.target.value)} placeholder="Clan name" className="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><input value={clanTag} onChange={(e) => setClanTag(e.target.value)} placeholder="TAG" className="w-16 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><button className={btn} onClick={() => call({ op: 'clan_create', name: clanName, tag: clanTag, emblem: clanEmblem || undefined })}>{tr('Create')}</button></div>
+                <EmblemGrid value={clanEmblem} onPick={(id) => setClanEmblem(clanEmblem === id ? '' : id)} />
+                {(data?.invites ?? []).map((i: any) => <div key={i.clanId} className={row}><span className="flex items-center gap-1"><ClanEmblemBadge emblem={i.emblem} size={18} />[{i.tag}] {i.name}</span><button className={btn} onClick={() => call({ op: 'clan_accept', clanId: i.clanId })}>{tr('Join')}</button></div>)}
               </>
             )
           )}
@@ -181,7 +186,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
           {tab === 'ranking' && (
             <>
               <div className="flex gap-1.5">{(['level', 'clans'] as const).map((k) => <button key={k} onClick={() => setRankKind(k)} className={`px-2 py-1 rounded text-xs ${rankKind === k ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{k}</button>)}</div>
-              {(data ?? []).map((r: any, i: number) => <div key={i} className={row}><span>#{i + 1} <b className="text-white">{r.name}{r.tag ? ` [${r.tag}]` : ''}</b></span><span className="text-slate-400">{r.level ? `Lv ${r.level}` : `${r.members} members · ${r.totalLevel} levels`}</span></div>)}
+              {(data ?? []).map((r: any, i: number) => <div key={i} className={row}><span>#{i + 1} <b className="text-white inline-flex items-center gap-1">{r.emblem && <ClanEmblemBadge emblem={r.emblem} size={16} />}{r.name}{r.tag ? ` [${r.tag}]` : ''}</b></span><span className="text-slate-400">{r.level ? `Lv ${r.level}` : `${r.members} members · ${r.totalLevel} levels`}</span></div>)}
             </>
           )}
         </div>
@@ -189,3 +194,13 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
     </div>
   );
 };
+
+const EmblemGrid: React.FC<{ value: string; onPick: (id: string) => void }> = ({ value, onPick }) => (
+  <div className="grid grid-cols-10 gap-1 max-h-24 overflow-y-auto" role="listbox" aria-label="Emblem">
+    {CLAN_EMBLEMS.map((id) => (
+      <button key={id} type="button" role="option" aria-selected={value === id} aria-label={id.replace(/_/g, ' ')} title={id.replace(/_/g, ' ')} onClick={() => onPick(id)} className={`p-0.5 rounded border ${value === id ? 'border-amber-400 bg-slate-800' : 'border-slate-800'}`}>
+        <ClanEmblemBadge emblem={id} size={24} />
+      </button>
+    ))}
+  </div>
+);

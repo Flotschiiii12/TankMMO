@@ -3,6 +3,7 @@
  * Everything is keyed by account id; names are resolved here. SQL is plain so it ports to PostgreSQL.
  */
 import type { DatabaseSync } from 'node:sqlite';
+import { isClanEmblem } from '../shared/data/emblems.ts';
 
 export const CLAN_CREATE_COST = 10_000;
 export const CLAN_MAX_MEMBERS = 50;
@@ -86,22 +87,34 @@ export class SocialRepo {
   closeReport(id: number): void { this.db.prepare(`UPDATE reports SET status = 'closed' WHERE id = ?`).run(id); }
 
   // ---------------------------------------------------------------- clans
-  clanOf(accountId: string): { id: number; name: string; tag: string; role: ClanRole } | undefined {
-    const r: any = this.db.prepare(`SELECT c.id, c.name, c.tag, m.role FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.account_id = ?`).get(accountId);
-    return r ? { id: r.id, name: r.name, tag: r.tag, role: r.role } : undefined;
+  clanOf(accountId: string): { id: number; name: string; tag: string; emblem?: string; role: ClanRole } | undefined {
+    const r: any = this.db.prepare(`SELECT c.id, c.name, c.tag, c.emblem, m.role FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.account_id = ?`).get(accountId);
+    return r ? { id: r.id, name: r.name, tag: r.tag, emblem: r.emblem ?? undefined, role: r.role } : undefined;
   }
 
-  createClan(founder: string, name: string, tag: string): R<{ clanId: number }> {
+  createClan(founder: string, name: string, tag: string, emblem?: string): R<{ clanId: number }> {
     if (!CLAN_NAME_RE.test(name)) return fail('invalid_clan_name');
     if (!TAG_RE.test(tag)) return fail('invalid_tag');
+    if (emblem !== undefined && !isClanEmblem(emblem)) return fail('invalid_emblem');
     if (this.clanOf(founder)) return fail('already_in_clan');
     try {
-      const r = this.db.prepare(`INSERT INTO clans (name, tag, created_at) VALUES (?, ?, ?)`).run(name, tag.toUpperCase(), this.now());
+      const r = this.db.prepare(`INSERT INTO clans (name, tag, created_at, emblem) VALUES (?, ?, ?, ?)`).run(name, tag.toUpperCase(), this.now(), emblem ?? null);
       const id = Number(r.lastInsertRowid);
       this.db.prepare(`INSERT INTO clan_members (account_id, clan_id, role, joined_at) VALUES (?, ?, 'leader', ?)`).run(founder, id, this.now());
       this.log(id, founder, `Clan founded`);
       return { ok: true, clanId: id };
     } catch { return fail('name_or_tag_taken'); }
+  }
+
+  /** Leader/officer only; the id must be on the whitelist. */
+  setEmblem(actor: string, emblem: string): R {
+    const c = this.clanOf(actor);
+    if (!c) return fail('no_clan');
+    if (c.role === 'member') return fail('no_permission');
+    if (!isClanEmblem(emblem)) return fail('invalid_emblem');
+    this.db.prepare(`UPDATE clans SET emblem = ? WHERE id = ?`).run(emblem, c.id);
+    this.log(c.id, actor, `Changed the emblem to ${emblem}`);
+    return { ok: true };
   }
 
   members(clanId: number): Array<{ id: string; name: string; role: ClanRole; level: number }> {
@@ -122,8 +135,8 @@ export class SocialRepo {
     return { ok: true };
   }
 
-  invitesFor(accountId: string): Array<{ clanId: number; name: string; tag: string }> {
-    return this.db.prepare(`SELECT c.id AS clanId, c.name AS name, c.tag AS tag FROM clan_invites i JOIN clans c ON c.id = i.clan_id WHERE i.account_id = ?`).all(accountId) as any;
+  invitesFor(accountId: string): Array<{ clanId: number; name: string; tag: string; emblem: string | null }> {
+    return this.db.prepare(`SELECT c.id AS clanId, c.name AS name, c.tag AS tag, c.emblem AS emblem FROM clan_invites i JOIN clans c ON c.id = i.clan_id WHERE i.account_id = ?`).all(accountId) as any;
   }
 
   acceptInvite(accountId: string, clanId: number): R {
@@ -189,7 +202,7 @@ export class SocialRepo {
     const c: any = this.db.prepare(`SELECT * FROM clans WHERE id = ?`).get(clanId);
     if (!c) return undefined;
     return {
-      id: c.id, name: c.name, tag: c.tag, scrap: c.scrap, research: JSON.parse(c.research_json), members: this.members(clanId),
+      id: c.id, name: c.name, tag: c.tag, emblem: c.emblem ?? null, scrap: c.scrap, research: JSON.parse(c.research_json), members: this.members(clanId),
       log: this.db.prepare(`SELECT l.ts AS ts, a.name AS actor, l.text AS text FROM clan_log l LEFT JOIN accounts a ON a.id = l.actor WHERE l.clan_id = ? ORDER BY l.id DESC LIMIT 30`).all(clanId),
     };
   }
@@ -222,9 +235,9 @@ export class SocialRepo {
     return q[questId];
   }
 
-  clanRanking(limit = 20): Array<{ name: string; tag: string; members: number; totalLevel: number }> {
+  clanRanking(limit = 20): Array<{ name: string; tag: string; emblem: string | null; members: number; totalLevel: number }> {
     return this.db.prepare(
-      `SELECT c.name AS name, c.tag AS tag, COUNT(m.account_id) AS members, COALESCE(SUM(p.level), 0) AS totalLevel FROM clans c LEFT JOIN clan_members m ON m.clan_id = c.id
+      `SELECT c.name AS name, c.tag AS tag, c.emblem AS emblem, COUNT(m.account_id) AS members, COALESCE(SUM(p.level), 0) AS totalLevel FROM clans c LEFT JOIN clan_members m ON m.clan_id = c.id
        LEFT JOIN profiles p ON p.account_id = m.account_id GROUP BY c.id ORDER BY totalLevel DESC LIMIT ?`
     ).all(limit) as any;
   }

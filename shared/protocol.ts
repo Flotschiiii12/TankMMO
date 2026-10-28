@@ -64,7 +64,8 @@ export type SocialOp =
   | { op: 'party_leave' }
   | { op: 'party_kick'; name: string }
   | { op: 'party_info' }
-  | { op: 'clan_create'; name: string; tag: string }
+  | { op: 'clan_create'; name: string; tag: string; emblem?: string }
+  | { op: 'clan_emblem'; emblem: string }
   | { op: 'clan_invite'; name: string }
   | { op: 'clan_accept'; clanId: number }
   | { op: 'clan_invites' }

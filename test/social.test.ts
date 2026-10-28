@@ -170,6 +170,58 @@ describe('Clans', () => {
   });
 });
 
+describe('Clan emblems', () => {
+  it('create with emblem, invalid id, permissions, change, clans without emblem, DB migration', async () => {
+    const a = await P.make(); const b = await P.make(); const c = await P.make();
+    for (const p of [a, c]) ctx.game.getSessionState(p.id)!.character.wallet.scrap = 100_000;
+    expect((await a.req({ op: 'clan_create', name: 'Emblem Crew', tag: 'EMB', emblem: 'nope' })).error).toBe('invalid_emblem');
+    expect((await a.req({ op: 'clan_create', name: 'Emblem Crew', tag: 'EMB', emblem: '__proto__' })).error).toBe('invalid_emblem');
+    expect(ctx.game.getSessionState(a.id)!.character.wallet.scrap).toBe(100_000); // failed create costs nothing
+    expect((await a.req({ op: 'clan_create', name: 'Emblem Crew', tag: 'EMB', emblem: 'wolf' })).ok).toBe(true);
+    expect((await a.req({ op: 'clan_info' })).data.emblem).toBe('wolf');
+    expect(ctx.social.clanOf(a.id)?.emblem).toBe('wolf');
+
+    expect((await a.req({ op: 'clan_invite', name: b.name })).ok).toBe(true);
+    const invites = (await b.req({ op: 'clan_invites' })).data;
+    expect(invites[0].emblem).toBe('wolf');
+    expect((await b.req({ op: 'clan_accept', clanId: invites[0].clanId })).ok).toBe(true);
+    expect((await b.req({ op: 'clan_emblem', emblem: 'bear_paw' })).error).toBe('no_permission'); // plain member
+    expect((await c.req({ op: 'clan_emblem', emblem: 'bear_paw' })).error).toBe('no_clan');
+    expect((await a.req({ op: 'clan_emblem', emblem: 'bad id' })).error).toBe('invalid_emblem');
+    expect((await a.req({ op: 'clan_emblem', emblem: 'bear_paw' })).ok).toBe(true);
+    expect((await b.req({ op: 'clan_info' })).data.emblem).toBe('bear_paw');
+    expect((await b.req({ op: 'ranking', kind: 'clans' })).data[0].emblem).toBe('bear_paw');
+    expect((await a.req({ op: 'profile', name: a.name })).data.clan.emblem).toBe('bear_paw');
+    // promoted officers may change it
+    expect((await a.req({ op: 'clan_role', name: b.name, role: 'officer' })).ok).toBe(true);
+    expect((await b.req({ op: 'clan_emblem', emblem: 'star' })).ok).toBe(true);
+
+    // a clan created without an emblem (and old rows with NULL) work everywhere
+    expect((await c.req({ op: 'clan_create', name: 'Plain Crew', tag: 'PLN' })).ok).toBe(true);
+    expect((await c.req({ op: 'clan_info' })).data.emblem).toBeNull();
+    expect(ctx.social.clanOf(c.id)?.emblem).toBeUndefined();
+    [a, b, c].forEach((p) => p.close());
+  });
+
+  it('adds the emblem column to a pre-existing clans table without losing data', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const { openDatabase } = await import('../server/db.ts');
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const dir = mkdtempSync(`${tmpdir()}/emb-`);
+    const path = `${dir}/old.db`;
+    const old = new DatabaseSync(path);
+    old.exec(`CREATE TABLE clans (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE COLLATE NOCASE, tag TEXT NOT NULL UNIQUE COLLATE NOCASE, scrap INTEGER NOT NULL DEFAULT 0, research_json TEXT NOT NULL DEFAULT '{}', quest_json TEXT NOT NULL DEFAULT '{}', created_at INTEGER NOT NULL);
+      INSERT INTO clans (name, tag, scrap, created_at) VALUES ('Old Guard', 'OLD', 42, 1);`);
+    old.close();
+    const db = openDatabase(path);
+    const row: any = db.prepare('SELECT name, scrap, emblem FROM clans').get();
+    expect(row).toMatchObject({ name: 'Old Guard', scrap: 42, emblem: null });
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe('Profile, rankings, admin tools', () => {
   it('profile card + level ranking; admin can announce, mute, ban (kicks live), rename and delete', async () => {
     const a = await P.make(); const b = await P.make();

@@ -84,7 +84,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const lastPinchDistRef = useRef<number | null>(null);
 
   // Profiler stats
+  const drawStatsRef = useRef({ avg: 0, worst: 0 });
   const [debugStats, setDebugStats] = useState({
+    drawMs: 0,
+    drawWorstMs: 0,
     fps: 60,
     tickTime: 0,
     entityCount: 0,
@@ -470,7 +473,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           const currentMap = client['clientWorld']?.mapDef;
           if (currentMap) {
             renderer.viewerFaction = player?.faction;
+            const drawT0 = performance.now();
             renderer.render(ctx, entities, player, currentMap, snapshot.time);
+            const drawMs = performance.now() - drawT0;
+            drawStatsRef.current = { avg: drawStatsRef.current.avg * 0.9 + drawMs * 0.1, worst: Math.max(drawMs, drawStatsRef.current.worst * 0.98) };
           }
 
           // Emotes arrive as map chat consisting only of an emote glyph: show them as bubbles
@@ -511,6 +517,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           if (showDebug && player) {
             const stats = client.getTickStats();
             setDebugStats({
+              drawMs: Math.round(drawStatsRef.current.avg * 10) / 10,
+              drawWorstMs: Math.round(drawStatsRef.current.worst),
               fps: currentFps,
               tickTime: stats.tickTime,
               entityCount: stats.entityCount,
@@ -921,6 +929,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       {showDebug && (
         <DebugPanel
           fps={debugStats.fps}
+          drawMs={debugStats.drawMs}
+          drawWorstMs={debugStats.drawWorstMs}
           tickTime={debugStats.tickTime}
           entityCount={debugStats.entityCount}
           tickRate={debugStats.tickRate}

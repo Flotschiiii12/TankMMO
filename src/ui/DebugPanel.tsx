@@ -2,6 +2,8 @@ import React from 'react';
 
 interface DebugPanelProps {
   fps: number;
+  drawMs?: number;
+  drawWorstMs?: number;
   tickTime: number;
   entityCount: number;
   tickRate: number;
@@ -10,6 +12,8 @@ interface DebugPanelProps {
 
 export const DebugPanel: React.FC<DebugPanelProps> = ({
   fps,
+  drawMs,
+  drawWorstMs,
   tickTime,
   entityCount,
   tickRate,
@@ -23,7 +27,11 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
         </div>
         <span>·</span>
         <div>
-          Tick: <span className="text-white">{tickTime}ms</span>
+          Draw: <span className={(drawMs ?? 0) > 12 ? 'text-amber-400' : 'text-emerald-400'}>{drawMs ?? 0}ms</span> <span className="text-slate-500">(max {drawWorstMs ?? 0})</span>
+        </div>
+        <span>·</span>
+        <div>
+          Tick/Ping: <span className="text-white">{tickTime}ms</span>
         </div>
         <span>·</span>
         <div>

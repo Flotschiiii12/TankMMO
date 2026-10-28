@@ -1,3 +1,4 @@
+import { RemoteInterpolator } from './interpolation.ts';
 import { approachSpeed } from '../../shared/rules/movement.ts';
 import { applyPatch } from '../../shared/net/delta.ts';
 import { PROTOCOL_VERSION, ServerMessage, SocialOp } from '../../shared/protocol.ts';
@@ -9,12 +10,8 @@ import { angleDiff, ChatMessage, clamp, dist, lerp, SimCommand, SimEntity, SimEv
 import type { UserProfile } from '../save/profile.ts';
 import type { GameClient } from './client.ts';
 
-const INTERP_MS = 100; // remote entities are rendered ~100 ms in the past (minimum tween length)
-const INTERP_MAX_MS = 320; // far entities only update every other snapshot (200 ms): glide over the whole gap
 const INPUT_FLUSH_MS = 50;
 const PREDICT_DT = 1 / 30;
-
-interface Tween { fromX: number; fromY: number; toX: number; toY: number; fromA: number; toA: number; fromT: number; toT: number; t0: number; dur: number }
 
 export type OnlineStatus = 'connecting' | 'online' | 'closed';
 
@@ -34,7 +31,7 @@ export class OnlineGameClient implements GameClient {
 
   private ws!: WebSocket;
   private entities = new Map<number, SimEntity>();
-  private tweens = new Map<number, Tween>();
+  private interp = new RemoteInterpolator();
   private clientWorld: ClientWorld;
   private predicted: SimEntity | null = null;
   private pendingInputs: SimCommand[] = [];
@@ -96,7 +93,7 @@ export class OnlineGameClient implements GameClient {
         this.playerId = m.assignedEntityId;
         this.mapId = m.mapId;
         this.entities.clear();
-        this.tweens.clear();
+        this.interp.clear();
         this.predicted = null;
         this.clientWorld.mapId = String(m.mapId);
         this.clientWorld.mapDef = MAP_CATALOG[m.mapId] || MAP_CATALOG['green_valley'];
@@ -114,23 +111,11 @@ export class OnlineGameClient implements GameClient {
         this.stateTimes.push(now);
         if (this.stateTimes.length > 20) this.stateTimes.shift();
         for (const p of m.patches) {
-          const before = this.entities.get(p.id);
-          const fromPos = before ? { ...before.pos } : undefined;
-          const fromA = before?.chassisAngle ?? 0;
-          const fromT = before?.turretAngle ?? 0;
           applyPatch(this.entities, p);
           const e = this.entities.get(p.id);
-          if (e && p.id !== this.playerId && fromPos) {
-            const cur = this.tweens.get(p.id);
-            const fx = cur ? this.tweenPos(cur, now).x : fromPos.x;
-            const fy = cur ? this.tweenPos(cur, now).y : fromPos.y;
-            // glide over as long as this entity usually waits between updates (100 ms near, 200 ms far), so it never stops and starts
-            const gap = cur ? now - cur.t0 : INTERP_MS;
-            const dur = clamp(cur ? cur.dur * 0.5 + gap * 0.55 : INTERP_MS, INTERP_MS, INTERP_MAX_MS);
-            this.tweens.set(p.id, { fromX: fx, fromY: fy, toX: e.pos.x, toY: e.pos.y, fromA, toA: e.chassisAngle, fromT, toT: e.turretAngle, t0: now, dur });
-          }
+          if (e && p.id !== this.playerId) this.interp.push(p.id, now, e.pos.x, e.pos.y, e.chassisAngle, e.turretAngle);
         }
-        for (const id of m.removed) { this.entities.delete(id); this.tweens.delete(id); }
+        for (const id of m.removed) { this.entities.delete(id); this.interp.remove(id); }
         this.lastTick = m.tick;
         this.serverTime = m.serverTime;
         this.reconcile();
@@ -155,11 +140,6 @@ export class OnlineGameClient implements GameClient {
       case 's_pong': this.pingMs = Date.now() - m.originalTimestamp; break;
       case 's_error': this.closeReason = m.code; break;
     }
-  }
-
-  private tweenPos(t: Tween, now: number): { x: number; y: number } {
-    const k = clamp((now - t.t0) / t.dur, 0, 1);
-    return { x: lerp(t.fromX, t.toX, k), y: lerp(t.fromY, t.toY, k) };
   }
 
   // ----------------------------------------------------------- prediction
@@ -244,12 +224,9 @@ export class OnlineGameClient implements GameClient {
     const list: SimEntity[] = [];
     for (const e of this.entities.values()) {
       if (e.id === this.playerId && this.predicted) { list.push(this.predicted); continue; }
-      const t = this.tweens.get(e.id);
-      if (t) {
-        const pos = this.tweenPos(t, now);
-        const k = clamp((now - t.t0) / t.dur, 0, 1);
-        list.push({ ...e, pos, chassisAngle: t.fromA + angleDiff(t.toA, t.fromA) * k, turretAngle: t.fromT + angleDiff(t.toT, t.fromT) * k });
-      } else list.push(e);
+      const sm = this.interp.sample(e.id, now);
+      if (sm) list.push({ ...e, pos: { x: sm.x, y: sm.y }, chassisAngle: sm.a, turretAngle: sm.ta });
+      else list.push(e);
     }
     this.clientWorld.chatHistory = this.chat;
     return { tick: this.lastTick, time: this.serverTime, mapId: this.clientWorld.mapId, entities: list, events: [], chatHistory: this.chat };

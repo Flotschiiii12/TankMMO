@@ -185,6 +185,9 @@ export class GameServer {
   /** Public for tests: advance every instance one tick. */
   stepAll(): void {
     const t0 = performance.now();
+    const lap: Record<string, number> = {};
+    let mark = t0;
+    const took = (name: string) => { const n = performance.now(); lap[name] = (lap[name] ?? 0) + (n - mark); mark = n; };
     this.tick++;
     const all: Instance[] = [...[...this.instances.values()].flat(), ...this.arenaInstances, ...this.dungeonInstances];
     {
@@ -195,18 +198,28 @@ export class GameServer {
           if (s.pending.length) { cmds.set(s.entityId, s.pending); s.pending = []; }
           s.cmdBudget = Math.min(MAX_COMMANDS_PER_SECOND, s.cmdBudget + MAX_COMMANDS_PER_SECOND / TICK_HZ);
         }
+        took('prep');
         stepWorld(inst.world, cmds);
+        took('sim');
         this.processEvents(inst);
+        took('events');
         this.handleRespawns(inst);
         if (inst.arena) this.stepArena(inst);
+        took('respawns');
         if (this.tick % SNAPSHOT_EVERY_TICKS === 0) this.sendSnapshots(inst);
+        took('snapshots');
       }
     }
     if (this.tick % TICK_HZ === 0) { this.runMatchmaking(); this.checkSecrets(); }
+    took('every_second');
     if (this.tick % (TICK_HZ * 30) === 0) this.flushWarScores();
+    took('war_scores');
     if (this.tick % (TICK_HZ * 60) === 0) { this.sweepAuctions(); this.runScheduler(); }
+    took('minute_jobs');
     this.autosaveSome();
+    took('autosave');
     const ms = performance.now() - t0;
+    if (ms > 60) log('warn', 'slow_tick', { ms: Math.round(ms), players: this.sessions.size, ...Object.fromEntries(Object.entries(lap).map(([k, v]) => [k, Math.round(v)])) });
     this.metrics.ticks++;
     this.metrics.maxTickMs = Math.max(this.metrics.maxTickMs, ms);
     this.metrics.avgTickMs += (ms - this.metrics.avgTickMs) / Math.min(this.metrics.ticks, 300);

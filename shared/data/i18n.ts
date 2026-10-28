@@ -4,9 +4,11 @@
  * All player-facing text keys resolve through here.
  */
 
+import { NAMES_DE, NAMES_EN } from './names/index.ts';
+
 export type LanguageCode = 'en' | 'de';
 
-export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
+const HAND_WRITTEN: Record<LanguageCode, Record<string, string>> = {
   en: {
     // Classes
     'class.scout': 'Scout',
@@ -219,6 +221,12 @@ export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     'ui.quests': 'Aufträge',
     'ui.settings': 'Optionen',
   },
+};
+
+/** Hand-written UI/ability/ammo texts plus the generated data names (vehicles, items, maps, quests...); the generated ones win. */
+export const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
+  en: { ...HAND_WRITTEN.en, ...NAMES_EN },
+  de: { ...HAND_WRITTEN.de, ...NAMES_DE },
 };
 
 /**

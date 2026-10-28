@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { tr } from '../i18n.ts';
+import { tr, nm } from '../i18n.ts';
 import { CurrencyIcon } from './GameIcon.tsx';
 import { VEHICLE_TIERS } from '../data/vehicles.ts';
 import { createWorld as createSharedWorld, spawnVehicle } from '../../shared/sim/world.ts';
@@ -25,8 +25,8 @@ interface GarageModalProps {
 
 const VEHICLE_ORE_COST: Record<string, number> = Object.fromEntries(VEHICLE_CATALOG.map((v) => [v.id, v.costOre]));
 
-function talentLabel(id: string): string {
-  return id.replace(/^(off|def|log)_/, '').split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+function talentLabel(t: { id: string; nameKey: string }): string {
+  return nm(t.nameKey, t.id.replace(/^(off|def|log)_/, '').split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' '));
 }
 
 const PREVIEW_WORLD = createSharedWorld({ populate: false });
@@ -402,7 +402,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                           onClick={() => run({ kind: 'rank_talent', talentId: t.id })}
                           className="w-full flex items-center justify-between p-1.5 rounded border border-slate-800 hover:border-slate-600 text-left text-xs"
                         >
-                          <span className="text-slate-200">{talentLabel(t.id)} <span className="text-[10px] text-slate-500">{t.effectPerRank.isPercent ? `+${Math.round(t.effectPerRank.valuePerRank * 1000) / 10}%` : `+${t.effectPerRank.valuePerRank}`}/{tr('rank')} · Lv {t.minLevel}</span></span>
+                          <span className="text-slate-200">{talentLabel(t)} <span className="text-[10px] text-slate-500">{t.effectPerRank.isPercent ? `+${Math.round(t.effectPerRank.valuePerRank * 1000) / 10}%` : `+${t.effectPerRank.valuePerRank}`}/{tr('rank')} · Lv {t.minLevel}</span></span>
                           <span className={`tabular-nums ${rank === t.maxRank ? 'text-emerald-400' : 'text-slate-400'}`}>{rank}/{t.maxRank}</span>
                         </button>
                       );

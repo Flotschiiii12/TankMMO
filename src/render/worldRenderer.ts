@@ -1,3 +1,4 @@
+import { localizeEntityName } from '../i18n.ts';
 import { clamp, MapDef, SimEntity, Vec2, dist } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { ParticleSystem } from './particles.ts';
@@ -869,7 +870,7 @@ export class WorldRenderer {
 
     const isHostile = ent.isHostile || (String(ent.kind) === 'player' && !!ent.faction && !!this.viewerFaction && ent.faction !== this.viewerFaction);
     const clan = ent.clanTag ? `[${ent.clanTag}] ` : '';
-    const label = `${clan}${ent.name}`;
+    const label = `${clan}${String(ent.kind) === 'player' ? ent.name : localizeEntityName(ent.name)}`;
 
     // Dark stroke outline so text is readable over sunlit grass & snow
     ctx.strokeStyle = '#09090b';

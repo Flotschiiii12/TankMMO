@@ -1,5 +1,6 @@
 import { VehicleStats } from '../sim/types.ts';
 import { TIER_CONFIGS, VEHICLE_CATALOG } from '../../shared/data/vehicles.ts';
+import { nm } from '../i18n.ts';
 
 const CLASS_LABEL: Record<string, string> = {
   scout: 'Scout',
@@ -22,7 +23,7 @@ export const VEHICLE_TIERS: VehicleStats[] = VEHICLE_CATALOG.map((v) => {
   const tierName = TIER_CONFIGS[v.tier - 1].name;
   return {
     id: v.id,
-    name: `${tierName} ${CLASS_LABEL[v.vehicleClass]}`,
+    name: nm(v.nameKey, `${tierName} ${CLASS_LABEL[v.vehicleClass]}`),
     vehicleClass: v.vehicleClass,
     tier: v.tier,
     damage: v.baseDamage,
@@ -37,7 +38,7 @@ export const VEHICLE_TIERS: VehicleStats[] = VEHICLE_CATALOG.map((v) => {
     // Ore is not a profile currency yet (economy milestone): parts stand in at 1/10.
     costParts: Math.round(v.costOre / 10),
     minLevel: v.minLevel,
-    description: CLASS_BLURB[v.vehicleClass],
+    description: nm(v.descriptionKey, CLASS_BLURB[v.vehicleClass]),
   };
 });
 

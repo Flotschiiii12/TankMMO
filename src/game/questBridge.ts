@@ -1,6 +1,7 @@
 import { UserProfile } from '../save/profile.ts';
 import * as Q from '../../shared/rules/quests.ts';
 import { QUEST_BY_ID } from '../../shared/data/quests.ts';
+import { nm } from '../i18n.ts';
 
 export const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
@@ -13,7 +14,8 @@ export function applyQuestEvent(profile: UserProfile, ev: Q.QuestEvent): { profi
 }
 
 export function questName(id: string): string {
-  return QUEST_BY_ID.get(id)?.name ?? id;
+  const q = QUEST_BY_ID.get(id);
+  return q ? nm(q.nameKey, q.name) : id;
 }
 
 /** Rotates daily/weekly quests when the (real) day changed; no-op otherwise. */

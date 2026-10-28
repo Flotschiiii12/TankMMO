@@ -1,4 +1,4 @@
-import { tr, T } from '../i18n.ts';
+import { tr, T, nm } from '../i18n.ts';
 import { SimRNG } from '../../shared/prng.ts';
 import { CharacterState, ItemInstance, Result } from '../../shared/rules/character.ts';
 import { ITEM_BY_ID, ItemDefinition, RARITY_CONFIGS } from '../../shared/data/items.ts';
@@ -122,6 +122,10 @@ const FAMILY_NAME: Record<string, string> = {
 };
 
 export function itemName(def: ItemDefinition): string {
+  return nm(def.nameKey, englishItemName(def));
+}
+
+function englishItemName(def: ItemDefinition): string {
   if (def.family === 'module') return def.id.replace('mod_', '').split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
   if (def.family === 'drone') return def.id.replace('drn_', '').replace(/_t\d+$/, '').split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ') + ' Drone';
   return `${FAMILY_NAME[def.family] || def.family} T${def.tier}`;

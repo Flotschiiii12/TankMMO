@@ -5,7 +5,7 @@
  * current player location, and single-player roaming fast travel.
  */
 
-import { tr, T } from '../i18n.ts';
+import { tr, T, nm } from '../i18n.ts';
 import React, { useState, useMemo } from 'react';
 import {
   Compass,
@@ -331,7 +331,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
 
                     {/* Small Node Name Label */}
                     <div className="absolute -bottom-5 whitespace-nowrap text-[10px] font-semibold text-slate-300 drop-shadow-md pointer-events-none group-hover:text-white">
-                      {meta.name}
+                      {nm(meta.nameKey, meta.name)}
                     </div>
                   </button>
                 );
@@ -347,7 +347,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                   {tr('Zone')} {selectedMeta.id} · {tr(selectedMeta.region)}
                 </span>
                 <h3 className="text-xl font-bold text-white tracking-tight mt-0.5">
-                  {selectedMeta.name}
+                  {nm(selectedMeta.nameKey, selectedMeta.name)}
                 </h3>
               </div>
               <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700">
@@ -393,7 +393,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
             </div>
 
             <p className="text-xs text-slate-400 mt-3 leading-relaxed">
-              {selectedMeta.description}
+              {nm(`${selectedMeta.nameKey}.desc`, selectedMeta.description)}
             </p>
 
             {/* Zone Telemetry */}
@@ -440,7 +440,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                       className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-left transition text-xs"
                     >
                       <div className="font-bold text-white flex items-center justify-between">
-                        <span>{targetMeta.id}. {targetMeta.name}</span>
+                        <span>{targetMeta.id}. {nm(targetMeta.nameKey, targetMeta.name)}</span>
                         <ArrowRight className="w-3 h-3 text-slate-400" />
                       </div>
                       <span className="text-[10px] text-slate-400">
@@ -468,7 +468,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                   className="w-full py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-sky-600/30"
                 >
                   <Sparkles className="w-4 h-4" />
-                  {tr('Roam to')} {selectedMeta.name}
+                  {tr('Roam to')} {nm(selectedMeta.nameKey, selectedMeta.name)}
                 </button>
               )}
             </div>

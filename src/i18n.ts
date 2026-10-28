@@ -2,6 +2,9 @@
  * Minimal UI translation: English text is the key, German the value. Unknown strings fall back to English.
  * The language is stored in localStorage; changing it reloads the page (simplest way to re-render every screen).
  */
+import { TRANSLATIONS } from '../shared/data/i18n.ts';
+import { KEY_BY_ENGLISH, TITLE_DE } from '../shared/data/names/index.ts';
+
 export type Lang = 'en' | 'de';
 const KEY = 'treadfront_lang';
 
@@ -48,6 +51,7 @@ const DE: Record<string, string> = {
   'Spectating (stream is delayed)': 'Zuschauen (Übertragung verzögert)', 'Previous': 'Zurück', 'Next': 'Weiter', 'Free camera': 'Freie Kamera', 'Running matches': 'Laufende Matches', 'No match is running right now.': 'Gerade läuft kein Match.', 'watching': 'Zuschauer', 'Watch': 'Zuschauen',
   'That match is not running (any more)': 'Dieses Match läuft nicht (mehr)', 'This match has no free spectator slots': 'Dieses Match hat keine freien Zuschauerplätze', 'You are already watching a match': 'Du schaust schon ein Match', 'You are not watching a match': 'Du schaust kein Match',
   'Leave': 'Verlassen',
+  'CRITICAL ALERT: {name} detected on the battlefield!': 'KRITISCHER ALARM: {name} auf dem Schlachtfeld entdeckt!',
   'Donate 1,000': '1.000 spenden', 'Collect mail': 'Post abholen', 'My listings': 'Meine Angebote', 'List 24h': '24 h anbieten', 'No friends yet.': 'Noch keine Freunde.', 'No listings.': 'Keine Angebote.',
   'Faction war scores': 'Fraktionskrieg-Stand', 'Leave current gate': 'Aktuelles Tor verlassen', 'Create a clan (10,000 scrap) or accept an invite.': 'Gründe einen Clan (10.000 Schrott) oder nimm eine Einladung an.',
   // garage
@@ -407,3 +411,21 @@ export const T = (s: string): string => s;
 /** The German table, exposed for the key-coverage test. */
 export const DE_TABLE: Readonly<Record<string, string>> = DE;
 export const currentLang = lang;
+
+
+/** Display name of a data-driven thing by its key; English (and unknown keys) keep the name the data already carries. */
+export function nm(key: string | undefined, fallback: string): string {
+  return lang === 'de' && key ? TRANSLATIONS.de[key] ?? fallback : fallback;
+}
+
+/** "Elite Scout Buggy [Lv.5]" built by the simulation -> German label. Players and unknown names pass through unchanged. */
+export function localizeEntityName(name: string): string {
+  if (lang !== 'de') return name;
+  const m = name.match(/^(Elite )?(.*?)(\s\[Lv\.\d+\])?$/);
+  const key = m ? KEY_BY_ENGLISH.get(m[2]) : undefined;
+  if (!m || !key) return name;
+  return `${m[1] ? 'Elite-' : ''}${TRANSLATIONS.de[key]}${m[3] ?? ''}`;
+}
+
+/** Title text (achievement / season rewards) in the current language. */
+export function titleText(en: string): string { return lang === 'de' ? TITLE_DE[en] ?? en : en; }

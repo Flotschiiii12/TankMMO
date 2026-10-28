@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { tr } from '../i18n.ts';
+import { tr, nm, titleText } from '../i18n.ts';
+import { DUNGEONS } from '../../shared/data/dungeons.ts';
 import { X, Users } from 'lucide-react';
 import { soundEngine } from '../audio/soundEngine.ts';
 import type { OnlineGameClient } from '../net/onlineClient.ts';
@@ -124,7 +125,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
             <>
               <div className="text-xs text-slate-300">{tr('Free keys left today')}: <b className="text-orange-400">{data.freeKeysLeft}</b> · {tr('Gate keys')}: <b className="text-white">{data.gateKeys}</b>. {tr('Parties (up to 5) enter together; enemies scale with party size. 15 minute limit.')}</div>
               {data.dungeons.map((d: any) => (
-                <div key={d.id} className={row}><span><b className="text-white">{d.name}</b> <span className="text-slate-500">Lv {d.minLevel}+ · {d.waves} {tr('waves + boss')} {d.cleared ? `· ${tr('cleared')}` : ''}</span></span>
+                <div key={d.id} className={row}><span><b className="text-white">{nm(DUNGEONS.find((x) => x.id === d.id)?.nameKey, d.name)}</b> <span className="text-slate-500">Lv {d.minLevel}+ · {d.waves} {tr('waves + boss')} {d.cleared ? `· ${tr('cleared')}` : ''}</span></span>
                   <button className={btn} onClick={() => call({ op: 'dungeon_enter', dungeonId: d.id })}>{tr('Enter')}</button></div>
               ))}
               <button className={ghost} onClick={() => call({ op: 'dungeon_leave' })}>{tr('Leave current gate')}</button>
@@ -139,14 +140,14 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
                 <div className="flex items-center gap-2">
                   <RankBadge level={rank.level} size={48} />
                   <FactionCrest faction={character.faction} size={40} />
-                  <div className="text-xs text-slate-300"><CurrencyIcon kind="honor" /> {tr('Honor')} <b className="text-white">{character.wallet.honor}</b> · {tr('rank')} {rank.level} / 21 · <CurrencyIcon kind="marks" /> {tr('season marks')} {character.wallet.seasonMarks} · {tr('faction')} <b className="capitalize text-white">{character.faction}</b></div>
+                  <div className="text-xs text-slate-300"><CurrencyIcon kind="honor" /> {tr('Honor')} <b className="text-white">{character.wallet.honor}</b> · {tr('rank')} {rank.level} / 21 ({nm(rank.nameKey, '')}) · <CurrencyIcon kind="marks" /> {tr('season marks')} {character.wallet.seasonMarks} · {tr('faction')} <b className="capitalize text-white">{character.faction}</b></div>
                 </div>
-                <div className="text-xs text-slate-400">{tr('Titles')}: {character.season.titles.join(', ') || tr('none yet')}</div>
+                <div className="text-xs text-slate-400">{tr('Titles')}: {character.season.titles.map(titleText).join(', ') || tr('none yet')}</div>
                 <div className="text-[11px] text-slate-400">{tr('Codex')}: {Object.entries(prog).map(([k, v]) => `${k} ${v.have}/${v.total}`).join(' · ')}</div>
                 {ACHIEVEMENTS_CATALOG.map((a) => {
                   const p = Math.min(a.targetValue, progressOf(character, a.id));
                   const done = character.achievements.includes(a.id);
-                  return <div key={a.id} className={row}><span className={done ? 'text-emerald-400' : 'text-slate-200'}>{a.id.replace('ach_', '').replace(/_/g, ' ')}</span><span className="text-slate-400 tabular-nums">{done ? tr('done') : `${p} / ${a.targetValue}`}</span></div>;
+                  return <div key={a.id} className={row}><span className={done ? 'text-emerald-400' : 'text-slate-200'} title={nm(a.descKey, '')}>{nm(a.nameKey, a.id.replace('ach_', '').replace(/_/g, ' '))}</span><span className="text-slate-400 tabular-nums">{done ? tr('done') : `${p} / ${a.targetValue}`}</span></div>;
                 })}
               </>
             );

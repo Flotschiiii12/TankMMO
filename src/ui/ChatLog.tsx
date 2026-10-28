@@ -1,9 +1,17 @@
 import React, { useEffect, useRef } from 'react';
 import { ChatMessage } from '../sim/types.ts';
 import { ClanEmblemBadge } from './GameIcon.tsx';
+import { tr, nm } from '../i18n.ts';
+import { KEY_BY_ENGLISH } from '../../shared/data/names/index.ts';
 
 interface ChatLogProps {
   messages: ChatMessage[];
+}
+
+/** Server system messages that are built from English templates. */
+function localizeSystemText(text: string): string {
+  const m = text.match(/^CRITICAL ALERT: (.+) detected on the battlefield!$/);
+  return m ? tr('CRITICAL ALERT: {name} detected on the battlefield!', { name: nm(KEY_BY_ENGLISH.get(m[1]), m[1]) }) : text;
 }
 
 export const ChatLog: React.FC<ChatLogProps> = ({ messages }) => {
@@ -41,7 +49,7 @@ export const ChatLog: React.FC<ChatLogProps> = ({ messages }) => {
           >
             {msg.sender}:
           </span>
-          <span className="text-slate-200 truncate">{msg.text}</span>
+          <span className="text-slate-200 truncate">{localizeSystemText(msg.text)}</span>
         </div>
       ))}
     </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { tr } from '../i18n.ts';
+import { tr, nm } from '../i18n.ts';
 import { ChatMessage, SimEntity } from '../sim/types.ts';
 import { QUEST_BY_ID } from '../../shared/data/quests.ts';
 import { UserProfile } from '../save/profile.ts';
@@ -96,7 +96,7 @@ export const HUD: React.FC<HUDProps> = ({
             const total = aq.targets.reduce((a, b) => a + b, 0);
             return (
               <div key={aq.id} className="text-[10px] flex justify-between gap-2 text-slate-400 border-t border-slate-800/60 pt-0.5">
-                <span className={`truncate ${aq.ready ? 'text-emerald-400' : ''}`}>{def.name}</span>
+                <span className={`truncate ${aq.ready ? 'text-emerald-400' : ''}`}>{nm(def.nameKey, def.name)}</span>
                 <span className="tabular-nums shrink-0">{aq.ready ? tr('ready') : `${done}/${total}`}</span>
               </div>
             );

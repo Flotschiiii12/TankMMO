@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { tr } from '../i18n.ts';
+import { tr, nm } from '../i18n.ts';
 import { Camera } from '../render/camera.ts';
 import { ParticleSystem } from '../render/particles.ts';
 import { WorldRenderer } from '../render/worldRenderer.ts';
@@ -251,7 +251,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           break;
         }
 
-        case 'event_started': { showBanner(`${tr('Event')}: ${tr(event.kind.replace(/_/g, ' '))}`); break; }
+        case 'event_started': { showBanner(`${tr('Event')}: ${nm(`event.${event.kind}.name`, tr(event.kind.replace(/_/g, ' ')))}`); break; }
         case 'dungeon_wave': { showBanner(`${tr('Wave')} ${event.wave} / ${event.total}`); gateRef.current = { wave: event.wave, total: event.total, endsAt: event.timeLeft != null ? Date.now() + event.timeLeft * 1000 : 0 }; setProgress('gate'); break; }
         case 'dungeon_cleared': { showBanner(tr('Gate cleared!')); setProgress(null); gateRef.current = null; break; }
         case 'dungeon_failed': { showBanner(`${tr('Gate failed')} (${tr(String(event.reason))})`); setProgress(null); gateRef.current = null; break; }

@@ -16,6 +16,9 @@ import {
 const CHUNK_SIZE = 1000;
 
 export class WorldRenderer {
+  /** Faction of the local player: players of other factions get red name plates. */
+  public viewerFaction?: string;
+
   private camera: Camera;
   private particles: ParticleSystem;
 
@@ -806,7 +809,7 @@ export class WorldRenderer {
     ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.textAlign = 'center';
 
-    const isHostile = ent.isHostile;
+    const isHostile = ent.isHostile || (String(ent.kind) === 'player' && !!ent.faction && !!this.viewerFaction && ent.faction !== this.viewerFaction);
     const clan = ent.clanTag ? `[${ent.clanTag}] ` : '';
     const label = `${clan}${ent.name}`;
 

@@ -456,6 +456,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
           const currentMap = client['clientWorld']?.mapDef;
           if (currentMap) {
+            renderer.viewerFaction = player?.faction;
             renderer.render(ctx, entities, player, currentMap, snapshot.time);
           }
 
@@ -582,7 +583,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     let clickedEntity: SimEntity | undefined;
     for (const ent of snapshot.entities) {
       if (ent.id === clientRef.current.playerId || ent.hull <= 0) continue;
-      if (ent.isHostile && dist(worldPos, ent.pos) <= ent.radius + 20) {
+      if (isAttackable(clientRef.current?.getPredictedPlayer() ?? null, ent) && dist(worldPos, ent.pos) <= ent.radius + 20) {
         clickedEntity = ent;
         break;
       }
@@ -625,6 +626,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     return r.ok ? { ok: true } : { ok: false, error: (r as any).error };
   }, [saveProfile]);
 
+  /** Can the local player attack this entity? Monsters always; players only of another faction at level 15+ (the server decides for real). */
+  const isAttackable = (me: SimEntity | null, e: SimEntity): boolean =>
+    e.isHostile || (!!me && e.kind === 'player' && e.id !== me.id && !!me.faction && !!e.faction && e.faction !== me.faction && me.level >= 15 && e.level >= 15);
+
   const handleCommand = useCallback((cmd: SimCommand) => {
     if (cmd.type === 'Drive' && (Math.abs(cmd.x) > 0.2 || Math.abs(cmd.y) > 0.2)) questEvent({ type: 'tutorial', step: 'drive' });
     if (cmd.type === 'SetTarget' && cmd.targetId !== null && cmd.targetId !== undefined) questEvent({ type: 'tutorial', step: 'lock' });
@@ -643,7 +648,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     let minD = 750;
 
     for (const ent of snapshot.entities) {
-      if (ent.id === player.id || ent.hull <= 0 || !ent.isHostile) continue;
+      if (ent.id === player.id || ent.hull <= 0 || !isAttackable(player, ent)) continue;
       if (ent.kind === 'gate' || ent.kind === 'loot_crate' || ent.kind === 'projectile') continue;
       const d = dist(player.pos, ent.pos);
       if (d < minD) {
@@ -668,7 +673,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       (e) =>
         e.id !== player.id &&
         e.hull > 0 &&
-        e.isHostile &&
+        isAttackable(player, e) &&
         dist(player.pos, e.pos) <= 800
     );
 

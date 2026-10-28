@@ -4,10 +4,10 @@ import { timingSafeEqual } from 'node:crypto';
 import { AccountService } from './accounts.ts';
 import { SocialRepo } from './social.ts';
 import { MarketRepo, PremiumWallet } from './market.ts';
-import { openDatabase, SqliteArenaRepo, SqliteWarRepo, SqliteAccountRepo, SqliteChatRepo, SqliteProfileRepo } from './db.ts';
-import { GameServer } from './gameServer.ts';
+import { backupDatabase, openDatabase, SqliteArenaRepo, SqliteWarRepo, SqliteAccountRepo, SqliteChatRepo, SqliteProfileRepo } from './db.ts';
+import { GameServer, log } from './gameServer.ts';
 
-export interface AppOptions { dbPath?: string; staticDir?: string; adminToken?: string; clock?: { nowMs(): number } }
+export interface AppOptions { backupDir?: string; dbPath?: string; staticDir?: string; adminToken?: string; clock?: { nowMs(): number } }
 
 const hits = new Map<string, number[]>();
 /** Tiny per-IP rate limiter for the REST endpoints. */
@@ -38,7 +38,7 @@ export function createApp(opts: AppOptions = {}) {
   const app = express();
   app.use(express.json({ limit: '8kb' }));
   const server = http.createServer(app);
-  const game = new GameServer({ accounts, profiles, chat, service, social, arena, war, market, premium, adminToken: opts.adminToken, clock: opts.clock }, server);
+  const game = new GameServer({ accounts, profiles, chat, service, social, arena, war, market, premium, adminToken: opts.adminToken, clock: opts.clock, onDaily: opts.backupDir ? () => { const f = backupDatabase(db, opts.backupDir!); log('info', 'backup', { file: f }); } : undefined }, server);
 
   app.get('/health', (_req, res) => res.json({ ok: true, players: game.playerCount(), instances: game.instanceInfo().length }));
   app.get('/metrics', (_req, res) => {

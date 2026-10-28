@@ -127,7 +127,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Displays real-time FPS, tick time, and entity counts
               </div>
             </div>
-            <div className="flex items-center justify-between text-xs text-slate-300 py-2"><span>{tr('Language')}</span><select value={currentLang} onChange={(e) => setLang(e.target.value as any)} className="bg-slate-950 border border-slate-700 rounded px-2 py-1"><option value="en">English</option><option value="de">Deutsch</option></select></div>
             <button
               onClick={() => {
                 soundEngine.playUIClick();
@@ -141,6 +140,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             >
               {profile.settings.showDebug ? 'ON' : 'OFF'}
             </button>
+          </div>
+
+
+            <div className="flex items-center justify-between text-xs text-slate-300 py-2"><span>{tr('Language')}</span><select value={currentLang} onChange={(e) => setLang(e.target.value as any)} className="bg-slate-950 border border-slate-700 rounded px-2 py-1"><option value="en">English</option><option value="de">Deutsch</option></select></div>
+          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
+            <div><span className="font-medium text-white">{tr('Colour-blind mode')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('Radar uses amber instead of red for enemies')}</div></div>
+            <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, colorBlind: !profile.settings.colorBlind }); }} className={`px-3 py-1 rounded text-xs font-semibold ${profile.settings.colorBlind ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{profile.settings.colorBlind ? 'ON' : 'OFF'}</button>
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
+            <div><span className="font-medium text-white">{tr('Reduced effects')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('No particles or tread marks (less motion, better on slow phones)')}</div></div>
+            <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, reducedEffects: !profile.settings.reducedEffects }); }} className={`px-3 py-1 rounded text-xs font-semibold ${profile.settings.reducedEffects ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{profile.settings.reducedEffects ? 'ON' : 'OFF'}</button>
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
+            <span className="font-medium text-white">{tr('UI size')} {Math.round((profile.settings.uiScale || 1) * 100)}%</span>
+            <input type="range" min="0.8" max="1.4" step="0.1" value={profile.settings.uiScale || 1} onChange={(e) => onUpdateSettings({ ...profile.settings, uiScale: Number(e.target.value) })} className="w-40" />
           </div>
 
           {/* Reset Progress Section */}

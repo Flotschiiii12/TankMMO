@@ -85,3 +85,18 @@ describe('Scheduler', () => {
     expect(await (await fetch(`http://127.0.0.1:${port}/metrics`)).text()).toContain('treadfront_tick_ms_max');
   });
 });
+
+describe('Daily database backup', () => {
+  it('creates a restorable backup and keeps only the newest ones', async () => {
+    const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+    const { backupDatabase, openDatabase } = await import('../server/db.ts');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tfb-'));
+    const db = openDatabase(':memory:');
+    db.exec("INSERT INTO accounts (id, name, secret_hash, created_at) VALUES ('a','Alice','h',1)");
+    for (let i = 0; i < 4; i++) backupDatabase(db, dir, 2, new Date(2026, 0, 1, 0, 0, i));
+    const files = fs.readdirSync(dir).sort();
+    expect(files).toHaveLength(2);
+    const restored = openDatabase(path.join(dir, files[1]));
+    expect((restored.prepare('SELECT name FROM accounts').get() as any).name).toBe('Alice');
+  });
+});

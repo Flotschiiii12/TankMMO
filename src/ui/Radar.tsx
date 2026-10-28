@@ -6,9 +6,11 @@ interface RadarProps {
   entities: SimEntity[];
   mapWidth: number;
   mapHeight: number;
+  partyNames?: string[];
+  colorBlind?: boolean;
 }
 
-export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHeight }) => {
+export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHeight, partyNames, colorBlind }) => {
   const radarRadius = 46;
   const radarRange = 1200; // World units displayed on radar
 
@@ -45,7 +47,7 @@ export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHei
         const x = radarRadius + Math.cos(angle) * r;
         const y = radarRadius + Math.sin(angle) * r;
 
-        let color = '#ef4444'; // Hostile red
+        let color = colorBlind ? '#f59e0b' : '#ef4444'; // Hostile (red, or amber for colour-blind mode)
         let size = 2.5;
 
         if (ent.kind === 'loot_crate') {
@@ -58,8 +60,8 @@ export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHei
           color = '#f97316'; // Boss orange
           size = 4.5;
         } else if (!ent.isHostile) {
-          color = '#60a5fa'; // Ally blue
-          size = 2.5;
+          color = partyNames?.includes(ent.name) ? '#22c55e' : '#60a5fa'; // party green, other players blue
+          size = partyNames?.includes(ent.name) ? 3.5 : 2.5;
         }
 
         computedDots.push({ x, y, color, size });
@@ -67,7 +69,7 @@ export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHei
     }
 
     return { enemyCount: enemies, allyCount: allies, dots: computedDots };
-  }, [entities, player?.id, playerPos.x, playerPos.y]);
+  }, [entities, player?.id, playerPos.x, playerPos.y, partyNames, colorBlind]);
 
   return (
     <div className="relative flex flex-col items-center pointer-events-none select-none">

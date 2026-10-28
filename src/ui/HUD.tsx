@@ -13,6 +13,7 @@ interface HUDProps {
   entities: SimEntity[];
   mapWidth: number;
   mapHeight: number;
+  partyNames?: string[];
   mapName: string;
   isSafeZone: boolean;
   profile: UserProfile;
@@ -34,6 +35,7 @@ export const HUD: React.FC<HUDProps> = ({
   entities,
   mapWidth,
   mapHeight,
+  partyNames,
   mapName,
   isSafeZone,
   profile,
@@ -54,7 +56,7 @@ export const HUD: React.FC<HUDProps> = ({
       {/* TOP BAR */}
       <div className="flex items-start justify-between w-full">
         {/* Top-Left Status: Level, Map, Currencies, Ammo */}
-        <div className="flex flex-col gap-1 pointer-events-auto bg-slate-950/60 rounded-lg p-2 border border-slate-800/60 shadow-sm max-w-[280px]">
+        <div className="hud-scale origin-top-left flex flex-col gap-1 pointer-events-auto bg-slate-950/60 rounded-lg p-2 border border-slate-800/60 shadow-sm max-w-[280px]">
           {/* Header Row: Level + Map Name + Safe Zone Status */}
           <div className="flex items-center gap-2 text-xs text-slate-300">
             <span className="font-semibold text-orange-400">Lv. {profile.character.level}</span>
@@ -108,6 +110,8 @@ export const HUD: React.FC<HUDProps> = ({
             entities={entities}
             mapWidth={mapWidth}
             mapHeight={mapHeight}
+            partyNames={partyNames}
+            colorBlind={profile.settings.colorBlind}
           />
 
           {/* Icon Button Column Below Radar: All buttons >= 44x44px */}

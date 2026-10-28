@@ -24,6 +24,9 @@ export interface UserProfile {
     masterVolume: number;
     showDebug: boolean;
     zoom?: number; // 0.5 to 1.2
+    colorBlind?: boolean; // radar/markers use a colour-blind safe palette
+    reducedEffects?: boolean; // no particles, tracks or banners animation
+    uiScale?: number; // 0.8 - 1.4 HUD text/button scale
   };
 }
 

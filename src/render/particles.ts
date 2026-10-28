@@ -277,6 +277,7 @@ export class ParticleSystem {
   }
 
   public renderTreads(ctx: CanvasRenderingContext2D, camera: Camera) {
+    if (!this.enabled) return;
     ctx.save();
     for (let i = 0; i < this.treadMarks.length; i++) {
       const tm = this.treadMarks[i];
@@ -304,7 +305,11 @@ export class ParticleSystem {
     ctx.restore();
   }
 
+  /** Accessibility: when false, particles and tread marks are not drawn. */
+  public enabled = true;
+
   public renderParticles(ctx: CanvasRenderingContext2D, camera: Camera) {
+    if (!this.enabled) return;
     ctx.save();
 
     for (let i = 0; i < this.pool.length; i++) {

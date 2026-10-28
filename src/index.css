@@ -35,3 +35,4 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+.hud-scale { zoom: var(--ui-scale, 1); }

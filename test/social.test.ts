@@ -318,3 +318,17 @@ describe('PvP, bounties, arena and faction war (server)', () => {
     expect((await a.p.req({ op: 'war_status' })).data.scores).toMatchObject({ coastal: expect.any(Number) });
   });
 });
+
+describe('Faction chat', () => {
+  it('only players of the same faction hear the F channel', async () => {
+    const a = await P.make(); const b = await P.make(); const c = await P.make();
+    ctx.game.getSessionState(a.id)!.character.faction = 'coastal';
+    ctx.game.getSessionState(b.id)!.character.faction = 'coastal';
+    ctx.game.getSessionState(c.id)!.character.faction = 'highland';
+    a.chat('F', 'coastal only');
+    await b.until(() => b.heard('coastal only'));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(c.heard('coastal only')).toBe(false);
+    a.close(); b.close(); c.close();
+  });
+});

@@ -2,6 +2,7 @@
  * Persistence behind interfaces (design doc section 0). SQLite via node:sqlite today; the SQL is plain so a
  * PostgreSQL implementation of the same interfaces can replace it later.
  */
+import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { normalizeCharacter, type CharacterState } from '../shared/rules/character.ts';
 
@@ -285,4 +286,16 @@ export class SqliteWarRepo {
     for (const r of this.db.prepare(`SELECT faction, score FROM war_scores WHERE week = ?`).all(week) as any[]) out[r.faction] = r.score;
     return out;
   }
+}
+
+/** Consistent online backup (VACUUM INTO) as <dir>/treadfront-YYYYMMDD-HHMMSS.db; keeps the newest `keep` files. */
+export function backupDatabase(db: DatabaseSync, dir: string, keep = 14, now = new Date()): string {
+
+  fs.mkdirSync(dir, { recursive: true });
+  const stamp = now.toISOString().replace(/[-:T]/g, '').slice(0, 14);
+  const file = `${dir}/treadfront-${stamp.slice(0, 8)}-${stamp.slice(8)}.db`;
+  db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
+  const all = fs.readdirSync(dir).filter((f) => /^treadfront-\d{8}-\d{6}\.db$/.test(f)).sort();
+  for (const old of all.slice(0, Math.max(0, all.length - keep))) fs.rmSync(`${dir}/${old}`);
+  return file;
 }

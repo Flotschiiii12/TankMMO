@@ -6,6 +6,7 @@ const { game } = createApp({
   dbPath: process.env.DB_PATH ?? path.resolve('data/treadfront.db'),
   staticDir: process.env.STATIC_DIR ?? path.resolve('dist'),
   adminToken: process.env.ADMIN_TOKEN,
+  backupDir: process.env.BACKUP_DIR,
 });
 game.start();
 game.listen(port).then((p) => console.log(`Treadfront server listening on :${p}`));

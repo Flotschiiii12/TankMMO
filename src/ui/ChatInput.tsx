@@ -2,13 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { tr } from '../i18n.ts';
 import type { OnlineGameClient } from '../net/onlineClient.ts';
 
-const CHANNELS = [['G', 'Global'], ['M', 'Map'], ['C', 'Clan'], ['P', 'Party'], ['T', 'Trade']] as const;
+const CHANNELS = [['G', 'Global'], ['M', 'Map'], ['F', 'Faction'], ['C', 'Clan'], ['P', 'Party'], ['T', 'Trade']] as const;
 
 /** Chat line for the online game. Enter opens it; "/w Name text" whispers. */
 export const ChatInput: React.FC<{ client: OnlineGameClient }> = ({ client }) => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
-  const [channel, setChannel] = useState<'G' | 'M' | 'C' | 'P' | 'T'>('G');
+  const [channel, setChannel] = useState<'G' | 'M' | 'F' | 'C' | 'P' | 'T'>('G');
   const ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

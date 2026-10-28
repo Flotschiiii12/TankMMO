@@ -44,6 +44,7 @@ const DE: Record<string, string> = {
   'Hull HP': 'Hüllen-HP', 'Armor HP': 'Panzerungs-HP', 'Top Speed': 'Höchsttempo', 'Deployed': 'Im Einsatz', 'Deploy Vehicle': 'Fahrzeug einsetzen',
   'all': 'Alle', 'main': 'Haupt', 'secondary': 'Neben', 'armor': 'Panzerung', 'engine': 'Motor', 'module': 'Modul', 'drone': 'Drohne', 'empty': 'leer', 'equipped': 'angelegt',
   // settings
+  'Colour-blind mode': 'Farbenblind-Modus', 'Radar uses amber instead of red for enemies': 'Radar zeigt Gegner in Bernstein statt Rot', 'Reduced effects': 'Weniger Effekte', 'No particles or tread marks (less motion, better on slow phones)': 'Keine Partikel oder Spuren (weniger Bewegung, besser auf langsamen Handys)', 'UI size': 'Oberflächengröße',
   'Game Settings': 'Spieleinstellungen', 'Master Volume': 'Gesamtlautstärke', 'Reset Game Progress': 'Fortschritt zurücksetzen', 'Battlefield Camera Zoom': 'Kamera-Zoom',
   'Audio Effects & Engine Hum': 'Soundeffekte & Motorbrummen', 'Developer Diagnostics Overlay (F3)': 'Entwickler-Anzeige (F3)', 'Language': 'Sprache',
 };

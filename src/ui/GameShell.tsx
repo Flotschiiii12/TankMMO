@@ -51,6 +51,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [socialOpen, setSocialOpen] = useState(false);
   const [notices, setNotices] = useState<string[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
+  const [partyNames, setPartyNames] = useState<string[]>([]);
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showBanner = useCallback((text: string) => {
     setBanner(text);
@@ -96,7 +97,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         setProfile((prev) => ({ ...prev, playerName: ch.name, currentMapId: String(online.mapId), character: ch, ammoInventory: { ...prev.ammoInventory, ...(ammo as any) } }));
       if (online.character) adopt(online.character, online.ammo);
       online.onCharacter(adopt);
+      const refreshParty = () => void online.social({ op: 'party_info' }).then((r) => setPartyNames(r.ok && r.data ? r.data.members.map((m: any) => m.name) : []));
+      refreshParty();
       online.onSocialEvent((kind, d) => {
+        if (kind === 'party_update') setPartyNames(d ? d.members.map((m: any) => m.name) : []);
         const text = kind === 'friend_request' ? `${d.from} sent you a friend request` : kind === 'friend_accepted' ? `${d.from} is now your friend` : kind === 'party_invite' ? `${d.from} invited you to a party` : kind === 'clan_invite' ? `${d.from} invited you to ${d.clan}` : kind === 'announcement' ? `Announcement: ${d.text}` : kind === 'achievement' ? `Achievement unlocked: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `Gate ${d.result}` : kind === 'arena_start' ? 'Arena match starting' : kind === 'arena_round' ? `Round over: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `Arena ${d.won ? 'won' : 'lost'} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
         if (text) setNotices((n) => [...n.slice(-4), text]);
         if (text && (kind.startsWith('arena') || kind === 'dungeon' || kind === 'achievement' || kind === 'announcement')) showBanner(text);
@@ -179,6 +183,12 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       return next;
     });
   }, []);
+
+  // Accessibility: reduced effects and UI scale follow the settings
+  useEffect(() => {
+    particlesRef.current.enabled = !profile.settings.reducedEffects;
+    document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
+  }, [profile.settings.reducedEffects, profile.settings.uiScale]);
 
   // Rotate daily/weekly quests on start and when the level changes (more quests become eligible)
   useEffect(() => {
@@ -746,6 +756,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             entities={activeSnapshot?.entities || []}
             mapWidth={currentMapDef?.width || 4000}
             mapHeight={currentMapDef?.height || 4000}
+            partyNames={partyNames}
             mapName={currentMapDef?.name || 'Green Valley'}
             isSafeZone={inSafeZone}
             profile={profile}

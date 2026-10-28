@@ -107,6 +107,8 @@ export interface ServerDeps {
   service: AccountService;
   clock?: Clock;
   adminToken?: string;
+  /** called once per day by the scheduler (daily database backup) */
+  onDaily?: () => void;
   social: SocialRepo;
   arena: SqliteArenaRepo;
   war: SqliteWarRepo;
@@ -461,6 +463,7 @@ export class GameServer {
         for (const o of this.sessions.values()) deliver(o);
         return;
       case 'M': for (const o of s.instance.sessions) deliver(o); return;
+      case 'F': for (const o of this.sessions.values()) if (o.character.faction === s.character.faction) deliver(o); return;
       case 'C': {
         if (!s.clanId) return this.send(s, { type: 's_error', code: 'no_clan', message: 'You are not in a clan' });
         for (const o of this.sessions.values()) if (o.clanId === s.clanId) deliver(o);
@@ -1321,6 +1324,7 @@ export class GameServer {
       this.announce(text);
       for (const s of this.sessions.values()) this.send(s, { type: 's_social_event', kind: 'war_result', data: { winner } });
     }
+    if (this.lastDay && day !== this.lastDay) { try { this.deps.onDaily?.(); } catch (e) { log('error', 'daily_hook_failed', { error: String(e) }); } }
     this.lastDay = day; this.lastWeek = week;
     log('info', 'scheduler', { day, week, players: this.sessions.size, instances: this.instanceInfo().length });
   }

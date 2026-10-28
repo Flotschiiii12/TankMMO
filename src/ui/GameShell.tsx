@@ -25,6 +25,7 @@ import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts
 import { HUD } from './HUD.tsx';
 import { ControlsOverlay } from './ControlsOverlay.tsx';
 import { SpectateBar } from './SpectateBar.tsx';
+import { impactLevel, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../render/combatFx.ts';
 import { GarageModal } from './GarageModal.tsx';
 import { InventoryModal } from './InventoryModal.tsx';
 import { SettingsModal } from './SettingsModal.tsx';
@@ -214,6 +215,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   // Accessibility: reduced effects and UI scale follow the settings
   useEffect(() => {
     particlesRef.current.enabled = !profile.settings.reducedEffects;
+    particlesRef.current.setReduced(!!profile.settings.reducedEffects);
+    if (rendererRef.current) rendererRef.current.reducedEffects = !!profile.settings.reducedEffects;
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
   }, [profile.settings.reducedEffects, profile.settings.uiScale]);
 
@@ -240,7 +243,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         case 'projectile_fired': {
           const isPlayer = !!clientRef.current && event.shooterId === clientRef.current.playerId;
           if (!event.isSecondary) {
-            particles.emitMuzzleFlash(event.pos, event.angle);
+            const family = clientRef.current?.getEntity(event.shooterId)?.weaponFamily;
+            particles.emitMuzzleFlash(event.pos, event.angle, family);
             soundEngine.playCannonShot(isPlayer);
           }
           // Tutorial auto-advance: Player fired cannon!
@@ -259,13 +263,22 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         case 'boss_rewards': { showBanner(tr('Boss defeated')); break; }
         case 'explosion': {
           particles.emitExplosion(event.pos, true);
+          particles.emitRing(event.pos, Math.min(160, event.radius ?? 80), '#f97316');
           soundEngine.playExplosion(true);
           camera.addShake(8);
           break;
         }
 
         case 'damage_dealt': {
-          particles.emitHitSparks(event.pos, 7, event.armorDamage > 0 ? '#38bdf8' : '#f97316');
+          {
+            const victim = clientRef.current?.getEntity(event.targetId);
+            const level = impactLevel(event.finalDamage, victim ? victim.maxHull + victim.maxArmor : 1000);
+            particles.emitHitSparks(event.pos, SPARKS_BY_LEVEL[level], event.armorDamage > 0 ? '#38bdf8' : '#f97316');
+            if (RING_BY_LEVEL[level]) particles.emitRing(event.pos, RING_BY_LEVEL[level], event.isCrit ? '#fde047' : '#f97316');
+            if (event.isCrit) particles.emitRing(event.pos, 30, '#fde047');
+            if (event.armorDamage > 0 && victim && victim.armor <= 1 && victim.maxArmor > 0) { particles.emitRing(event.pos, 44, '#38bdf8'); particles.emitDamageText(event.pos, tr('ARMOR BREAK'), '#38bdf8', true); }
+            if (event.isRearHit) particles.emitDamageText({ x: event.pos.x, y: event.pos.y + 14 }, tr('REAR'), '#fb923c');
+          }
           soundEngine.playImpact(event.armorDamage > 0);
           if (event.finalDamage > 0) {
             particles.emitDamageText(

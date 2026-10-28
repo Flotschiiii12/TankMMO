@@ -2,9 +2,13 @@ import { Vec2 } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { spriteRegistry } from './assets.ts';
 
+/** Hard cap of simultaneous particles; "Reduced effects" lowers it to REDUCED_PARTICLE_CAP. */
+export const PARTICLE_CAP = 600;
+export const REDUCED_PARTICLE_CAP = 120;
+
 export interface Particle {
   active: boolean;
-  type: 'dust' | 'muzzle' | 'spark' | 'smoke' | 'explosion' | 'damage_text';
+  type: 'dust' | 'muzzle' | 'spark' | 'smoke' | 'explosion' | 'damage_text' | 'ring';
   x: number;
   y: number;
   vx: number;
@@ -31,7 +35,9 @@ export interface TreadMark {
 export class ParticleSystem {
   private pool: Particle[] = [];
   private treadMarks: TreadMark[] = [];
-  private maxParticles = 600;
+  private maxParticles = PARTICLE_CAP;
+  private live = 0;
+  private reducedMode = false;
   private maxTreads = 300;
 
   constructor() {
@@ -55,10 +61,18 @@ export class ParticleSystem {
     }
   }
 
-  private alloc(): Particle | null {
+  /** Reduced effects: far fewer particles (damage numbers are still shown, they are information). */
+  public setReduced(reduced: boolean): void { this.reducedMode = reduced; }
+  public get activeCount(): number { return this.live; }
+  public get cap(): number { return this.reducedMode ? REDUCED_PARTICLE_CAP : this.maxParticles; }
+
+  private alloc(essential = false): Particle | null {
+    if (!this.enabled && !essential) return null;
+    if (this.live >= (essential ? this.maxParticles : this.cap)) return null;
     for (let i = 0; i < this.pool.length; i++) {
       if (!this.pool[i].active) {
         this.pool[i].active = true;
+        this.live++;
         return this.pool[i];
       }
     }
@@ -101,7 +115,38 @@ export class ParticleSystem {
     });
   }
 
-  public emitMuzzleFlash(pos: Vec2, angle: number) {
+  /** Expanding ring (impact, crit, armor break, mortar landing). */
+  public emitRing(pos: Vec2, radius: number, color = '#f97316') {
+    const p = this.alloc();
+    if (!p) return;
+    p.type = 'ring'; p.x = pos.x; p.y = pos.y; p.vx = 0; p.vy = 0;
+    p.size = radius * 0.35; p.maxSize = radius; p.life = 0.32; p.maxLife = 0.32; p.color = color; p.alpha = 0.9; p.angle = 0; p.spriteId = undefined;
+  }
+
+  /** One grey smoke puff (rocket trail, backblast). */
+  public emitSmokePuff(pos: Vec2, size = 7, life = 0.5) {
+    const p = this.alloc();
+    if (!p) return;
+    p.type = 'smoke'; p.x = pos.x; p.y = pos.y; p.vx = (Math.random() - 0.5) * 20; p.vy = (Math.random() - 0.5) * 20;
+    p.size = size * 0.6; p.maxSize = size * 1.8; p.life = life; p.maxLife = life; p.color = '#a1a1aa'; p.alpha = 0.5; p.angle = Math.random() * Math.PI * 2; p.spriteId = undefined;
+  }
+
+  /** Flamethrower: a few short orange sparks fanned around the aim angle. */
+  public emitFlame(pos: Vec2, angle: number) {
+    for (let i = 0; i < 3; i++) {
+      const p = this.alloc();
+      if (!p) return;
+      const a = angle + (Math.random() - 0.5) * 0.7; const sp = 160 + Math.random() * 120;
+      p.type = 'spark'; p.x = pos.x; p.y = pos.y; p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp;
+      p.size = 3 + Math.random() * 3; p.maxSize = p.size; p.life = 0.25 + Math.random() * 0.15; p.maxLife = p.life; p.color = i % 2 ? '#fb923c' : '#fde047'; p.alpha = 1; p.angle = a; p.spriteId = undefined;
+    }
+  }
+
+  public emitMuzzleFlash(pos: Vec2, angle: number, family?: string) {
+    if (family === 'flamethrower') { this.emitFlame(pos, angle); return; }
+    if (family === 'railgun') this.emitRing(pos, 34, '#67e8f9');
+    if (family === 'rocket') { const back = { x: pos.x - Math.cos(angle) * 30, y: pos.y - Math.sin(angle) * 30 }; this.emitSmokePuff(back, 11, 0.6); this.emitSmokePuff(back, 9, 0.5); }
+    if (family === 'mortar') this.emitSmokePuff(pos, 12, 0.7);
     // Muzzle blast flare with random pick from fx_13-fx_17
     const p = this.alloc();
     if (p) {
@@ -216,7 +261,7 @@ export class ParticleSystem {
   }
 
   public emitDamageText(pos: Vec2, text: string, color = '#ef4444', isCrit = false) {
-    const p = this.alloc();
+    const p = this.alloc(true);
     if (!p) return;
     p.type = 'damage_text';
     p.x = pos.x + (Math.random() - 0.5) * 20;
@@ -242,6 +287,7 @@ export class ParticleSystem {
       p.life -= dt;
       if (p.life <= 0) {
         p.active = false;
+        this.live--;
         continue;
       }
 
@@ -260,6 +306,10 @@ export class ParticleSystem {
       } else if (p.type === 'explosion') {
         p.size = p.size + (p.maxSize - p.size) * (dt * 7);
         p.alpha = 1 - progress;
+      } else if (p.type === 'ring') {
+        p.vx = 0; p.vy = 0;
+        p.size = p.size + (p.maxSize - p.size) * (dt * 9);
+        p.alpha = (1 - progress) * 0.9;
       } else if (p.type === 'damage_text') {
         p.alpha = Math.min(1, (1 - progress) * 1.5);
       } else {
@@ -309,12 +359,12 @@ export class ParticleSystem {
   public enabled = true;
 
   public renderParticles(ctx: CanvasRenderingContext2D, camera: Camera) {
-    if (!this.enabled) return;
     ctx.save();
 
     for (let i = 0; i < this.pool.length; i++) {
       const p = this.pool[i];
       if (!p.active) continue;
+      if (!this.enabled && p.type !== 'damage_text') continue; // reduced effects keep the damage numbers (they are information)
 
       const s = camera.worldToScreen({ x: p.x, y: p.y });
       if (
@@ -348,6 +398,15 @@ export class ParticleSystem {
         ctx.beginPath();
         ctx.arc(s.x, s.y, scaledSize, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
+      } else if (p.type === 'ring') {
+        ctx.save();
+        ctx.strokeStyle = p.color;
+        ctx.globalAlpha = p.alpha;
+        ctx.lineWidth = Math.max(1.5, 3 * (1 - (1 - p.life / p.maxLife)) * camera.zoom);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, scaledSize, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
       } else if (p.type === 'dust' || p.type === 'smoke') {
         const smokeImg = p.spriteId ? spriteRegistry.getImage(spriteRegistry.getFxPath(p.spriteId)) : null;

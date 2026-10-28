@@ -1,5 +1,6 @@
 import { localizeEntityName } from '../i18n.ts';
 import { DroneRenderer } from './droneDraw.ts';
+import { drawAuras, drawShellTrail } from './combatFx.ts';
 import { clamp, MapDef, SimEntity, Vec2, dist } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { ParticleSystem } from './particles.ts';
@@ -287,6 +288,9 @@ export class WorldRenderer {
   }
 
   readonly drones = new DroneRenderer();
+  /** Accessibility "Reduced effects": no smoke trails, flames or drone beams. */
+  reducedEffects = false;
+  private byId = new Map<number, SimEntity>();
 
   public render(
     ctx: CanvasRenderingContext2D,
@@ -389,6 +393,7 @@ export class WorldRenderer {
         const tier = Math.min(6, Math.max(1, Math.floor(ent.level / 5) + 1));
         drawVehicle(ctx, ent, this.camera, tier, time);
         if (!ent.isWreck) {
+          drawAuras(ctx, this.camera, ent, performance.now() / 1000, this.reducedEffects);
           this.renderStatusIcons(ctx, ent);
           this.renderNameplate(ctx, ent);
         }
@@ -402,6 +407,7 @@ export class WorldRenderer {
       ) {
         drawEnemy(ctx, ent, this.camera, time);
         if (!ent.isWreck) {
+          drawAuras(ctx, this.camera, ent, performance.now() / 1000, this.reducedEffects);
           this.renderStatusIcons(ctx, ent);
           this.renderNameplate(ctx, ent);
         }
@@ -778,6 +784,8 @@ export class WorldRenderer {
 
   private renderProjectiles(ctx: CanvasRenderingContext2D, entities: SimEntity[]) {
     const zoom = this.camera.zoom;
+    this.byId.clear();
+    for (const e of entities) if (e.kind !== 'projectile') this.byId.set(e.id, e);
 
     for (const proj of entities) {
       if (proj.kind !== 'projectile') continue;
@@ -792,6 +800,8 @@ export class WorldRenderer {
         continue;
       }
 
+      const shooter = (proj as any).sourceEntityId !== undefined ? this.byId.get((proj as any).sourceEntityId) : undefined;
+      drawShellTrail(ctx, this.camera, proj, { family: shooter?.weaponFamily, now: performance.now() / 1000, reduced: this.reducedEffects, smoke: (x, y) => this.particles.emitSmokePuff({ x, y }, 6, 0.45) });
       const isTracer = proj.name === 'MG Tracer' || (proj.radius && proj.radius <= 2);
       const spritePath = spriteRegistry.getFxPath(isTracer ? 'fx_19' : 'fx_18');
       const pImg = spriteRegistry.getImage(spritePath);

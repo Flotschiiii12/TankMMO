@@ -27,6 +27,7 @@ export function spawnPlayerFromCharacter(world: World, ch: CharacterState, pos: 
   ent.faction = ch.faction;
   ent.drones = stats.drones.length ? stats.drones : undefined;
   ent.radarMult = stats.radarMult > 1 ? stats.radarMult : undefined;
+  ent.weaponFamily = stats.mainFamily;
   if (ammo) for (const [k, v] of Object.entries(ammo)) if (k !== 'STANDARD') (ent.ammoInventory as any)[k] = v ?? 0;
   return ent;
 }
@@ -40,6 +41,7 @@ export function refreshPlayerStats(ent: SimEntity, ch: CharacterState): void {
   ent.skin = ch.activeSkin;
   ent.drones = s.drones.length ? s.drones : undefined;
   ent.radarMult = s.radarMult > 1 ? s.radarMult : undefined;
+  ent.weaponFamily = s.mainFamily;
   Object.assign(ent, {
     maxHull: s.maxHull, maxArmor: s.maxArmor, maxSpeed: s.maxSpeed, turnRate: s.turnRate, turretTurnRate: s.turretTurnRate,
     mainReloadTime: s.mainReloadTime, mainDamage: s.mainDamage, mainRange: s.mainRange, mgDamage: s.mgDamage, mgRange: s.mgRange,

@@ -141,6 +141,8 @@ export interface SimEntity {
   drones?: DroneSpec[];
   /** radar range multiplier (recon drone) */
   radarMult?: number;
+  /** family of the equipped main weapon (cannon, rocket, ...): drives muzzle flash and shell look on the client only */
+  weaponFamily?: string;
   kind: EntityKind;
   name: string;
   clanTag?: string;

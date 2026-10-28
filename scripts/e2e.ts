@@ -63,6 +63,8 @@ async function main() {
     };
     await page.waitForTimeout(1000);
     const before = await readPos();
+    // frame-time probe: requestAnimationFrame deltas while driving and shooting (budget check below)
+    await page.evaluate('window.__frames = []; (function () { var last = performance.now(); function tick(t) { window.__frames.push(t - last); last = t; requestAnimationFrame(tick); } requestAnimationFrame(tick); })()');
     await page.keyboard.down('KeyD');
     await page.keyboard.down('KeyS');
     await page.waitForTimeout(2500);
@@ -71,6 +73,11 @@ async function main() {
     await page.keyboard.press('Space'); // auto-fire
     await page.waitForTimeout(500);
     const after = await readPos();
+    const frames = ((await page.evaluate('window.__frames')) as number[]).slice(5).sort((a, b) => a - b);
+    const avgFrame = frames.reduce((a, b) => a + b, 0) / Math.max(1, frames.length); const p95Frame = frames[Math.floor(frames.length * 0.95)] ?? 0;
+    console.log(`frame time: avg ${avgFrame.toFixed(1)} ms, p95 ${p95Frame.toFixed(1)} ms over ${frames.length} frames (software-rendered headless Chromium)`);
+    if (frames.length < 20) fail('too few animation frames measured');
+    if (avgFrame > Number(process.env.E2E_MAX_AVG_FRAME_MS ?? 80)) fail(`average frame time ${avgFrame.toFixed(1)} ms is over the budget`);
     const moved = Math.hypot(after[0] - before[0], after[1] - before[1]);
     if (moved < 20) fail(`player did not move (before ${before}, after ${after})`);
 

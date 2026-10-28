@@ -481,6 +481,7 @@ export interface LoadoutStats {
   dps: number;
   drones: DroneSpec[];
   radarMult: number;
+  mainFamily?: string;
 }
 
 /** Radar range factor from recon drones: +8 % per drone tier scaled by the drone's quality, capped at +60 %. */
@@ -511,6 +512,7 @@ export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVeh
   const levelMult = 1 + (ch.level - 1) * 0.02;
 
   const drones: DroneSpec[] = [];
+  let mainFamily: string | undefined;
   let hullBonus = 0, armorBonus = 0, speedBonus = 0, flat = 0, dmgAdd = 0, mgAdd = 0, range = v.range, mgRange = 300;
   let affDps = 0, affHull = 0, affArmor = 0, affSpeed = 0, affCrit = 0, affFlat = 0, affReload = 0, affRange = 0;
   for (const uid of Object.values(g.loadout)) {
@@ -518,7 +520,7 @@ export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVeh
     if (!item) continue;
     const def = ITEM_BY_ID.get(item.defId)!;
     const m = itemStatMultiplier(item);
-    if (def.slotType === 'main') { dmgAdd += (def.baseDPS ?? 0) * m * 0.5; range = Math.max(range, def.baseRange ?? range); }
+    if (def.slotType === 'main') { mainFamily ??= def.family; dmgAdd += (def.baseDPS ?? 0) * m * 0.5; range = Math.max(range, def.baseRange ?? range); }
     if (def.slotType === 'secondary') { mgAdd += (def.baseDPS ?? 0) * m * 0.15; mgRange = Math.max(mgRange, def.baseRange ?? mgRange); }
     if (def.slotType === 'drone') {
       const dt = def.id.replace(/^drn_/, '').replace(/_t\d+$/, '');
@@ -570,6 +572,7 @@ export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVeh
     flatReduction,
     dps: Math.round(mainDamage / reload),
     drones: drones.sort((x, y) => x.slot - y.slot),
+    mainFamily,
     radarMult: radarMultiplier(drones),
   };
 }

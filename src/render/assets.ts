@@ -95,6 +95,11 @@ export class SpriteRegistry {
     return null;
   }
 
+  /** True when the manifest lists the file (it may still be loading). */
+  public isListed(path: string): boolean {
+    return this.manifestLoaded && this.allowedFiles.has(path);
+  }
+
   public getVehicleBodyPath(tier: number, id: string): string {
     return `/assets/vehicles/${tier}_${id}_body.png`;
   }

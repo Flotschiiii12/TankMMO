@@ -86,7 +86,10 @@ export function drawVehicle(
     }
   }
 
-  const bodyImg = spriteRegistry.getImage(spriteRegistry.getVehicleBodyPath(tier, ent.kind));
+  // Painted sprites per vehicle class and tier (1-6 so far); older art is keyed by level tier and kind.
+  const classKey = ent.vehicleClass && ent.tier ? `${ent.tier}_${ent.vehicleClass}` : '';
+  const classBody = classKey ? spriteRegistry.getVehicleBodyPath(ent.tier!, ent.vehicleClass!) : '';
+  const bodyImg = spriteRegistry.getImage(classBody && spriteRegistry.isListed(classBody) ? classBody : spriteRegistry.getVehicleBodyPath(tier, ent.kind));
   if (bodyImg) {
     const w = radius * 2.4;
     const h = radius * 2.0;
@@ -105,7 +108,12 @@ export function drawVehicle(
   ctx.shadowOffsetX = 2.5 * zoom;
   ctx.shadowOffsetY = 3.5 * zoom;
 
-  const turretImg = spriteRegistry.getImage(spriteRegistry.getVehicleTurretPath(tier, ent.kind));
+  const classTurret = classKey ? spriteRegistry.getVehicleTurretPath(ent.tier!, ent.vehicleClass!) : '';
+  // a class body without its own painted turret keeps the vector turret instead of borrowing a mismatched old one
+  const usesClassArt = !!classBody && spriteRegistry.isListed(classBody);
+  const turretImg = usesClassArt
+    ? (spriteRegistry.isListed(classTurret) ? spriteRegistry.getImage(classTurret) : null)
+    : spriteRegistry.getImage(spriteRegistry.getVehicleTurretPath(tier, ent.kind));
   if (turretImg) {
     const tw = radius * 2.2;
     const th = radius * 1.4;

@@ -256,6 +256,18 @@ async function main() {
         await check(page, vp, 'modal-hangar', { modal: true });
         await closeModal(page, vp, 'modal-hangar');
       }
+      // inventory (select an item: detail inline or as a sheet), workshop sub tabs, market tabs
+      {
+        const iv = (m: string) => violations.push({ viewport: vp.name, screen: 'modal-inventory', rule: 'inventory', element: 'inventory', detail: m });
+        await page.keyboard.press('KeyI'); await page.waitForTimeout(350);
+        const first = page.locator('[data-window=inventory] .k-item').first();
+        if (await first.count()) { await first.click({ force: true }); await page.waitForTimeout(300); if (!(await page.getByTestId('item-detail').count())) iv('selecting an item should show its detail'); else await check(page, vp, 'modal-inventory-detail', { modal: true }); if (vp.touch) { await page.keyboard.press('Escape'); await page.waitForTimeout(150); } } else iv('no item card found');
+        for (const t of ['Workshop', 'Gear']) { await page.getByRole('tab', { name: new RegExp(`^${t}$`) }).first().click({ force: true }).catch(() => iv(`tab ${t} missing`)); await page.waitForTimeout(200); if (t === 'Workshop') for (const sub of ['Upgrade', 'Reroll', 'Fusion', 'Craft']) { await page.getByRole('tab', { name: new RegExp(`^${sub}$`) }).first().click({ force: true }).catch(() => iv(`workshop tab ${sub} missing`)); await page.waitForTimeout(200); await check(page, vp, `modal-workshop-${sub.toLowerCase()}`, { modal: true }); } }
+        await closeModal(page, vp, 'modal-inventory');
+        await page.keyboard.press('KeyK'); await page.waitForTimeout(350);
+        for (const t of ['Browse', 'Sell', 'My listings', 'Trade', 'Mail']) { await page.getByRole('tab', { name: new RegExp(`^${t}`) }).first().click({ force: true }).catch(() => violations.push({ viewport: vp.name, screen: 'modal-market', rule: 'market', element: t, detail: 'tab missing' })); await page.waitForTimeout(350); await check(page, vp, `modal-market-${t.toLowerCase().replace(/\W+/g, '')}`, { modal: true }); }
+        await closeModal(page, vp, 'modal-market');
+      }
       // left-handed layout and performance mode (settings toggles): controls swap sides, the DPR cap drops to 1.5
       if (vp.touch && (await page.getByRole('button', { name: /^Settings$/ }).count())) {
         const toggle = async (label: string) => { await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200); await page.getByRole('button', { name: label }).first().evaluate((el) => (el as HTMLElement).click()).catch(() => {}); };

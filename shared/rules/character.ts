@@ -381,34 +381,50 @@ export function upgradeItem(ch: CharacterState, uid: string, rng: SimRNG, safeMo
   return { ok: true, success, newLevel: item.upgrade };
 }
 
+/** What dismantling an item yields (also used by the bulk-dismantle review screen, so preview and result can never differ). */
+export function dismantleYieldOf(item: ItemInstance): { ore: OreType; oreAmount: number; fragments: number } {
+  const def = ITEM_BY_ID.get(item.defId)!;
+  const rarityIdx = RARITIES.indexOf(item.rarity);
+  return {
+    ore: def.dismantleYield.oreType,
+    oreAmount: Math.round(def.dismantleYield.oreAmount * (1 + rarityIdx * 0.25) * (1 + item.upgrade * 0.1)),
+    fragments: Math.round(def.dismantleYield.fragments * (1 + rarityIdx * 0.3) * (1 + item.upgrade * 0.15)),
+  };
+}
+
 export function dismantleItem(ch: CharacterState, uid: string): Result<{ ore: OreType; oreAmount: number; fragments: number }> {
   const item = findItem(ch, uid);
   if (!item) return fail('item_not_found');
   if (isEquipped(ch, uid)) return fail('item_equipped');
   const def = ITEM_BY_ID.get(item.defId)!;
-  const rarityIdx = RARITIES.indexOf(item.rarity);
-  const oreAmount = Math.round(def.dismantleYield.oreAmount * (1 + rarityIdx * 0.25) * (1 + item.upgrade * 0.1));
-  const fragments = Math.round(def.dismantleYield.fragments * (1 + rarityIdx * 0.3) * (1 + item.upgrade * 0.15));
+  const { oreAmount, fragments } = dismantleYieldOf(item);
   ch.wallet.ore[def.dismantleYield.oreType] += oreAmount;
   ch.wallet.fragments += fragments;
   ch.inventory = ch.inventory.filter((i) => i.uid !== uid);
   return { ok: true, ore: def.dismantleYield.oreType, oreAmount, fragments };
 }
 
+/** What a recipe costs this character right now (crafting talents lower it). Shared by craftItem and the workshop screen. */
+export function craftCost(ch: CharacterState, recipe: { costScrap: number; costFragments: number; costOre: Partial<Record<OreType, number>> }): { scrap: number; fragments: number; ore: Array<[OreType, number]> } {
+  const reduction = Math.min(0.5, talentTotals(ch)['crafting_cost_reduction'] ?? 0);
+  return {
+    scrap: Math.round(recipe.costScrap * (1 - reduction)),
+    fragments: Math.round(recipe.costFragments * (1 - reduction)),
+    ore: (Object.entries(recipe.costOre) as Array<[OreType, number]>).map(([k, n]) => [k, Math.round(n * (1 - reduction))]),
+  };
+}
+
 export function craftItem(ch: CharacterState, recipeId: string, rng: SimRNG): Result<{ item: ItemInstance }> {
   const recipe = CRAFTING_RECIPES.find((r) => r.id === recipeId);
   if (!recipe) return fail('unknown_recipe');
   if (ch.level < recipe.minLevel) return fail('level_too_low');
-  const reduction = Math.min(0.5, talentTotals(ch)['crafting_cost_reduction'] ?? 0);
-  const scrap = Math.round(recipe.costScrap * (1 - reduction));
-  const frag = Math.round(recipe.costFragments * (1 - reduction));
-  const oreCosts = Object.entries(recipe.costOre) as Array<[OreType, number]>;
-  const oreOk = oreCosts.every(([k, n]) => ch.wallet.ore[k] >= Math.round(n * (1 - reduction)));
-  if (ch.wallet.scrap < scrap || ch.wallet.fragments < frag || !oreOk) return fail('not_enough_materials');
+  const cost = craftCost(ch, recipe);
+  const oreOk = cost.ore.every(([k, n]) => ch.wallet.ore[k] >= n);
+  if (ch.wallet.scrap < cost.scrap || ch.wallet.fragments < cost.fragments || !oreOk) return fail('not_enough_materials');
   if (ch.inventory.length >= inventoryCapacity(ch)) return fail('inventory_full');
-  ch.wallet.scrap -= scrap;
-  ch.wallet.fragments -= frag;
-  for (const [k, n] of oreCosts) ch.wallet.ore[k] -= Math.round(n * (1 - reduction));
+  ch.wallet.scrap -= cost.scrap;
+  ch.wallet.fragments -= cost.fragments;
+  for (const [k, n] of cost.ore) ch.wallet.ore[k] -= n;
   const def = ITEM_BY_ID.get(recipe.outputItemId)!;
   const made = createItem(ch, def.id, def.baseRarity, rng);
   if (!made.ok) return made;

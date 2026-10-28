@@ -73,6 +73,11 @@ export class MarketRepo {
       .filter((l) => (!opts.slot || ITEM_BY_ID.get(l.item.defId)?.slotType === opts.slot) && (!opts.maxPrice || l.price <= opts.maxPrice));
   }
 
+  /** Last sale prices of one item definition (newest first), so sellers can see what it really goes for. */
+  recentSales(defId: string, limit = 8): Array<{ price: number; at: number }> {
+    return (this.db.prepare(`SELECT price, listed_at FROM auctions WHERE status = 'sold' AND def_id = ? ORDER BY id DESC LIMIT ?`).all(defId, Math.max(1, Math.min(20, limit))) as any[]).map((r) => ({ price: r.price, at: r.listed_at }));
+  }
+
   mine(seller: string): Listing[] {
     return (this.db.prepare(`SELECT id, seller, item_json, price, expires_at FROM auctions WHERE seller = ? AND status = 'active'`).all(seller) as any[])
       .map((r) => ({ id: r.id, seller: r.seller, sellerName: '', item: JSON.parse(r.item_json), price: r.price, expiresAt: r.expires_at }));

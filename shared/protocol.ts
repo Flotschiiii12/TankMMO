@@ -98,6 +98,7 @@ export type SocialOp =
   | { op: 'ah_sell'; uid: string; price: number; hours: number }
   | { op: 'ah_search'; defId?: string; slot?: string; maxPrice?: number }
   | { op: 'ah_mine' }
+  | { op: 'ah_recent'; defId: string }
   | { op: 'ah_buy'; id: number }
   | { op: 'ah_cancel'; id: number }
   | { op: 'mail_list' }

@@ -23,20 +23,20 @@ export function useNavPips(character: CharacterState, online: OnlineGameClient |
   const [, bump] = useState(0);
   if (seen.current === null && uids.length >= 0) { seen.current = new Set(uids); saveSeen(uids); } // first run: everything counts as seen
   useEffect(() => { if (inventoryOpen && seen.current) { seen.current = new Set(uids); saveSeen(uids); bump((n) => n + 1); } }, [inventoryOpen, uids]);
-  const [social, setSocial] = useState(0);
+  const [social, setSocial] = useState(0); const [mail, setMail] = useState(0);
   useEffect(() => {
     if (!online) return;
     let dead = false;
     const poll = async () => {
-      const [invites, friends] = await Promise.all([online.social({ op: 'clan_invites' }), online.social({ op: 'friend_list' })]);
+      const [invites, friends, mailbox] = await Promise.all([online.social({ op: 'clan_invites' }), online.social({ op: 'friend_list' }), online.social({ op: 'mail_list' })]);
       if (dead) return;
       const inv = invites.ok && Array.isArray(invites.data) ? invites.data.length : 0;
       const req = friends.ok && Array.isArray(friends.data) ? friends.data.filter((f: { status?: string }) => f.status === 'incoming').length : 0;
-      setSocial(inv + req);
+      setSocial(inv + req); setMail(mailbox.ok && Array.isArray(mailbox.data) ? mailbox.data.length : 0);
     };
     void poll(); const id = setInterval(poll, 30_000);
     return () => { dead = true; clearInterval(id); };
   }, [online]);
   const ready = Object.values(character.quests.active).filter((q) => q.ready).length;
-  return { inventory: unseenCount(uids, seen.current), quests: ready, social, map: eventRunning };
+  return { inventory: unseenCount(uids, seen.current), quests: ready, social, map: eventRunning, market: mail };
 }

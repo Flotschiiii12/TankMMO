@@ -23,6 +23,7 @@ import { Hotbar } from './hud/Hotbar.tsx';
 import { NotificationHistory, NotificationHost, useNotifications } from './hud/Notifications.tsx';
 import { TargetFrame } from './hud/TargetFrame.tsx';
 import { notifications, diffCharacter, type CharSnapshot } from './hud/notify.ts';
+import { MarketWindow } from './items/MarketWindow.tsx';
 import { useTouchLayout } from './useTouchLayout.ts';
 import { Banner, BossBar, ProgressChip } from './Overlays.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
@@ -1030,6 +1031,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} character={profile.character} />}
       {gameState === 'PLAYING' && <ChatDock client={online ?? null} messages={activeSnapshot?.chatHistory || []} leftHanded={!!profile.settings.leftHanded} touchLayout={touchLayout} />}
       <NotificationHistory />
+      <MarketWindow client={online ?? null} profile={profile} />
       {gameState === 'PLAYING' && <Banner text={banner} />}
       {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `${tr('Arena')} · ${tr('Round')} ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? `${tr('Break')} ` : `${tr('Start in')} `}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `${tr('Gate')} · ${tr('Wave')} ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}

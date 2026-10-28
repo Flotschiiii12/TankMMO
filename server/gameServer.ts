@@ -9,6 +9,7 @@ import { rollLoot } from '../shared/data/loot.ts';
 import { compactEntity, DeltaEncoder, viewFor } from '../shared/net/delta.ts';
 import { MIN_PROTOCOL_VERSION, PROTOCOL_VERSION, ClientActionPacket, ClientMessage, ClientSocialPacket, ServerMessage } from '../shared/protocol.ts';
 import { SimRNG } from '../shared/prng.ts';
+import { ITEM_BY_ID } from '../shared/data/items.ts';
 import * as C from '../shared/rules/character.ts';
 import { AMMO_PRICES, ammoCost, executeAction } from '../shared/rules/actions.ts';
 import { calculateKillXP } from '../shared/rules/progression.ts';
@@ -997,7 +998,7 @@ export class GameServer {
         return reply({ ok: true, data: req.kind === 'clans' ? social.clanRanking(20) : this.deps.profiles.topByLevel(20) });
       case 'arena_queue': return reply(this.arenaQueueJoin(s, req.mode));
       case 'dungeon_list': case 'dungeon_enter': case 'dungeon_leave': return reply(this.handleDungeon(s, req as any));
-      case 'ah_sell': case 'ah_search': case 'ah_mine': case 'ah_buy': case 'ah_cancel': case 'mail_list': case 'mail_claim':
+      case 'ah_sell': case 'ah_search': case 'ah_mine': case 'ah_recent': case 'ah_buy': case 'ah_cancel': case 'mail_list': case 'mail_claim':
       case 'trade_open': case 'trade_set': case 'trade_confirm': case 'trade_cancel': case 'trade_info':
       case 'fast_travel': case 'shop_list': case 'shop_buy': case 'shop_receipt':
         return this.handleMarket(s, req as any, reply);
@@ -1314,6 +1315,7 @@ export class GameServer {
     switch (req.op) {
       case 'ah_search': return reply({ ok: true, data: market.search({ defId: typeof req.defId === 'string' ? req.defId : undefined, slot: typeof req.slot === 'string' ? req.slot : undefined, maxPrice: typeof req.maxPrice === 'number' ? req.maxPrice : undefined }) });
       case 'ah_mine': return reply({ ok: true, data: market.mine(s.accountId) });
+      case 'ah_recent': return reply(typeof req.defId === 'string' && ITEM_BY_ID.has(req.defId) ? { ok: true, data: market.recentSales(req.defId) } : { ok: false, error: 'bad_request' });
       case 'ah_sell': {
         if (!this.inHub(s)) return reply({ ok: false, error: 'hub_only' });
         const item = C.findItem(ch, req.uid);

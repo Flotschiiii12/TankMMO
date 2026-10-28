@@ -7,15 +7,12 @@ import { isClanEmblem } from '../shared/data/emblems.ts';
 
 export const CLAN_CREATE_COST = 10_000;
 export const CLAN_MAX_MEMBERS = 50;
+import { CLAN_RESEARCH } from '../shared/data/clanResearch.ts';
 export const FRIEND_MAX = 100;
 export const CLAN_ROLES = ['leader', 'officer', 'member'] as const;
 export type ClanRole = (typeof CLAN_ROLES)[number];
 
-export const CLAN_RESEARCH: Array<{ id: string; name: string; maxLevel: number; costPerLevel: number; effect: string }> = [
-  { id: 'banner', name: 'Clan banner styles', maxLevel: 5, costPerLevel: 20_000, effect: 'cosmetic' },
-  { id: 'storage', name: 'Storage space', maxLevel: 5, costPerLevel: 30_000, effect: 'convenience: +10 storage slots per level' },
-  { id: 'xpshare', name: 'Shared XP', maxLevel: 3, costPerLevel: 50_000, effect: 'convenience: +2% party XP per level' },
-];
+export { CLAN_RESEARCH };
 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });

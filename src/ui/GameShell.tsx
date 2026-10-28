@@ -23,6 +23,9 @@ import { Hotbar } from './hud/Hotbar.tsx';
 import { NotificationHistory, NotificationHost, useNotifications } from './hud/Notifications.tsx';
 import { TargetFrame } from './hud/TargetFrame.tsx';
 import { notifications, diffCharacter, type CharSnapshot } from './hud/notify.ts';
+import { ChatWindow } from './social/ChatWindow.tsx';
+import { ProfileWindow } from './social/ProfileWindow.tsx';
+import { chatStore, setChatName, useChat } from './social/chat.ts';
 import { CareerWindow } from './career/CareerWindow.tsx';
 import { MarketWindow } from './items/MarketWindow.tsx';
 import { useTouchLayout } from './useTouchLayout.ts';
@@ -177,6 +180,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       online.onCharacter(adopt);
       const refreshParty = () => void online.social({ op: 'party_info' }).then((r) => setPartyNames(r.ok && r.data ? r.data.members.map((m: any) => m.name) : []));
       refreshParty();
+      setChatName(online.character?.name ?? profile.playerName);
+      online.onChat((m) => chatStore.add(m));
       online.onSocialEvent((kind, d) => {
         if (kind === 'party_update') setPartyNames(d ? d.members.map((m: any) => m.name) : []);
         const text = kind === 'friend_request' ? tr('{from} sent you a friend request', { from: d.from }) : kind === 'friend_accepted' ? tr('{from} is now your friend', { from: d.from }) : kind === 'party_invite' ? tr('{from} invited you to a party', { from: d.from }) : kind === 'clan_invite' ? tr('{from} invited you to {clan}', { from: d.from, clan: d.clan }) : kind === 'pvp_summary' ? pvpSummaryText(d) : kind === 'event_reward' ? tr('{event} reward: +{scrap} scrap for {kills} kills', { event: nm(`event.${d.event}.name`, d.event), scrap: d.scrap, kills: d.kills }) : kind === 'announcement' ? `${tr('Announcement')}: ${d.text}` : kind === 'achievement' ? `${tr('Achievement unlocked')}: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `${tr('Gate')} ${tr(String(d.result))}` : kind === 'arena_start' ? tr('Arena match starting') : kind === 'arena_round' ? `${tr('Round over')}: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `${d.won ? tr('Arena won') : tr('Arena lost')} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
@@ -779,7 +784,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const eventLinesNow = [...runningEventLines(online ? online.mapId : Number(profile.currentMapId) || 1), ...warLines];
   const touchLayout = useTouchLayout(profile.settings.touchControls);
   const { unread } = useNotifications();
-  const navPips = { ...useNavPips(profile.character, online, inventoryOpen, eventLinesNow.length > 0), notifications: unread };
+  const chatUnread = useChat();
+  const navPips = { ...useNavPips(profile.character, online, inventoryOpen, eventLinesNow.length > 0), notifications: unread, chat: chatUnread.mentions > 0 ? chatUnread.mentions : chatUnread.total > 0 };
   // HUD opacity as a CSS variable (panels read it), notices derived from character changes (loot, XP, level-ups, ready quests)
   useEffect(() => { document.documentElement.style.setProperty('--hud-opacity', String(profile.settings.hudOpacity ?? 0.7)); }, [profile.settings.hudOpacity]);
   const prevChar = useRef<CharSnapshot | null>(null);
@@ -1034,6 +1040,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       <NotificationHistory />
       <MarketWindow client={online ?? null} profile={profile} />
       <CareerWindow profile={profile} onAction={performAction} />
+      <ChatWindow client={online ?? null} character={profile.character} myName={profile.character.name} />
+      <ProfileWindow client={online ?? null} myName={profile.character.name} />
       {gameState === 'PLAYING' && <Banner text={banner} />}
       {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `${tr('Arena')} · ${tr('Round')} ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? `${tr('Break')} ` : `${tr('Start in')} `}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `${tr('Gate')} · ${tr('Wave')} ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}

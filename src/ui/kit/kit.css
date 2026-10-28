@@ -15,7 +15,7 @@
 /* ---- Button ---- */
 .k-btn { --b-bg: var(--c-bg-3); --b-fg: var(--c-text); --b-line: var(--c-line-strong); position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); min-height: 36px; padding: 0 var(--s-4); border-radius: var(--r-md); border: 1px solid var(--b-line); background: var(--b-bg); color: var(--b-fg); font: 600 var(--t-sm)/1 var(--font); cursor: pointer; user-select: none; transition: transform var(--m-fast) var(--ease-out), filter var(--m-fast), opacity var(--m-fast); -webkit-tap-highlight-color: transparent; }
 .k-btn:hover:not(:disabled) { filter: brightness(1.15); }
-.k-btn:active:not(:disabled), .k-btn[aria-pressed="true"] { transform: scale(0.97); }
+.k-btn:active:not(:disabled) { transform: scale(0.97); }
 .k-btn[aria-pressed="true"] { --b-line: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .k-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .k-btn--primary { --b-bg: var(--accent); --b-fg: var(--accent-ink); --b-line: var(--accent-2); }
@@ -50,7 +50,7 @@
 .k-badge--warn { color: var(--c-warn); border-color: rgba(251, 191, 36, 0.4); }
 .k-pip { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c-bad); box-shadow: 0 0 0 2px var(--c-bg-1); }
 .k-counter { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--c-bad); color: #fff; font: 800 var(--t-xs)/1 var(--font); box-shadow: 0 0 0 2px var(--c-bg-1); }
-.k-pip-host { position: relative; display: inline-flex; }
+.k-pip-host { position: relative; display: inline-flex; flex: none; }
 .k-pip-host > .k-pip, .k-pip-host > .k-counter { position: absolute; top: -4px; right: -4px; }
 
 /* ---- Progress bar / ring ---- */

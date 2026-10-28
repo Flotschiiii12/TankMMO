@@ -1,5 +1,5 @@
 /** All in-game windows in one table: id, title, icon, shortcut. The menu, the help overlay and the key handler read from here. */
-export type WindowId = 'garage' | 'inventory' | 'quests' | 'social' | 'map' | 'settings' | 'howto' | 'feedback' | 'shortcuts' | 'notifications' | 'market' | 'career';
+export type WindowId = 'garage' | 'inventory' | 'quests' | 'social' | 'map' | 'settings' | 'howto' | 'feedback' | 'shortcuts' | 'notifications' | 'market' | 'career' | 'chat' | 'profile';
 
 export interface WindowDef {
   id: WindowId;
@@ -22,6 +22,8 @@ export const WINDOW_DEFS: readonly WindowDef[] = [
   { id: 'map', title: 'World Map', icon: 'map', codes: ['KeyM'], key: 'M', menu: true },
   { id: 'howto', title: 'How to play', icon: 'tutorial', codes: ['KeyH'], key: 'H', menu: false },
   { id: 'settings', title: 'Settings', icon: 'settings', codes: ['KeyO'], key: 'O', menu: true },
+  { id: 'chat', title: 'Chat', icon: 'chat', codes: ['KeyY'], key: 'Y', menu: true },
+  { id: 'profile', title: 'Player profile', icon: 'friends', codes: [], menu: false },
   { id: 'career', title: 'Career', icon: 'codex', codes: ['KeyX', 'KeyT'], key: 'X', menu: true },
   { id: 'market', title: 'Market & Mail', icon: 'auction', codes: ['KeyK'], key: 'K', menu: true },
   { id: 'notifications', title: 'Notifications', icon: 'event', codes: ['KeyN'], key: 'N', menu: true },

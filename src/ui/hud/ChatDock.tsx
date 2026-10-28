@@ -3,6 +3,9 @@ import { tr, T } from '../../i18n.ts';
 import type { ChatMessage } from '../../sim/types.ts';
 import type { OnlineGameClient } from '../../net/onlineClient.ts';
 import { ChatLog } from '../ChatLog.tsx';
+import { plainText } from '../social/chatLogic.ts';
+import { useChat } from '../social/chat.ts';
+import { windows } from '../wm/windowStore.ts';
 import { controlStrip } from '../layoutStrip.ts';
 import { KEY_BY_ENGLISH } from '../../../shared/data/names/index.ts';
 import { nm } from '../../i18n.ts';
@@ -14,7 +17,7 @@ type Channel = (typeof CHANNELS)[number][0];
 function tickerText(m: ChatMessage): string {
   const crit = m.text.match(/^CRITICAL ALERT: (.+) detected on the battlefield!$/);
   const text = crit ? tr('CRITICAL ALERT: {name} detected on the battlefield!', { name: nm(KEY_BY_ENGLISH.get(crit[1]), crit[1]) }) : m.text;
-  return `[${m.channel}] ${m.sender}: ${text}`;
+  return `[${m.channel}] ${m.sender}: ${plainText(text)}`;
 }
 
 /**
@@ -25,7 +28,7 @@ export const ChatDock: React.FC<{ client: OnlineGameClient | null; messages: Cha
   const [open, setOpen] = useState(false); const [emotes, setEmotes] = useState(false);
   const [text, setText] = useState(''); const [channel, setChannel] = useState<Channel>('G');
   const ref = useRef<HTMLInputElement>(null);
-  const last = messages[messages.length - 1];
+  const last = messages[messages.length - 1]; const unread = useChat();
 
   useEffect(() => {
     if (!client) return;
@@ -50,6 +53,7 @@ export const ChatDock: React.FC<{ client: OnlineGameClient | null; messages: Cha
         <button type="button" onClick={() => { setOpen(true); setTimeout(() => ref.current?.focus(), 0); }} aria-label={tr('Chat (Enter)')} className="hud-surface min-h-[44px] px-3 text-left min-w-0 flex-1 text-[11px] truncate" style={{ color: 'var(--c-text-2)' }}>
           {last ? tickerText(last) : tr('Chat (Enter)')}
         </button>
+        <button type="button" onClick={() => windows.open('chat')} aria-label={tr('Open chat window')} title={tr('Open chat window')} className="hud-surface w-11 h-11 text-base shrink-0 relative">💬{unread.total > 0 && <span className="k-counter" style={{ position: 'absolute', top: -4, right: -4 }}>{unread.total > 99 ? '99+' : unread.total}</span>}</button>
         {client && <button type="button" onClick={() => setEmotes((v) => !v)} aria-label={tr('Emotes')} title={tr('Emotes')} className="hud-surface w-11 h-11 text-base shrink-0">😀</button>}
         {emotes && client && (
           <div className="absolute bottom-full mb-1 right-0 flex gap-1 p-1 rounded-full" style={{ background: 'var(--c-scrim)' }}>

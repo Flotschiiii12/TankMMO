@@ -85,6 +85,8 @@ export type SocialOp =
   | { op: 'clan_ally_decline'; clanId: number }
   | { op: 'clan_ally_break'; clanId: number }
   | { op: 'profile'; name: string }
+  | { op: 'ranking_me'; kind: 'level' | 'clans' | 'arena_1v1' | 'arena_3v3' | 'arena_5v5' | 'honor' }
+  | { op: 'players_nearby' }
   | { op: 'ranking'; kind: 'level' | 'clans' | 'arena_1v1' | 'arena_3v3' | 'arena_5v5' | 'honor' }
   | { op: 'arena_queue'; mode: '1v1' | '3v3' | '5v5' }
   | { op: 'arena_leave' }

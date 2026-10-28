@@ -48,6 +48,9 @@ export interface ProfileRepo {
   save(row: ProfileRow): void;
   topByLevel(limit: number): Array<{ accountId: string; name: string; level: number }>;
   topByHonor(limit: number): Array<{ accountId: string; name: string; honor: number }>;
+  /** 1-based position of the account in the level / honor ranking, and how many are ranked (honor: players with honor > 0). undefined when not ranked. */
+  rankByLevel(accountId: string): { rank: number; total: number; value: number } | undefined;
+  rankByHonor(accountId: string): { rank: number; total: number; value: number } | undefined;
 }
 
 export interface ChatRepo {
@@ -112,6 +115,20 @@ export class SqliteProfileRepo implements ProfileRepo {
     return (this.db.prepare('SELECT a.id AS id, a.name AS name, p.level AS level FROM profiles p JOIN accounts a ON a.id = p.account_id ORDER BY p.level DESC, p.updated_at ASC LIMIT ?').all(limit) as any[])
       .map((r) => ({ accountId: r.id, name: r.name, level: r.level }));
   }
+  rankByLevel(accountId: string) {
+    const me: any = this.db.prepare('SELECT level, updated_at FROM profiles WHERE account_id = ?').get(accountId);
+    if (!me) return undefined;
+    const ahead: any = this.db.prepare('SELECT COUNT(*) AS n FROM profiles WHERE level > ? OR (level = ? AND updated_at < ?)').get(me.level, me.level, me.updated_at);
+    const total: any = this.db.prepare('SELECT COUNT(*) AS n FROM profiles').get();
+    return { rank: ahead.n + 1, total: total.n, value: me.level };
+  }
+  rankByHonor(accountId: string) {
+    const honor = (a: string) => ((this.db.prepare(`SELECT CAST(json_extract(character_json, '$.wallet.honor') AS INTEGER) AS h FROM profiles WHERE account_id = ?`).get(a) as any)?.h as number | undefined) ?? 0;
+    const mine = honor(accountId); if (mine <= 0) return undefined;
+    const ahead: any = this.db.prepare(`SELECT COUNT(*) AS n FROM profiles WHERE CAST(json_extract(character_json, '$.wallet.honor') AS INTEGER) > ?`).get(mine);
+    const total: any = this.db.prepare(`SELECT COUNT(*) AS n FROM profiles WHERE CAST(json_extract(character_json, '$.wallet.honor') AS INTEGER) > 0`).get();
+    return { rank: ahead.n + 1, total: total.n, value: mine };
+  }
 }
 
 export class SqliteChatRepo implements ChatRepo {
@@ -136,6 +153,14 @@ export class SqliteArenaRepo {
        ON CONFLICT(account_id, mode, season) DO UPDATE SET rating = excluded.rating, wins = excluded.wins, losses = excluded.losses`
     ).run(accountId, mode, season, rating, cur.wins + (won ? 1 : 0), cur.losses + (won ? 0 : 1));
     return rating;
+  }
+  /** Position in the arena ranking of one mode (players who have played it). undefined when the account has no rating row. */
+  rank(accountId: string, mode: string, season = 1): { rank: number; total: number; value: number } | undefined {
+    const me: any = this.db.prepare('SELECT rating FROM arena_ratings WHERE account_id = ? AND mode = ? AND season = ?').get(accountId, mode, season);
+    if (!me) return undefined;
+    const ahead: any = this.db.prepare('SELECT COUNT(*) AS n FROM arena_ratings WHERE mode = ? AND season = ? AND rating > ?').get(mode, season, me.rating);
+    const total: any = this.db.prepare('SELECT COUNT(*) AS n FROM arena_ratings WHERE mode = ? AND season = ?').get(mode, season);
+    return { rank: ahead.n + 1, total: total.n, value: me.rating };
   }
   top(mode: string, limit = 20, season = 1): Array<{ name: string; rating: number; wins: number; losses: number }> {
     return this.db.prepare(

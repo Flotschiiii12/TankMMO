@@ -57,6 +57,8 @@ export class OnlineGameClient implements GameClient {
   private socialId = 0;
   private socialWaiters = new Map<number, (r: { ok: boolean; error?: string; data?: any }) => void>();
   private socialHandlers = new Set<(kind: string, data: any) => void>();
+  private chatHandlers = new Set<(m: ChatMessage) => void>();
+  private errorHandlers = new Set<(code: string) => void>();
 
   constructor(private serverUrl: string, private credential: string, profile: UserProfile) {
     this.clientWorld = { id: 'online', mapId: String(profile.currentMapId), tick: 0, time: 0, entities: this.entities, events: [], chatHistory: [], mapDef: MAP_CATALOG[profile.currentMapId] || MAP_CATALOG['green_valley'] };
@@ -132,6 +134,7 @@ export class OnlineGameClient implements GameClient {
       case 's_chat':
         this.chat.push(m.message);
         if (this.chat.length > 40) this.chat.shift();
+        for (const h of this.chatHandlers) h(m.message);
         break;
       case 's_action_result': {
         const w = this.actionWaiters.get(m.id);
@@ -145,7 +148,7 @@ export class OnlineGameClient implements GameClient {
       }
       case 's_social_event': for (const h of this.socialHandlers) h(m.kind, m.data); break;
       case 's_pong': this.pingMs = Date.now() - m.originalTimestamp; break;
-      case 's_error': this.closeReason = m.code; break;
+      case 's_error': this.closeReason = m.code; for (const h of this.errorHandlers) h(m.code); break;
     }
   }
 
@@ -222,6 +225,9 @@ export class OnlineGameClient implements GameClient {
     });
   }
 
+  /** every incoming chat message (the dock only keeps the last 40; the chat window keeps its own history per channel) */
+  onChat(h: (m: ChatMessage) => void): () => void { this.chatHandlers.add(h); return () => this.chatHandlers.delete(h); }
+  onServerError(h: (code: string) => void): () => void { this.errorHandlers.add(h); return () => this.errorHandlers.delete(h); }
   onSocialEvent(h: (kind: string, data: any) => void): () => void { this.socialHandlers.add(h); return () => this.socialHandlers.delete(h); }
 
   getSnapshot(): WorldSnapshot | null {

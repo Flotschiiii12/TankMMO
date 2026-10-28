@@ -164,7 +164,7 @@ async function main() {
           await fx.getByRole('button', { name: /^Repair kit$/ }).first().click({ force: true }).catch(() => bad('repair kit button not clickable'));
           const cmds = (await fx.evaluate('window.__cmds || []')) as string[];
           if (!cmds.includes('UseAbility')) bad(`clicking an ability should send UseAbility, got ${JSON.stringify(cmds)}`);
-          await fx.getByRole('button', { name: /^Chat/ }).first().click(); await fx.waitForTimeout(150);
+          await fx.getByRole('button', { name: /^Chat \(Enter\)$/ }).first().click(); await fx.waitForTimeout(150);
           if (!(await fx.getByTestId('chat-open').count())) bad('the chat ticker should expand on tap');
           await fx.keyboard.press('Escape');
           await fx.getByRole('button', { name: /^Notifications$/ }).first().click({ force: true }); await fx.waitForTimeout(250);
@@ -289,6 +289,20 @@ async function main() {
           await check(page, vp, `modal-career-${t.toLowerCase().replace(/\W+/g, '')}`, { modal: true });
         }
         await closeModal(page, vp, 'modal-career');
+      }
+      // social window tabs, chat window (channel tabs, input), public profile
+      {
+        const bad = (screen: string, rule: string, m: string) => violations.push({ viewport: vp.name, screen, rule, element: rule, detail: m });
+        await page.keyboard.press('KeyC'); await page.waitForTimeout(400);
+        for (const t of ['Friends', 'Party', 'Clan', 'Rankings', 'Arena', 'Gates', 'War', 'Me']) { await page.getByRole('tab', { name: new RegExp(`^${t}$`) }).first().click({ force: true }).catch(() => bad('modal-social', 'social', `tab ${t} missing`)); await page.waitForTimeout(450); await check(page, vp, `modal-social-${t.toLowerCase()}`, { modal: true }); }
+        await page.getByRole('button', { name: /^My public profile$/ }).first().click({ force: true }).catch(() => bad('modal-social', 'social', 'profile button missing')); await page.waitForTimeout(500);
+        if (!(await page.getByTestId('profile-card').count())) bad('modal-profile', 'social', 'the public profile card should open'); else await check(page, vp, 'modal-profile', { modal: true });
+        await page.keyboard.press('Escape'); await page.waitForTimeout(150); await closeModal(page, vp, 'modal-social');
+        await page.keyboard.press('KeyY'); await page.waitForTimeout(400);
+        if (!(await page.getByTestId('chat-log').count())) bad('modal-chat', 'chat', 'the chat window should open with Y');
+        for (const c of ['Whispers', 'System']) { await page.getByRole('button', { name: new RegExp(`${c}`) }).first().click({ force: true }).catch(() => bad('modal-chat', 'chat', `channel ${c} missing`)); await page.waitForTimeout(150); }
+        await check(page, vp, 'modal-chat', { modal: true });
+        await closeModal(page, vp, 'modal-chat');
       }
       // left-handed layout and performance mode (settings toggles): controls swap sides, the DPR cap drops to 1.5
       if (vp.touch && (await page.getByRole('button', { name: /^Settings$/ }).count())) {

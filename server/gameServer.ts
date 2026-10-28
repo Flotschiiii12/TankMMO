@@ -877,7 +877,7 @@ export class GameServer {
     const req = p.req;
     const byName = (name: string) => this.deps.accounts.getByName(String(name ?? ''));
     if (NAME_OPS.has(req.op) && (typeof (req as any).name !== 'string' || !(req as any).name)) return reply({ ok: false, error: 'unknown_player' });
-    if (req.op === 'ranking' && typeof req.kind !== 'string') return reply({ ok: false, error: 'bad_request' });
+    if ((req.op === 'ranking' || req.op === 'ranking_me') && typeof req.kind !== 'string') return reply({ ok: false, error: 'bad_request' });
     const needsPlayer = !['clan_create'].includes(req.op) && 'name' in req;
     const target = needsPlayer ? byName((req as any).name) : undefined;
     if (needsPlayer && !target) return reply({ ok: false, error: 'unknown_player' });
@@ -989,6 +989,7 @@ export class GameServer {
         return reply({ ok: true, data: {
           name: target!.name, level: row?.character.level ?? 1, clan: c ? { name: c.name, tag: c.tag, emblem: c.emblem ?? null } : null, online: !!live,
           vehicle: row?.character.activeVehicle, power: stats ? Math.round(Math.sqrt(stats.dps * (stats.maxHull + stats.maxArmor))) : 0,
+          honor: row?.character.wallet.honor ?? 0, faction: row?.character.faction, achievements: row?.character.achievements.length ?? 0, activeSkin: row?.character.activeSkin ?? null,
           titles: row?.character.season.titles ?? [], isFriend: social.areFriends(s.accountId, target!.id), blocked: social.isBlocked(s.accountId, target!.id),
         } });
       }
@@ -996,6 +997,22 @@ export class GameServer {
         if (req.kind.startsWith('arena_')) return reply({ ok: true, data: this.deps.arena.top(req.kind.slice(6)) });
         if (req.kind === 'honor') return reply({ ok: true, data: this.deps.profiles.topByHonor(20) });
         return reply({ ok: true, data: req.kind === 'clans' ? social.clanRanking(20) : this.deps.profiles.topByLevel(20) });
+      case 'ranking_me': {
+        const kind = String(req.kind); const c = social.clanOf(s.accountId);
+        if (kind.startsWith('arena_')) return reply({ ok: true, data: this.deps.arena.rank(s.accountId, kind.slice(6)) ?? null });
+        if (kind === 'honor') return reply({ ok: true, data: this.deps.profiles.rankByHonor(s.accountId) ?? null });
+        if (kind === 'clans') { const all = social.clanRanking(1000); const i = c ? all.findIndex((x) => x.tag === c.tag && x.name === c.name) : -1; return reply({ ok: true, data: i >= 0 ? { rank: i + 1, total: all.length, value: all[i].totalLevel } : null }); }
+        return reply({ ok: true, data: this.deps.profiles.rankByLevel(s.accountId) ?? null });
+      }
+      case 'players_nearby': {
+        const out = [];
+        for (const o of s.instance.sessions) {
+          if (o === s || social.isBlocked(o.accountId, s.accountId) || social.isBlocked(s.accountId, o.accountId)) continue;
+          out.push({ name: o.name, level: o.character.level, faction: o.character.faction, clanTag: o.clanTag ?? null, inParty: !!o.partyId, sameParty: !!s.partyId && o.partyId === s.partyId, friend: social.areFriends(s.accountId, o.accountId) });
+          if (out.length >= 40) break;
+        }
+        return reply({ ok: true, data: out });
+      }
       case 'arena_queue': return reply(this.arenaQueueJoin(s, req.mode));
       case 'dungeon_list': case 'dungeon_enter': case 'dungeon_leave': return reply(this.handleDungeon(s, req as any));
       case 'ah_sell': case 'ah_search': case 'ah_mine': case 'ah_recent': case 'ah_buy': case 'ah_cancel': case 'mail_list': case 'mail_claim':

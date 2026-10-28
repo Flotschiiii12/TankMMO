@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { tr } from '../i18n.ts';
+import { CurrencyIcon } from './GameIcon.tsx';
 import { VEHICLE_TIERS } from '../data/vehicles.ts';
 import { createWorld as createSharedWorld, spawnVehicle } from '../../shared/sim/world.ts';
 import { AMMO_TYPES, AMMO_SIM_ID } from '../data/parts.ts';
@@ -135,10 +136,10 @@ export const GarageModal: React.FC<GarageModalProps> = ({
         {/* Currency Strip */}
         <div className="flex items-center gap-5 text-xs">
           <span className="tabular-nums">
-            Scrap: <span className="font-semibold text-white">{ch.wallet.scrap.toLocaleString()}</span>
+            <CurrencyIcon kind="scrap" /> Scrap: <span className="font-semibold text-white">{ch.wallet.scrap.toLocaleString()}</span>
           </span>
           <span className="tabular-nums">
-            Ore: <span className="font-semibold text-white">{oreHave.toLocaleString()}</span>
+            <CurrencyIcon kind="ore" /> Ore: <span className="font-semibold text-white">{oreHave.toLocaleString()}</span>
           </span>
           <span className="tabular-nums">
             Level: <span className="font-semibold text-orange-400">{ch.level}</span>

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { tr } from '../i18n.ts';
+import { RarityGem, CurrencyIcon, SlotIcon, FamilyIcon } from './GameIcon.tsx';
 import { X, Package } from 'lucide-react';
 import { UserProfile } from '../save/profile.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
@@ -62,12 +63,12 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
             <h3 className="font-semibold text-white text-sm">{tr('Loadout & Workshop')}</h3>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-slate-400 tabular-nums">
-            <span>{tr('Scrap')} <b className="text-white">{ch.wallet.scrap.toLocaleString()}</b></span>
-            <span>{tr('Iron')} <b className="text-white">{ch.wallet.ore.iron}</b></span>
-            <span>{tr('Copper')} <b className="text-white">{ch.wallet.ore.copper}</b></span>
-            <span>{tr('Titanium')} <b className="text-white">{ch.wallet.ore.titanium}</b></span>
-            <span>{tr('Crystal')} <b className="text-white">{ch.wallet.ore.crystal}</b></span>
-            <span>{tr('Fragments')} <b className="text-white">{ch.wallet.fragments}</b></span>
+            <span><CurrencyIcon kind="scrap" /> {tr('Scrap')} <b className="text-white">{ch.wallet.scrap.toLocaleString()}</b></span>
+            <span><CurrencyIcon kind="iron" /> {tr('Iron')} <b className="text-white">{ch.wallet.ore.iron}</b></span>
+            <span><CurrencyIcon kind="copper" /> {tr('Copper')} <b className="text-white">{ch.wallet.ore.copper}</b></span>
+            <span><CurrencyIcon kind="titanium" /> {tr('Titanium')} <b className="text-white">{ch.wallet.ore.titanium}</b></span>
+            <span><CurrencyIcon kind="crystal" /> {tr('Crystal')} <b className="text-white">{ch.wallet.ore.crystal}</b></span>
+            <span><CurrencyIcon kind="fragments" /> {tr('Fragments')} <b className="text-white">{ch.wallet.fragments}</b></span>
             <button onClick={() => { soundEngine.playUIClick(); onClose(); }} className="text-slate-400 hover:text-white"><X size={18} /></button>
           </div>
         </div>
@@ -108,7 +109,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                 return (
                   <div key={s.key} className="flex items-center justify-between p-2 rounded bg-slate-950/40 border border-slate-800/80 text-xs">
                     <div className="min-w-0">
-                      <div className="text-[10px] uppercase text-slate-500">{s.key}</div>
+                      <div className="text-[10px] uppercase text-slate-500 flex items-center gap-1"><SlotIcon slot={s.key} />{s.key}</div>
                       <button disabled={!it} onClick={() => it && setSelected(it.uid)} className="truncate text-left" style={{ color: info?.color || '#64748b' }}>{info ? info.name : tr('empty')}</button>
                     </div>
                     {it && <button onClick={() => run({ kind: 'unequip', vehicleId, slot: s.key })} className="text-[10px] text-slate-400 hover:text-white">{tr('Unequip')}</button>}
@@ -121,7 +122,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
             <div className="col-span-4 flex flex-col min-h-0">
               <div className="flex gap-1 flex-wrap mb-1">
                 {SLOT_FILTERS.map((f) => (
-                  <button key={f} onClick={() => setFilter(f)} className={`px-2 py-0.5 rounded text-[10px] capitalize border ${filter === f ? 'border-orange-500/70 text-orange-300' : 'border-slate-800 text-slate-400'}`}>{f}</button>
+                  <button key={f} onClick={() => setFilter(f)} className={`px-2 py-0.5 rounded text-[10px] capitalize border inline-flex items-center gap-1 ${filter === f ? 'border-orange-500/70 text-orange-300' : 'border-slate-800 text-slate-400'}`}>{f !== 'all' && <SlotIcon slot={f} size={12} />}{f}</button>
                 ))}
               </div>
               <div className="text-[10px] text-slate-500 mb-1">{ch.inventory.length} / {C.inventoryCapacity(ch)} slots
@@ -134,7 +135,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                   const eq = C.isEquipped(ch, it.uid);
                   return (
                     <button key={it.uid} onClick={() => setSelected(it.uid)} className={`w-full flex items-center justify-between p-2 rounded border text-left text-xs ${selected === it.uid ? 'border-orange-500/70 bg-orange-500/10' : 'border-slate-800 bg-slate-900/40'}`}>
-                      <span className="truncate" style={{ color: info.color }}>{info.name}</span>
+                      <span className="truncate flex items-center gap-1" style={{ color: info.color }}><RarityGem rarity={it.rarity} /><FamilyIcon family={info.def.family} />{info.name}</span>
                       <span className="text-[10px] text-slate-500 shrink-0 ml-2">{eq ? tr('equipped') + ' · ' : ''}{it.rarity}</span>
                     </button>
                   );
@@ -149,7 +150,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
               ) : (
                 <div className="space-y-2">
                   <div>
-                    <div className="text-sm font-semibold" style={{ color: selInfo.color }}>{selInfo.name}</div>
+                    <div className="text-sm font-semibold flex items-center gap-1" style={{ color: selInfo.color }}><RarityGem rarity={sel.rarity} size={18} />{selInfo.name}</div>
                     <div className="text-[11px] text-slate-400">{sel.rarity} · {selInfo.def.slotType} · needs level {selInfo.def.minLevel}</div>
                   </div>
                   <div className="text-[11px] text-slate-300 space-y-0.5">

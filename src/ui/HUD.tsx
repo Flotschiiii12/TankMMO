@@ -6,7 +6,7 @@ import { UserProfile } from '../save/profile.ts';
 import { Radar } from './Radar.tsx';
 import { ChatLog } from './ChatLog.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
-import { GameIcon } from './GameIcon.tsx';
+import { GameIcon, CurrencyIcon } from './GameIcon.tsx';
 import { Volume2, VolumeX, Wrench, Package, ScrollText, Users, Map as MapIcon, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
 
 interface HUDProps {
@@ -74,11 +74,11 @@ export const HUD: React.FC<HUDProps> = ({
           {/* Currencies: Scrap & Parts */}
           <div className="flex items-center gap-2.5 text-xs text-slate-400">
             <span className="tabular-nums">
-              Scrap: <span className="font-semibold text-slate-100">{profile.character.wallet.scrap.toLocaleString()}</span>
+              <CurrencyIcon kind="scrap" size={13} /> Scrap: <span className="font-semibold text-slate-100">{profile.character.wallet.scrap.toLocaleString()}</span>
             </span>
             <span>·</span>
             <span className="tabular-nums">
-              Frag: <span className="font-semibold text-slate-100">{profile.character.wallet.fragments.toLocaleString()}</span>
+              <CurrencyIcon kind="fragments" size={13} /> Frag: <span className="font-semibold text-slate-100">{profile.character.wallet.fragments.toLocaleString()}</span>
             </span>
           </div>
 

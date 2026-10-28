@@ -385,6 +385,7 @@ export class WorldRenderer {
         const tier = Math.min(6, Math.max(1, Math.floor(ent.level / 5) + 1));
         drawVehicle(ctx, ent, this.camera, tier, time);
         if (!ent.isWreck) {
+          this.renderStatusIcons(ctx, ent);
           this.renderNameplate(ctx, ent);
         }
       } else if (
@@ -397,6 +398,7 @@ export class WorldRenderer {
       ) {
         drawEnemy(ctx, ent, this.camera, time);
         if (!ent.isWreck) {
+          this.renderStatusIcons(ctx, ent);
           this.renderNameplate(ctx, ent);
         }
       }
@@ -820,6 +822,32 @@ export class WorldRenderer {
       ctx.stroke();
 
       ctx.restore();
+    }
+  }
+
+  private static readonly STATUS_ICONS = ['slowed', 'burning', 'stunned', 'marked'] as const;
+
+  /** Painted status pictograms in a row above the name plate; plain drawImage, no shadows. Skipped while the sprite is missing. */
+  private renderStatusIcons(ctx: CanvasRenderingContext2D, ent: SimEntity) {
+    const effects = ent.statusEffects;
+    if (!effects || effects.length === 0) return;
+    let n = 0;
+    const imgs: HTMLImageElement[] = [];
+    for (const t of WorldRenderer.STATUS_ICONS) {
+      if (!effects.some((e) => e.type === t)) continue;
+      const img = spriteRegistry.getImage(`/assets/icons/st_${t}.png`);
+      if (img) imgs.push(img);
+      if (++n >= 4) break;
+    }
+    if (imgs.length === 0) return;
+    const s = this.camera.worldToScreen(ent.pos);
+    const zoom = this.camera.zoom;
+    const size = Math.max(14, Math.round(16 * zoom));
+    const y = s.y - ent.radius * zoom - 18 - size - 16;
+    let x = s.x - (imgs.length * (size + 2) - 2) / 2;
+    for (const img of imgs) {
+      ctx.drawImage(img, x, y, size, size);
+      x += size + 2;
     }
   }
 

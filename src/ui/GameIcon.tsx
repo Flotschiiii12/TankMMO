@@ -6,6 +6,40 @@ export function GameIcon({ name, size = 24, className = '' }: { name: string; si
   return <img src={`/assets/icons/${name}.png`} width={size} height={size} alt="" draggable={false} className={`pointer-events-none select-none ${className}`} />;
 }
 
+/** Icon that falls back to nothing when the file is missing; the label stays as tooltip and aria-label. */
+function SafeIcon({ name, size, label }: { name: string; size: number; label: string }) {
+  return <img src={`/assets/icons/${name}.png`} width={size} height={size} alt="" title={label} aria-label={label} draggable={false} onError={(e) => { e.currentTarget.style.display = 'none'; }} className="inline-block align-middle shrink-0 pointer-events-none select-none" />;
+}
+
+/** Rarity gem (common | uncommon | rare | epic | legendary). */
+export function RarityGem({ rarity, size = 14 }: { rarity: string; size?: number }) {
+  return <SafeIcon name={`rarity_${rarity}`} size={size} label={rarity} />;
+}
+
+/** Wallet / currency pictogram: scrap, iron|copper|titanium|crystal (ore), honor, marks_faction, token_event, token_season, gate_key, fragments, cells. */
+const CURRENCY_ICON: Record<string, string> = {
+  scrap: 'scrap', iron: 'ore_iron', copper: 'ore_copper', titanium: 'ore_titanium', crystal: 'ore_crystal', ore: 'ore_iron',
+  honor: 'honor', marks: 'marks_faction', event: 'token_event', season: 'token_season', gate_key: 'gate_key', fragments: 'fragments', cells: 'cells',
+};
+export function CurrencyIcon({ kind, size = 14, label }: { kind: keyof typeof CURRENCY_ICON | string; size?: number; label?: string }) {
+  const name = CURRENCY_ICON[kind];
+  return name ? <SafeIcon name={name} size={size} label={label ?? kind.replace(/_/g, ' ')} /> : null;
+}
+
+/** Equipment slot (main | secondary | armor | engine | module | drone). */
+export function SlotIcon({ slot, size = 14 }: { slot: string; size?: number }) {
+  return <SafeIcon name={`slot_${slot}`} size={size} label={slot} />;
+}
+
+/** Weapon family -> icon (only families that have a painted icon). */
+const FAMILY_ICON: Record<string, string> = {
+  cannon: 'fam_cannon', rapid_fire: 'fam_rapid', rocket: 'fam_rocket', mortar: 'fam_mortar', railgun: 'fam_railgun', flamethrower: 'fam_flame',
+};
+export function FamilyIcon({ family, size = 14 }: { family: string; size?: number }) {
+  const name = FAMILY_ICON[family];
+  return name ? <SafeIcon name={name} size={size} label={family.replace(/_/g, ' ')} /> : null;
+}
+
 /** Ammo type (as used by the sim) -> icon name. */
 export const AMMO_ICON: Record<string, string> = {
   STANDARD: 'ammo_standard', REINFORCED: 'ammo_reinforced', ARMOR_PIERCING: 'ammo_ap', SHAPED_CHARGE: 'ammo_shaped', EXPLOSIVE: 'ammo_explosive',

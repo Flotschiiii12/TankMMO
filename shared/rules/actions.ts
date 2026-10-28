@@ -42,6 +42,18 @@ export const AMMO_PRICES: Record<string, { pack: number; cost: number }> = {
   REINFORCED: { pack: 20, cost: 45 }, ARMOR_PIERCING: { pack: 20, cost: 65 }, SHAPED_CHARGE: { pack: 10, cost: 120 }, EXPLOSIVE: { pack: 20, cost: 75 },
 };
 
+/** Reputation with your own faction (1000 points per level, max 7) gives 3 % off ammo per level. */
+export function reputationLevel(ch: C.CharacterState): number {
+  const key = ch.faction;
+  return Math.min(7, Math.floor((ch.reputation[key] ?? 0) / 1000));
+}
+
+export function ammoCost(ch: C.CharacterState, ammo: string, packs: number): number | undefined {
+  const price = AMMO_PRICES[ammo];
+  if (!price) return undefined;
+  return Math.max(1, Math.round(price.cost * packs * (1 - 0.03 * reputationLevel(ch))));
+}
+
 export function executeAction(ch: C.CharacterState, a: ClientAction, rng: SimRNG, ctx: ActionContext): C.Result<any> {
   if (SAFE_ONLY.has(a.kind) && !ctx.inSafeZone) return { ok: false, error: 'safe_zone_only' };
   switch (a.kind) {

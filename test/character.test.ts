@@ -201,3 +201,16 @@ describe('Modules and drones affect stats', () => {
     expect(s.mainDamage).toBeGreaterThan(base.mainDamage);
   });
 });
+
+import { ammoCost, reputationLevel } from '../shared/rules/actions.ts';
+describe('Reputation discount', () => {
+  it('3% off ammo per faction reputation level, capped at level 7', () => {
+    const ch = C.createCharacter('R');
+    expect(ammoCost(ch, 'ARMOR_PIERCING', 1)).toBe(65);
+    ch.reputation['coastal'] = 2500;
+    expect(reputationLevel(ch)).toBe(2);
+    expect(ammoCost(ch, 'ARMOR_PIERCING', 1)).toBe(Math.round(65 * 0.94));
+    ch.reputation['coastal'] = 99999;
+    expect(reputationLevel(ch)).toBe(7);
+  });
+});

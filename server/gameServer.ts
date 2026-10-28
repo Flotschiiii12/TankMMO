@@ -10,7 +10,7 @@ import { compactEntity, DeltaEncoder, viewFor } from '../shared/net/delta.ts';
 import { MIN_PROTOCOL_VERSION, PROTOCOL_VERSION, ClientActionPacket, ClientMessage, ClientSocialPacket, ServerMessage } from '../shared/protocol.ts';
 import { SimRNG } from '../shared/prng.ts';
 import * as C from '../shared/rules/character.ts';
-import { AMMO_PRICES, executeAction } from '../shared/rules/actions.ts';
+import { AMMO_PRICES, ammoCost, executeAction } from '../shared/rules/actions.ts';
 import { calculateKillXP } from '../shared/rules/progression.ts';
 import * as Q from '../shared/rules/quests.ts';
 import { canEngage, BOUNTY_SCRAP_PER_STREAK, BOUNTY_STREAK, HONOR_LOSS_ON_DEATH, honorForKill, registerPvpKill } from '../shared/sim/pvp.ts';
@@ -694,7 +694,7 @@ export class GameServer {
     const price = AMMO_PRICES[ammo];
     const n = Math.floor(packs);
     if (!price || n < 1 || n > 50) return { ok: false, error: 'bad_request' };
-    const cost = price.cost * n;
+    const cost = ammoCost(s.character, ammo, n)!;
     if (s.character.wallet.scrap < cost) return { ok: false, error: 'not_enough_scrap' };
     s.character.wallet.scrap -= cost;
     const ent = s.instance.world.entities.get(s.entityId);

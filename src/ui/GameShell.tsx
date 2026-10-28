@@ -10,7 +10,7 @@ import { calculateKillXP } from '../../shared/rules/progression.ts';
 import { rollLoot } from '../../shared/data/loot.ts';
 import * as C from '../../shared/rules/character.ts';
 import type { CharacterState } from '../../shared/rules/character.ts';
-import { AMMO_PRICES, executeAction, ClientAction } from '../../shared/rules/actions.ts';
+import { AMMO_PRICES, ammoCost, executeAction, ClientAction } from '../../shared/rules/actions.ts';
 import { describeItem } from '../game/actions.ts';
 import { applyQuestEvent, rotateQuests, questName } from '../game/questBridge.ts';
 import type { QuestEvent } from '../../shared/rules/quests.ts';
@@ -613,8 +613,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         const price = AMMO_PRICES[ammo];
         const n = Math.floor(packs);
         if (!price || n < 1) return { ok: false, error: 'bad_request' };
-        if (next.character.wallet.scrap < price.cost * n) return { ok: false, error: 'not_enough_scrap' };
-        next.character.wallet.scrap -= price.cost * n;
+        const cost = ammoCost(next.character, ammo, n)!;
+        if (next.character.wallet.scrap < cost) return { ok: false, error: 'not_enough_scrap' };
+        next.character.wallet.scrap -= cost;
         next.ammoInventory[ammo] = (next.ammoInventory[ammo] || 0) + price.pack * n;
         return { ok: true };
       },

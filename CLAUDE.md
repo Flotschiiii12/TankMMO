@@ -1,6 +1,6 @@
 # Treadfront (repo TankMMO) — notes for AI coding sessions
 
-> **Trigger words:** if the user's first message is just `start` (or `los`), read `docs/cloud-master.md`; `start2` -> `docs/cloud-master-2.md`; `start3` -> `docs/cloud-master-3.md` (10 demanding tasks; first read the earlier `docs/CLOUD_REPORT*.md`). Execute the file completely and unattended (no questions, make sensible decisions, push after every task, finish with the report file it names). Any other first message: behave normally.
+> **Trigger words:** if the user's first message is just `start` (or `los`), read `docs/cloud-master.md`; `start2` -> `docs/cloud-master-2.md`; `start3` -> `docs/cloud-master-3.md`; `start4` -> `docs/cloud-master-4.md` (UI/UX overhaul; first read the earlier `docs/CLOUD_REPORT*.md`). Execute the file completely and unattended (no questions, make sensible decisions, push after every task, finish with the report file it names). Any other first message: behave normally.
 
 Online tank MMO (landscape, mobile first, browser too). Server-authoritative. Owner: Florian (speaks German; code, commits and docs are English, UI strings are DE/EN).
 Live server: https://treadfront.213-199-44-82.sslip.io. Read `docs/GDD.md` (design), `docs/PROGRESS.md` (what exists + "Known gaps" + dated updates), `docs/PROTOCOL.md`, `docs/BALANCE.md`.

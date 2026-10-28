@@ -123,6 +123,14 @@ async function closeModal(page: Page, vp: Viewport, screen: string) {
   if (open > 0) { violations.push({ viewport: vp.name, screen, rule: 'escape-closes', element: 'modal', detail: 'Escape did not close the window' }); await page.mouse.click(2, 2).catch(() => {}); }
 }
 
+/** HTML5 drag and drop with real mouse movement (a few intermediate moves are needed before Chromium starts the drag). */
+async function drag(page: Page, from: ReturnType<Page['locator']>, to: ReturnType<Page['locator']>) {
+  const a = (await from.boundingBox())!; const b = (await to.boundingBox())!;
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();
+  await page.mouse.move(a.x + a.width / 2 + 12, a.y + a.height / 2 + 12, { steps: 4 });
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 }); await page.mouse.up();
+}
+
 async function main() {
   const dist = path.resolve('dist');
   if (!existsSync(path.join(dist, 'index.html'))) throw new Error('dist/ missing - run `npm run build` first');
@@ -135,7 +143,7 @@ async function main() {
     const t0 = Date.now();
     while (true) { try { if ((await fetch(`${base}/health`)).ok) break; } catch { /* not up yet */ } if (Date.now() - t0 > 30_000) throw new Error('server did not start'); await new Promise((r) => setTimeout(r, 200)); }
     browser = await chromium.launch({ args: ['--no-sandbox'], executablePath: process.env.E2E_CHROMIUM || undefined });
-    for (const vp of VIEWPORTS) {
+    for (const vp of VIEWPORTS.filter((v) => !process.env.LAYOUT_ONLY || v.name.includes(process.env.LAYOUT_ONLY))) { // LAYOUT_ONLY=desktop runs a single viewport while debugging
       const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.touch ? 2 : 1, isMobile: vp.touch, hasTouch: vp.touch });
       const page = await ctx.newPage();
       await page.addInitScript(() => { try { localStorage.setItem('treadfront_lang', 'en'); } catch { /* ignore */ } });
@@ -224,6 +232,29 @@ async function main() {
           if (z !== 0.6) violations.push({ viewport: vp.name, screen: 'modal-settings', rule: 'zoom-setting', element: 'zoom slider', detail: `profile zoom is ${z}, expected 0.6` });
         }
         await closeModal(page, vp, 'modal-settings');
+      }
+      // hangar: switch views on phones, drag an equipped item out and back in (desktop), preview power shows a number
+      {
+        const hg = (m: string) => violations.push({ viewport: vp.name, screen: 'modal-garage', rule: 'hangar', element: 'hangar', detail: m });
+        await page.keyboard.press('KeyG'); await page.waitForTimeout(400);
+        if (vp.touch) await page.getByRole('tab', { name: /^Stats$/ }).click().catch(() => hg('Stats view tab missing'));
+        const power = (await page.getByTestId('power').first().innerText().catch(() => '')).replace(/\D/g, '');
+        if (!power) hg('power rating is not shown');
+        if (vp.touch) await page.getByRole('tab', { name: /^Loadout$/ }).click().catch(() => hg('Loadout view tab missing'));
+        if (!vp.touch) {
+          const slot = page.locator('[data-slot=armor0] button').first(); const items = page.getByTestId('hangar-items');
+          if (await slot.count()) {
+            await drag(page, slot, items); await page.waitForTimeout(900);
+            const empty = (await page.locator('[data-slot=armor0] button[data-empty=true]').count()) === 1;
+            if (!empty) { hg(`dragging an equipped item into the item list should unequip it (alert: ${await page.locator('[role=alert]').allInnerTexts()})`); if (process.env.LAYOUT_DEBUG) await page.screenshot({ path: '/tmp/hangar_fail.png' }); }
+            else {
+              await drag(page, page.locator('[data-testid=hangar-items] button[aria-label*="Armor"]').first(), page.locator('[data-slot=armor0]')); await page.waitForTimeout(900);
+              if ((await page.locator('[data-slot=armor0] button[data-empty=true]').count()) !== 0) hg('dragging an item onto a slot should equip it');
+            }
+          } else hg('armor slot not found');
+        }
+        await check(page, vp, 'modal-hangar', { modal: true });
+        await closeModal(page, vp, 'modal-hangar');
       }
       // left-handed layout and performance mode (settings toggles): controls swap sides, the DPR cap drops to 1.5
       if (vp.touch && (await page.getByRole('button', { name: /^Settings$/ }).count())) {

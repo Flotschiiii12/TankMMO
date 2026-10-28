@@ -25,7 +25,7 @@ export interface ClientInputPacket {
 
 export interface ClientChatPacket {
   type: 'c_chat';
-  channel: 'G' | 'M' | 'F' | 'C' | 'P' | 'W' | 'T';
+  channel: 'G' | 'M' | 'F' | 'C' | 'A' | 'P' | 'W' | 'T';
   text: string;
   targetRecipient?: string;
 }
@@ -75,6 +75,15 @@ export type SocialOp =
   | { op: 'clan_info' }
   | { op: 'clan_donate'; amount: number }
   | { op: 'clan_research'; id: string }
+  | { op: 'clan_storage' }
+  | { op: 'clan_deposit'; uid: string }
+  | { op: 'clan_withdraw'; id: number }
+  | { op: 'clan_storage_policy'; minRole: 'member' | 'officer' | 'leader' }
+  | { op: 'clan_allies' }
+  | { op: 'clan_ally_propose'; tag: string }
+  | { op: 'clan_ally_accept'; clanId: number }
+  | { op: 'clan_ally_decline'; clanId: number }
+  | { op: 'clan_ally_break'; clanId: number }
   | { op: 'profile'; name: string }
   | { op: 'ranking'; kind: 'level' | 'clans' | 'arena_1v1' | 'arena_3v3' | 'arena_5v5' | 'honor' }
   | { op: 'arena_queue'; mode: '1v1' | '3v3' | '5v5' }
@@ -117,7 +126,7 @@ export interface ServerSocialResultPacket {
 
 export interface ServerSocialEventPacket {
   type: 's_social_event';
-  kind: 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_phase' | 'arena_result' | 'war_result' | 'trade_update' | 'mail' | 'achievement' | 'dungeon';
+  kind: 'clan_storage' | 'clan_allies' | 'friend_request' | 'friend_accepted' | 'party_invite' | 'party_update' | 'clan_invite' | 'announcement' | 'arena_start' | 'arena_round' | 'arena_phase' | 'arena_result' | 'war_result' | 'trade_update' | 'mail' | 'achievement' | 'dungeon';
   data: any;
 }
 

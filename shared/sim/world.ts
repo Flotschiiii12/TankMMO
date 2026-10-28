@@ -76,6 +76,8 @@ export interface World {
   /** kill cap bookkeeping: 'killerEntity>victimEntity' -> kill times / immunity-until (world seconds) */
   pvpKills: Map<string, number[]>;
   pvpImmunity: Map<string, number>;
+  /** allied clan tag pairs ('A|B', upper-case, sorted); allies cannot hurt each other on faction-war control points */
+  alliances: Set<string>;
   war?: WarPoint[];
   warScore: Record<string, number>;
   /** Server clock (epoch seconds) at world time 0: drives the event/world-boss schedule. */
@@ -137,6 +139,7 @@ export function createWorld(options: WorldInitOptions = {}): World {
     pvp: options.pvp ?? (map && isPvpMap(Number(map.numericId ?? map.id)) ? { pvpEnabled: true, arena: false } : undefined),
     pvpKills: new Map(),
     pvpImmunity: new Map(),
+    alliances: new Set(),
     war: map && options.populate !== false ? (createWarPoints(Number(map.numericId ?? map.id), width, height) || undefined) : undefined,
     warScore: {},
   };

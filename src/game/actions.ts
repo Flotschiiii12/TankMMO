@@ -97,6 +97,16 @@ const ERRORS: Record<string, string> = {
   vehicle_not_owned: T('You do not own that vehicle'),
   failed: T('Failed'),
   too_far: T('You are too far apart to trade'),
+  storage_full: T('The clan storage is full'),
+  daily_limit: T('Daily withdrawal limit reached'),
+  unknown_clan: T('No clan with that tag'),
+  already_allied: T('Already allied'),
+  already_proposed: T('Proposal already sent'),
+  ally_limit: T('Your clan already has 2 alliances'),
+  target_ally_limit: T('That clan already has 2 alliances'),
+  ally_cooldown: T('These clans broke up recently (7 day cooldown)'),
+  no_proposal: T('No such proposal'),
+  not_allied: T('Not allied'),
 };
 export const errorText = (code: string): string => tr(ERRORS[code] || code.replace(/_/g, ' '));
 

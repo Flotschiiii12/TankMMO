@@ -3,7 +3,8 @@ import { getMapById } from '../shared/data/maps.ts';
 import { SimRNG } from '../shared/prng.ts';
 import { createStarterCharacterForServer } from '../server/starter.ts';
 import { spawnPlayerFromCharacter } from '../shared/sim/playerEntity.ts';
-import { canEngage, honorForKill, isPvpMap, registerPvpKill } from '../shared/sim/pvp.ts';
+import { allianceKey, canEngage, honorForKill, isPvpMap, registerPvpKill } from '../shared/sim/pvp.ts';
+import { createWarPoints } from '../shared/sim/war.ts';
 import { createWorld, stepWorld } from '../shared/sim/world.ts';
 import { SimCommand } from '../shared/types.ts';
 
@@ -36,6 +37,24 @@ describe('PvP rules', () => {
     ({ w, a, b } = setup(23)); b.invulnerableTime = 3; expect(canEngage(w, a, b)).toBe(false); // respawn/jump protection
     ({ w, a, b } = setup(23)); w.safeZones = [{ x: b.pos.x, y: b.pos.y, radius: 100, name: 's' }]; expect(canEngage(w, a, b)).toBe(false);
     ({ w, a, b } = setup(23)); const g = w.map!.gates[0]; b.pos = { x: g.x + 100, y: g.y }; expect(canEngage(w, a, b)).toBe(false);
+  });
+
+  it('allied clans are immune to each other only on a war control point', () => {
+    const { w, a, b } = setup(23);
+    w.war = createWarPoints(23, 4000, 4000);
+    a.clanTag = 'AAA'; b.clanTag = 'BBB';
+    expect(canEngage(w, a, b)).toBe(true);
+    w.alliances.add(allianceKey('aaa', 'BBB'));
+    const cp = w.war![0];
+    a.pos = { x: cp.x + 800, y: cp.y };
+    b.pos = { x: cp.x + 10, y: cp.y };
+    expect(canEngage(w, a, b)).toBe(false); // victim on the point
+    expect(canEngage(w, b, a)).toBe(true); // the attacker's own position does not matter, the victim is off the point
+    b.pos = { x: cp.x + cp.radius + 500, y: cp.y };
+    expect(canEngage(w, a, b)).toBe(true); // off the point: normal faction PvP
+    w.alliances.clear();
+    b.pos = { x: cp.x, y: cp.y };
+    expect(canEngage(w, a, b)).toBe(true);
   });
 
   it('projectiles and machine guns follow the same rules in the simulation', () => {

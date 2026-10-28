@@ -20,6 +20,8 @@ export const CLAN_RESEARCH: Array<{ id: string; name: string; maxLevel: number; 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
 const TAG_RE = /^[A-Za-z0-9]{2,5}$/;
+/** Tags the game uses for system messages and NPCs: players may not take them (alliance and war rules key on tags). */
+export const RESERVED_TAGS = new Set(['CMD', 'BOSS', 'SYS', 'NPC', 'GM', 'ADMIN']);
 const CLAN_NAME_RE = /^[A-Za-z0-9 _\-]{3,20}$/;
 
 export class SocialRepo {
@@ -94,7 +96,7 @@ export class SocialRepo {
 
   createClan(founder: string, name: string, tag: string, emblem?: string): R<{ clanId: number }> {
     if (!CLAN_NAME_RE.test(name)) return fail('invalid_clan_name');
-    if (!TAG_RE.test(tag)) return fail('invalid_tag');
+    if (!TAG_RE.test(tag) || RESERVED_TAGS.has(tag.toUpperCase())) return fail('invalid_tag');
     if (emblem !== undefined && !isClanEmblem(emblem)) return fail('invalid_emblem');
     if (this.clanOf(founder)) return fail('already_in_clan');
     try {

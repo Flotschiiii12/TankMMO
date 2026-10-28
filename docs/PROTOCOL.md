@@ -104,3 +104,10 @@ interface ServerChatPacket {
   message: ChatMessage;
 }
 ```
+
+## Clan storage and alliances (social ops)
+
+`clan_storage` -> `{capacity, minRole, items:[{id,item,by,ts}], log, withdrawalsLeft}`; `clan_deposit {uid}`, `clan_withdraw {id}` (safe zone only, return the same view); `clan_storage_policy {minRole}` (leader);
+`clan_allies` -> `[{clanId,name,tag,emblem,status:'active'|'incoming'|'outgoing',since}]`; `clan_ally_propose {tag}` (officer+), `clan_ally_accept|decline|break {clanId}` (leader; officers may decline).
+Errors: `storage_full`, `daily_limit`, `inventory_full`, `item_bound`, `item_equipped`, `no_permission`, `unknown_clan`, `already_allied`, `already_proposed`, `ally_limit`, `target_ally_limit`, `ally_cooldown`, `no_proposal`, `not_allied`.
+Chat channel `A` reaches the own clan plus allied clans. Social events `clan_storage` / `clan_allies` tell clan members to refresh.

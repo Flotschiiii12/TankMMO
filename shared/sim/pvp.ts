@@ -31,6 +31,18 @@ function inPortalZone(world: World, e: SimEntity): boolean {
   return false;
 }
 
+export function allianceKey(a: string, b: string): string {
+  const x = a.toUpperCase(); const y = b.toUpperCase();
+  return x < y ? `${x}|${y}` : `${y}|${x}`;
+}
+
+/** Allied clans (different factions) are immune to each other while the victim stands on a war control point. */
+function alliedOnWarPoint(world: World, attacker: SimEntity, victim: SimEntity): boolean {
+  if (!attacker.clanTag || !victim.clanTag || !world.war) return false;
+  if (!world.alliances.has(allianceKey(attacker.clanTag, victim.clanTag))) return false;
+  return world.war.some((p) => (victim.pos.x - p.x) ** 2 + (victim.pos.y - p.y) ** 2 <= p.radius ** 2);
+}
+
 /**
  * May `attacker` (a player vehicle or a projectile fired by one) damage `victim`?
  * Monsters vs players always works (existing isHostile rule); player vs player follows the PvP rules.
@@ -54,6 +66,7 @@ export function canEngage(world: World, attacker: SimEntity, victim: SimEntity):
   if (victim.invulnerableTime > 0 || attacker.invulnerableTime > 0) return false; // respawn / portal protection
   if (world.safeZones.some((z) => (victim.pos.x - z.x) ** 2 + (victim.pos.y - z.y) ** 2 <= z.radius ** 2)) return false;
   if (inPortalZone(world, victim) || inPortalZone(world, attacker.kind === 'projectile' && aSource ? aSource : attacker)) return false;
+  if (world.alliances.size > 0 && alliedOnWarPoint(world, aSource ?? attacker, victim)) return false;
   const key = `${aSource?.id ?? attacker.id}>${victim.id}`;
   const until = world.pvpImmunity.get(key);
   if (until !== undefined && until > world.time) return false; // kill cap: this attacker may not hit this victim for 1 h

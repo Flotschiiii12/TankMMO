@@ -21,6 +21,8 @@ import { AbilityId, AmmoType, MapDef, SimCommand, SimEntity, SimEvent, SIM_TIMES
 import { AccountService } from './accounts.ts';
 import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
 import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
+import { AllianceRepo, ClanStorageRepo, STORAGE_DAILY_WITHDRAW } from './clanStorage.ts';
+import { allianceKey } from '../shared/sim/pvp.ts';
 import { SqliteArenaRepo, SqliteWarRepo } from './db.ts';
 import { AntiCheat } from './anticheat.ts';
 import { bump, checkAchievements, codexAdd } from '../shared/rules/achievements.ts';
@@ -147,6 +149,8 @@ export interface ServerDeps {
   /** called once per day by the scheduler (daily database backup) */
   onDaily?: () => void;
   social: SocialRepo;
+  clanStorage: ClanStorageRepo;
+  alliances: AllianceRepo;
   arena: SqliteArenaRepo;
   war: SqliteWarRepo;
   market: MarketRepo;
@@ -170,6 +174,8 @@ export class GameServer {
   inboundLimit = { perSecond: MAX_MESSAGES_PER_SECOND, burst: MAX_MESSAGE_BURST };
   readonly metrics = { ticks: 0, maxTickMs: 0, avgTickMs: 0, bytesOut: 0, msgsIn: 0 };
   private instanceCounter = 0;
+  /** allied clan-tag pairs, one Set shared by every world (mutated in place by refreshAlliances) */
+  private allianceSet = new Set<string>();
   private arenaInstances = new Set<Instance>();
   private dungeonInstances = new Set<Instance>();
   private dungeonCounter = 0;
@@ -189,6 +195,7 @@ export class GameServer {
     this.http = httpServer ?? http.createServer();
     this.wss = new WebSocketServer({ server: this.http, path: '/ws', maxPayload: 64 * 1024 });
     this.wss.on('connection', (ws, req) => this.onConnection(ws, clientIp(req)));
+    this.refreshAlliances();
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -365,6 +372,7 @@ export class GameServer {
     const map = getMapById(mapId) as MapDef;
     const n = ++this.instanceCounter;
     const world = createWorld({ map, seed: mapId * 7919 + n, clockOffset: Math.floor(this.clock.nowMs() / 1000) });
+    world.alliances = this.allianceSet;
     const inst: Instance = { id: `i${mapId}-${n}`, mapId, map, world, sessions: new Set(), chatSent: world.chat.length };
     list.push(inst);
     void preferInstanceOf;
@@ -406,10 +414,10 @@ export class GameServer {
   }
 
   /** Test hook. */
-  getSessionState(accountId: string): { character: C.CharacterState; entity: SimEntity; instanceId: string; mapId: number } | undefined {
+  getSessionState(accountId: string): { character: C.CharacterState; entity: SimEntity; instanceId: string; mapId: number; world: World } | undefined {
     const s = this.sessions.get(accountId);
     if (!s) return undefined;
-    return { character: s.character, entity: s.instance.world.entities.get(s.entityId)!, instanceId: s.instance.id, mapId: s.instance.mapId };
+    return { character: s.character, entity: s.instance.world.entities.get(s.entityId)!, instanceId: s.instance.id, mapId: s.instance.mapId, world: s.instance.world };
   }
 
   getWorld(accountId: string): World | undefined { return this.sessions.get(accountId)?.instance.world; }
@@ -664,6 +672,12 @@ export class GameServer {
         for (const o of this.sessions.values()) if (o.clanId === s.clanId) deliver(o);
         return;
       }
+      case 'A': { // clan + allied clans
+        if (!s.clanId) return this.send(s, { type: 's_error', code: 'no_clan', message: 'You are not in a clan' });
+        const allies = new Set([s.clanId, ...this.deps.alliances.allyIds(s.clanId)]);
+        for (const o of this.sessions.values()) if (o.clanId !== undefined && allies.has(o.clanId)) deliver(o);
+        return;
+      }
       case 'P': {
         const party = s.partyId ? this.parties.get(s.partyId) : undefined;
         if (!party) return this.send(s, { type: 's_error', code: 'no_party', message: 'You are not in a party' });
@@ -688,6 +702,76 @@ export class GameServer {
   private online(name: string): Session | undefined {
     const a = this.deps.accounts.getByName(name);
     return a ? this.sessions.get(a.id) : undefined;
+  }
+
+  /** Re-reads the alliance table into the Set shared by all worlds (war-point immunity). Called after every alliance change. */
+  private refreshAlliances(): void {
+    this.allianceSet.clear();
+    for (const [a, b] of this.deps.alliances.activeTagPairs()) this.allianceSet.add(allianceKey(a, b));
+  }
+
+  private handleClanExtras(s: Session, req: any, reply: (r: { ok: boolean; error?: string; data?: any }) => void): void {
+    const clan = this.deps.social.clanOf(s.accountId);
+    if (!clan) return reply({ ok: false, error: 'no_clan' });
+    const storage = this.deps.clanStorage; const alliances = this.deps.alliances;
+    const role = clan.role as 'member' | 'officer' | 'leader';
+    const storageView = () => ({
+      capacity: storage.capacity(clan.id), minRole: storage.getPolicy(clan.id),
+      items: storage.list(clan.id).map((x) => ({ id: x.id, item: x.item, by: x.depositedByName, ts: x.ts })),
+      log: storage.log(clan.id), withdrawalsLeft: Math.max(0, STORAGE_DAILY_WITHDRAW[role] - storage.withdrawnLast24h(clan.id, s.accountId)),
+    });
+    const notifyClan = (clanId: number, kind: 'clan_storage' | 'clan_allies') => { for (const o of this.sessions.values()) if (o.clanId === clanId) this.send(o, { type: 's_social_event', kind, data: {} }); };
+    const needOfficer = () => (role === 'member' ? 'no_permission' : undefined);
+    switch (req.op) {
+      case 'clan_storage': return reply({ ok: true, data: storageView() });
+      case 'clan_deposit': {
+        if (typeof req.uid !== 'string') return reply({ ok: false, error: 'item_not_found' });
+        if (!this.inSafeZone(s)) return reply({ ok: false, error: 'safe_zone_only' });
+        const ch = s.character;
+        const it = C.findItem(ch, req.uid);
+        if (it?.bound) return reply({ ok: false, error: 'item_bound' });
+        if (it && C.isEquipped(ch, req.uid)) return reply({ ok: false, error: 'item_equipped' });
+        const r = storage.deposit(clan.id, s.accountId, role, {
+          take: () => { const i = ch.inventory.findIndex((x) => x.uid === req.uid); return i < 0 ? undefined : ch.inventory.splice(i, 1)[0]; },
+          giveBack: (item) => { ch.inventory.push(item); },
+          persist: () => this.save(s),
+        });
+        if (r.ok) { this.sendCharacter(s); notifyClan(clan.id, 'clan_storage'); return reply({ ok: true, data: storageView() }); }
+        return reply(r);
+      }
+      case 'clan_withdraw': {
+        if (!this.inSafeZone(s)) return reply({ ok: false, error: 'safe_zone_only' });
+        const ch = s.character;
+        const r = storage.withdraw(clan.id, s.accountId, role, req.id, {
+          hasRoom: () => ch.inventory.length < C.inventoryCapacity(ch),
+          give: (item) => { ch.inventory.push({ ...item, uid: `i${ch.nextUid++}` }); },
+          remove: () => { ch.inventory.pop(); },
+          persist: () => this.save(s),
+        });
+        if (r.ok) { this.sendCharacter(s); notifyClan(clan.id, 'clan_storage'); return reply({ ok: true, data: storageView() }); }
+        return reply(r);
+      }
+      case 'clan_storage_policy': {
+        const r = storage.setPolicy(clan.id, role, req.minRole);
+        if (r.ok) notifyClan(clan.id, 'clan_storage');
+        return reply(r.ok ? { ok: true, data: storageView() } : r);
+      }
+      case 'clan_allies': return reply({ ok: true, data: alliances.list(clan.id) });
+      case 'clan_ally_propose': case 'clan_ally_accept': case 'clan_ally_decline': case 'clan_ally_break': {
+        const denied = req.op === 'clan_ally_propose' || req.op === 'clan_ally_decline' ? needOfficer() : role === 'leader' ? undefined : 'no_permission';
+        if (denied) return reply({ ok: false, error: denied });
+        const r = req.op === 'clan_ally_propose' ? alliances.propose(clan.id, req.tag)
+          : req.op === 'clan_ally_accept' ? alliances.accept(clan.id, req.clanId)
+          : req.op === 'clan_ally_decline' ? alliances.decline(clan.id, req.clanId)
+          : alliances.break(clan.id, req.clanId);
+        if (!r.ok) return reply(r);
+        this.refreshAlliances();
+        const other = 'clanId' in r ? (r as any).clanId : Number(req.clanId);
+        notifyClan(clan.id, 'clan_allies'); if (Number.isInteger(other)) notifyClan(other, 'clan_allies');
+        return reply({ ok: true, data: alliances.list(clan.id) });
+      }
+    }
+    return reply({ ok: false, error: 'bad_request' });
   }
 
   private applyClanTag(s: Session): void {
@@ -808,7 +892,16 @@ export class GameServer {
       }
       case 'clan_invites': return reply({ ok: true, data: social.invitesFor(s.accountId) });
       case 'clan_accept': { const r = social.acceptInvite(s.accountId, Number(req.clanId)); if (r.ok) this.applyClanTag(s); return reply(r); }
-      case 'clan_leave': { const r = social.leave(s.accountId); if (r.ok) this.applyClanTag(s); return reply(r); }
+      case 'clan_leave': {
+        const c = social.clanOf(s.accountId);
+        const lastMember = !!c && social.members(c.id).length === 1;
+        const stored = c && lastMember ? this.deps.clanStorage.drain(c.id) : [];
+        for (const it of stored) this.mailTo(s.accountId, 'item', it, 'Returned from the dissolved clan storage'); // mailed before the clan row (and its storage) is deleted
+        const r = social.leave(s.accountId);
+        this.applyClanTag(s);
+        this.refreshAlliances();
+        return reply(r);
+      }
       case 'clan_kick': {
         const r = social.kick(s.accountId, target!.id);
         if (r.ok) { const o = this.sessions.get(target!.id); if (o) this.applyClanTag(o); }
@@ -824,6 +917,9 @@ export class GameServer {
         return reply(r);
       }
       case 'clan_research': return reply(social.research(s.accountId, String(req.id)));
+      case 'clan_storage': case 'clan_deposit': case 'clan_withdraw': case 'clan_storage_policy':
+      case 'clan_allies': case 'clan_ally_propose': case 'clan_ally_accept': case 'clan_ally_decline': case 'clan_ally_break':
+        return this.handleClanExtras(s, req, reply);
 
       case 'profile': {
         const live = this.sessions.get(target!.id);

@@ -324,7 +324,7 @@ export interface ChatMessage {
   sender: string;
   clanTag?: string;
   clanEmblem?: string;
-  channel: 'G' | 'M' | 'F' | 'C' | 'P' | 'W' | 'S'; // Global, Map, Faction, Clan, Party, Whisper, System
+  channel: 'G' | 'M' | 'F' | 'C' | 'A' | 'P' | 'W' | 'S'; // Global, Map, Faction, Clan, Allies, Party, Whisper, System
   text: string;
   timestamp: number;
 }

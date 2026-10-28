@@ -8,6 +8,7 @@ import { describeItem, errorText } from '../game/actions.ts';
 import { ITEM_BY_ID } from '../../shared/data/items.ts';
 import { priceBandClient } from '../game/priceBand.ts';
 import { ACHIEVEMENTS_CATALOG } from '../../shared/data/achievements.ts';
+import { ClanExtras } from './ClanExtras.tsx';
 import { RankBadge, FactionCrest, ClanEmblemBadge, CurrencyIcon } from './GameIcon.tsx';
 import { CLAN_EMBLEMS } from '../../shared/data/emblems.ts';
 import { getRankForHonor } from '../../shared/data/ranks.ts';
@@ -105,6 +106,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
                     <span className="flex gap-1">{m.role === 'member' && <button className={ghost} onClick={() => call({ op: 'clan_role', name: m.name, role: 'officer' })}>{tr('Promote')}</button>}<button className={ghost} onClick={() => call({ op: 'clan_kick', name: m.name })}>{tr('Kick')}</button></span></div>
                 ))}
                 <div className="text-[11px] text-slate-500">{tr('Log')}: {(data.log ?? []).slice(0, 5).map((l: any) => `${l.actor}: ${l.text}`).join(' | ')}</div>
+                <ClanExtras client={client} character={character} myRole={data.myRole} />
                 <button className={ghost} onClick={() => call({ op: 'clan_leave' })}>{tr('Leave clan')}</button>
               </>
             ) : (

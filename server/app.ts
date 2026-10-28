@@ -3,6 +3,7 @@ import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { AccountService } from './accounts.ts';
 import { SocialRepo } from './social.ts';
+import { AllianceRepo, ClanStorageRepo } from './clanStorage.ts';
 import { MarketRepo, PremiumWallet } from './market.ts';
 import { backupDatabase, openDatabase, SqliteArenaRepo, SqliteWarRepo, SqliteAccountRepo, SqliteChatRepo, SqliteProfileRepo } from './db.ts';
 import { GameServer, log } from './gameServer.ts';
@@ -37,6 +38,8 @@ export function createApp(opts: AppOptions = {}) {
   const chat = new SqliteChatRepo(db);
   const service = new AccountService(accounts);
   const social = new SocialRepo(db);
+  const clanStorage = new ClanStorageRepo(db, opts.clock ? () => opts.clock!.nowMs() : undefined);
+  const alliances = new AllianceRepo(db, opts.clock ? () => opts.clock!.nowMs() : undefined);
   const arena = new SqliteArenaRepo(db);
   const war = new SqliteWarRepo(db);
   const market = new MarketRepo(db);
@@ -51,7 +54,7 @@ export function createApp(opts: AppOptions = {}) {
     next(err);
   });
   const server = http.createServer(app);
-  const game = new GameServer({ accounts, profiles, chat, service, social, arena, war, market, premium, adminToken: opts.adminToken, clock: opts.clock, onDaily: opts.backupDir ? () => { const f = backupDatabase(db, opts.backupDir!); log('info', 'backup', { file: f }); } : undefined }, server);
+  const game = new GameServer({ accounts, profiles, chat, service, social, clanStorage, alliances, arena, war, market, premium, adminToken: opts.adminToken, clock: opts.clock, onDaily: opts.backupDir ? () => { const f = backupDatabase(db, opts.backupDir!); log('info', 'backup', { file: f }); } : undefined }, server);
 
   app.get('/health', (_req, res) => res.json({ ok: true, players: game.playerCount(), instances: game.instanceInfo().length }));
   app.get('/metrics', (_req, res) => {
@@ -172,7 +175,7 @@ export function createApp(opts: AppOptions = {}) {
 
   if (opts.staticDir) app.use(express.static(opts.staticDir));
 
-  return { app, server, game, db, accounts, profiles, chat, service, social, arena, war, market, premium };
+  return { app, server, game, db, accounts, profiles, chat, service, social, clanStorage, alliances, arena, war, market, premium };
 }
 
 const ADMIN_HTML = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Treadfront admin</title>

@@ -3,13 +3,13 @@ import { tr, T } from '../i18n.ts';
 import type { OnlineGameClient } from '../net/onlineClient.ts';
 
 export const EMOTES = ['👍', '😂', '😡', '🆘', '👋'] as const;
-const CHANNELS = [['G', T('Global')], ['M', T('Map')], ['F', T('Faction')], ['C', T('Clan')], ['P', T('Party')], ['T', T('Trade')]] as const;
+const CHANNELS = [['G', T('Global')], ['M', T('Map')], ['F', T('Faction')], ['C', T('Clan')], ['A', T('Allies')], ['P', T('Party')], ['T', T('Trade')]] as const;
 
 /** Chat line for the online game. Enter opens it; "/w Name text" whispers. */
 export const ChatInput: React.FC<{ client: OnlineGameClient }> = ({ client }) => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
-  const [channel, setChannel] = useState<'G' | 'M' | 'F' | 'C' | 'P' | 'T'>('G');
+  const [channel, setChannel] = useState<'G' | 'M' | 'F' | 'C' | 'A' | 'P' | 'T'>('G');
   const ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

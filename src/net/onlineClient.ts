@@ -203,7 +203,7 @@ export class OnlineGameClient implements GameClient {
     });
   }
 
-  sendChat(text: string, channel: 'G' | 'M' | 'F' | 'C' | 'P' | 'W' | 'T' = 'G', targetRecipient?: string): void { this.send({ type: 'c_chat', channel, text, targetRecipient }); }
+  sendChat(text: string, channel: 'G' | 'M' | 'F' | 'C' | 'A' | 'P' | 'W' | 'T' = 'G', targetRecipient?: string): void { this.send({ type: 'c_chat', channel, text, targetRecipient }); }
 
   social(req: SocialOp): Promise<{ ok: boolean; error?: string; data?: any }> {
     const id = ++this.socialId;

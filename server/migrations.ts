@@ -166,6 +166,43 @@ export const MIGRATIONS: Migration[] = [
   // Databases created before faction choice (13ac65b, 257004c) have no accounts.start_faction; the server reads it on every login.
   { version: 2, name: 'accounts.start_faction', up: (db) => addColumnIfMissing(db, 'accounts', 'start_faction', "TEXT NOT NULL DEFAULT 'coastal'") },
   { version: 3, name: 'clans.emblem', up: (db) => addColumnIfMissing(db, 'clans', 'emblem', 'TEXT') },
+  {
+    version: 4,
+    name: 'clan item storage and alliances',
+    up: (db) => {
+      addColumnIfMissing(db, 'clans', 'storage_min_role', "TEXT NOT NULL DEFAULT 'member'");
+      db.exec(`
+CREATE TABLE IF NOT EXISTS clan_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+  item_json TEXT NOT NULL,
+  def_id TEXT NOT NULL,
+  deposited_by TEXT NOT NULL,
+  ts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_clan_items_clan ON clan_items(clan_id);
+CREATE TABLE IF NOT EXISTS clan_item_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+  account_id TEXT NOT NULL,
+  kind TEXT NOT NULL, -- deposit | withdraw
+  item_json TEXT NOT NULL,
+  ts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_clan_item_log_clan ON clan_item_log(clan_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_clan_item_log_member ON clan_item_log(clan_id, account_id, kind, ts);
+CREATE TABLE IF NOT EXISTS clan_alliances (
+  clan_a INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+  clan_b INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+  status TEXT NOT NULL, -- pending | active | broken (kept for the re-alliance cooldown)
+  proposed_by INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (clan_a, clan_b),
+  CHECK (clan_a < clan_b)
+);`);
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

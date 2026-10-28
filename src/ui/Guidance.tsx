@@ -13,7 +13,7 @@ export const TutorialChip: React.FC<{ step?: string; done: number; total: number
       <div className="rounded-lg border border-orange-500/60 bg-slate-950/85 px-2.5 py-1.5 text-[11px] text-slate-200">
         <div className="flex items-center justify-between gap-2 text-[11px] text-orange-300">
           <span>{tr('Getting started')} {done + 1}/{total}</span>
-          <button data-compact className="min-h-[44px] px-2 text-slate-400 hover:text-white underline" onClick={onSkip}>{tr('Skip tutorial')}</button>
+          <button data-compact className="min-h-[44px] px-2 -my-4 text-slate-400 hover:text-white underline" onClick={onSkip}>{tr('Skip tutorial')}</button>
         </div>
         <div className="mt-0.5 leading-snug">{tr(text)}</div>
       </div>

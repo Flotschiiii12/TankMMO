@@ -63,3 +63,11 @@ describe('ring and numbers', () => {
     expect(compactNumber(950)).toBe('950'); expect(compactNumber(9999)).toBe('9,999'); expect(compactNumber(12400)).toBe('12.4k'); expect(compactNumber(2_500_000)).toBe('2.5M'); expect(compactNumber(3e9)).toBe('3B'); expect(compactNumber(NaN)).toBe('0');
   });
 });
+
+import { decideTouchLayout } from '../src/ui/useTouchLayout.ts';
+describe('touch layout decision', () => {
+  it('explicit setting wins, auto follows the primary pointer', () => {
+    expect(decideTouchLayout('on', false)).toBe(true); expect(decideTouchLayout('off', true)).toBe(false);
+    expect(decideTouchLayout('auto', true)).toBe(true); expect(decideTouchLayout(undefined, false)).toBe(false);
+  });
+});

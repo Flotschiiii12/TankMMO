@@ -4,6 +4,7 @@ import { soundEngine } from '../audio/soundEngine.ts';
 import { Volume2, VolumeX } from 'lucide-react';
 import { GameIcon } from './GameIcon.tsx';
 import { PipHost } from './kit/Indicators.tsx';
+import { useShortScreen } from './useShortScreen.ts';
 import { Tooltip } from './kit/Tooltip.tsx';
 import { WINDOW_DEFS, WindowId } from './wm/defs.ts';
 import { windows } from './wm/windowStore.ts';
@@ -16,7 +17,7 @@ export type NavPips = Partial<Record<WindowId, number | boolean>>;
  * the garage button lights up in safe zones. Layout (column / 4x2 block) comes from .hud-menu-btns in index.css.
  */
 export const MainMenu: React.FC<{ pips?: NavPips; hasSocial: boolean; isSafeZone: boolean; soundMuted: boolean; onToggleMute: () => void }> = ({ pips = {}, hasSocial, isSafeZone, soundMuted, onToggleMute }) => {
-  const stack = useWindowStack();
+  const stack = useWindowStack(); const short = useShortScreen();
   const items = WINDOW_DEFS.filter((d) => d.menu && (d.id !== 'social' || hasSocial));
   return (
     <nav className="hud-menu-btns" aria-label={tr('Main menu')}>
@@ -34,12 +35,12 @@ export const MainMenu: React.FC<{ pips?: NavPips; hasSocial: boolean; isSafeZone
           </Tooltip>
         );
       })}
-      <Tooltip content={soundMuted ? tr('Unmute Audio') : tr('Mute Audio')} placement="left">
+      {!short && <Tooltip content={soundMuted ? tr('Unmute Audio') : tr('Mute Audio')} placement="left">
         <button type="button" aria-label={soundMuted ? tr('Unmute Audio') : tr('Mute Audio')} onClick={() => { soundEngine.playUIClick(); onToggleMute(); }}
           className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95">
           {soundMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
         </button>
-      </Tooltip>
+      </Tooltip>}
     </nav>
   );
 };

@@ -1,3 +1,4 @@
+import { SegmentedControl } from './kit/Tabs.tsx';
 import { WindowFrame } from './wm/WindowFrame.tsx';
 import React, { useState } from 'react';
 import { tr, currentLang, setLang } from '../i18n.ts';
@@ -156,8 +157,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
           <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-            <span className="font-medium text-white">{tr('UI size')} {Math.round((profile.settings.uiScale || 1) * 100)}%</span>
-            <input type="range" min="0.8" max="1.4" step="0.1" value={profile.settings.uiScale || 1} onChange={(e) => onUpdateSettings({ ...profile.settings, uiScale: Number(e.target.value) })} className="w-40" />
+            <span className="font-medium text-white">{tr('HUD scale')} {Math.round((profile.settings.uiScale || 1) * 100)}%</span>
+            <input type="range" min="0.8" max="1.4" step="0.1" value={profile.settings.uiScale || 1} onChange={(e) => onUpdateSettings({ ...profile.settings, uiScale: Number(e.target.value) })} className="w-40" aria-label={tr('HUD scale')} />
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
+            <span className="font-medium text-white">{tr('HUD opacity')} {Math.round((profile.settings.hudOpacity ?? 0.7) * 100)}%</span>
+            <input type="range" min="0.3" max="1" step="0.05" value={profile.settings.hudOpacity ?? 0.7} onChange={(e) => onUpdateSettings({ ...profile.settings, hudOpacity: Number(e.target.value) })} className="w-40" aria-label={tr('HUD opacity')} />
+          </div>
+          <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-slate-950/50 border border-slate-800">
+            <div><span className="font-medium text-white">{tr('Minimal HUD')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('Only bars, target and controls: no quest tracker, events or party frames')}</div></div>
+            <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, minimalHud: !profile.settings.minimalHud }); }} className={`min-h-[44px] min-w-[56px] px-3 rounded text-xs font-semibold ${profile.settings.minimalHud ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`} aria-pressed={!!profile.settings.minimalHud}>{profile.settings.minimalHud ? tr('ON') : tr('OFF')}</button>
+          </div>
+          <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-slate-950/50 border border-slate-800">
+            <div><span className="font-medium text-white">{tr('On-screen controls')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('Joystick and thumb buttons. Auto uses them on touch screens and the hotbar with mouse and keyboard')}</div></div>
+            <SegmentedControl label={tr('On-screen controls')} value={profile.settings.touchControls ?? 'auto'} onChange={(v) => onUpdateSettings({ ...profile.settings, touchControls: v as 'auto' | 'on' | 'off' })} options={[{ id: 'auto', label: tr('Auto') }, { id: 'on', label: tr('On') }, { id: 'off', label: tr('Off') }]} />
           </div>
 
           {/* Reset Progress Section */}

@@ -3,6 +3,7 @@ import { tr } from '../i18n.ts';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AmmoType, SimCommand, SimEntity } from '../sim/types.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
+import { CooldownSweep, ABILITY_COOLDOWN } from './hud/Cooldown.tsx';
 
 interface ControlsOverlayProps {
   player: SimEntity | null;
@@ -12,6 +13,8 @@ interface ControlsOverlayProps {
   onCycleAmmo: () => void;
   /** swaps the sides: fire cluster left, joystick right */
   leftHanded?: boolean;
+  /** false on mouse/keyboard layouts: keys still work, but joystick and thumb cluster are not drawn (the hotbar replaces them) */
+  visual?: boolean;
 }
 
 export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
@@ -21,6 +24,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   onCycleTarget,
   onCycleAmmo,
   leftHanded,
+  visual = true,
 }) => {
   // Joystick State
   const [stickActive, setStickActive] = useState(false);
@@ -178,6 +182,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   const repairCd = player?.abilityCooldowns.repair_kit || 0;
   const overdriveCd = player?.abilityCooldowns.boost || 0;
 
+  if (!visual) return null;
   return (
     <div className="absolute inset-0 pointer-events-none select-none overflow-hidden touch-none">
       {/* LEFT THUMB: Virtual Joystick */}
@@ -219,14 +224,14 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
             }}
             disabled={smokeCd > 0}
             title={tr('Smoke')} aria-label={tr('Smoke')}
-            className={`absolute top-0 left-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[11px] font-medium transition-all ${
+            className={`absolute top-0 left-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[11px] font-medium transition-all overflow-hidden ${
               smokeCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
                 : 'border-slate-700 bg-slate-900/90 text-slate-200 active:scale-95 active:border-orange-400 hover:border-slate-600'
             }`}
           >
             <GameIcon name="smoke" size={30} className={smokeCd > 0 ? 'opacity-30' : ''} />
-            {smokeCd > 0 && <span className="absolute tabular-nums text-[11px] font-bold text-orange-300">{Math.ceil(smokeCd)}</span>}
+            <CooldownSweep remaining={smokeCd} total={ABILITY_COOLDOWN.smoke} />
           </button>
 
           {/* Ability 2: Repair Kit (Top) */}
@@ -237,14 +242,14 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
             }}
             disabled={repairCd > 0}
             title={tr('Repair kit')} aria-label={tr('Repair kit')}
-            className={`absolute -top-4 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[11px] font-medium transition-all ${
+            className={`absolute -top-4 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[11px] font-medium transition-all overflow-hidden ${
               repairCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
                 : 'border-emerald-700/70 bg-slate-900/90 text-emerald-300 active:scale-95 active:border-emerald-400 hover:border-emerald-600'
             }`}
           >
             <GameIcon name="repair" size={30} className={repairCd > 0 ? 'opacity-30' : ''} />
-            {repairCd > 0 && <span className="absolute tabular-nums text-[11px] font-bold text-orange-300">{Math.ceil(repairCd)}</span>}
+            <CooldownSweep remaining={repairCd} total={ABILITY_COOLDOWN.repair_kit} />
           </button>
 
           {/* Ability 3: Overdrive (Top-Right) */}
@@ -255,14 +260,14 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
             }}
             disabled={overdriveCd > 0}
             title={tr('Boost')} aria-label={tr('Boost')}
-            className={`absolute top-0 right-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[11px] font-medium transition-all ${
+            className={`absolute top-0 right-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[11px] font-medium transition-all overflow-hidden ${
               overdriveCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
                 : 'border-orange-500/60 bg-slate-900/90 text-orange-300 active:scale-95 active:border-orange-400 hover:border-orange-400'
             }`}
           >
             <GameIcon name="boost" size={30} className={overdriveCd > 0 ? 'opacity-30' : ''} />
-            {overdriveCd > 0 && <span className="absolute tabular-nums text-[11px] font-bold text-orange-300">{Math.ceil(overdriveCd)}</span>}
+            <CooldownSweep remaining={overdriveCd} total={ABILITY_COOLDOWN.boost} />
           </button>
 
           {/* Target Cycle (Left - 44x44px) */}

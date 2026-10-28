@@ -1,5 +1,5 @@
 /** All in-game windows in one table: id, title, icon, shortcut. The menu, the help overlay and the key handler read from here. */
-export type WindowId = 'garage' | 'inventory' | 'quests' | 'social' | 'map' | 'settings' | 'howto' | 'feedback' | 'shortcuts';
+export type WindowId = 'garage' | 'inventory' | 'quests' | 'social' | 'map' | 'settings' | 'howto' | 'feedback' | 'shortcuts' | 'notifications';
 
 export interface WindowDef {
   id: WindowId;
@@ -20,8 +20,9 @@ export const WINDOW_DEFS: readonly WindowDef[] = [
   { id: 'quests', title: 'Quests', icon: 'quests', codes: ['KeyJ'], key: 'J', menu: true },
   { id: 'social', title: 'Social', icon: 'friends', codes: ['KeyC'], key: 'C', menu: true },
   { id: 'map', title: 'World Map', icon: 'map', codes: ['KeyM'], key: 'M', menu: true },
-  { id: 'howto', title: 'How to play', icon: 'tutorial', codes: ['KeyH'], key: 'H', menu: true },
+  { id: 'howto', title: 'How to play', icon: 'tutorial', codes: ['KeyH'], key: 'H', menu: false },
   { id: 'settings', title: 'Settings', icon: 'settings', codes: ['KeyO'], key: 'O', menu: true },
+  { id: 'notifications', title: 'Notifications', icon: 'event', codes: ['KeyN'], key: 'N', menu: true },
   { id: 'feedback', title: 'Send feedback', icon: 'report', codes: [], menu: false },
   { id: 'shortcuts', title: 'Keyboard shortcuts', icon: 'settings', codes: ['F1', 'Slash'], key: '?', menu: false },
 ];

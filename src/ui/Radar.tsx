@@ -10,10 +10,14 @@ interface RadarProps {
   colorBlind?: boolean;
   /** enemy kinds named by active quests: drawn with a yellow ring */
   questKinds?: string[];
+  /** larger scope (toggle in the minimap block) */
+  big?: boolean;
+  /** zone name shown under the scope; coordinates are added from the player position */
+  zoneName?: string;
 }
 
-export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHeight, partyNames, colorBlind, questKinds }) => {
-  const radarRadius = 46;
+export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHeight, partyNames, colorBlind, questKinds, big, zoneName }) => {
+  const radarRadius = big ? 80 : 46;
   const radarRange = 1200 * (player?.radarMult ?? 1); // World units displayed on radar (recon drones widen it)
 
   const playerPos = player ? player.pos : { x: 2000, y: 2000 };
@@ -72,14 +76,14 @@ export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHei
     }
 
     return { enemyCount: enemies, allyCount: allies, dots: computedDots };
-  }, [entities, player?.id, playerPos.x, playerPos.y, partyNames, colorBlind, questKinds]);
+  }, [entities, player?.id, playerPos.x, playerPos.y, partyNames, colorBlind, questKinds, radarRadius]);
 
   return (
     <div className="relative flex flex-col items-center pointer-events-none select-none">
       {/* Radar Circular Scope */}
       <div
-        className="relative rounded-full border border-orange-500/30 bg-slate-950/70 shadow-sm"
-        style={{ width: radarRadius * 2, height: radarRadius * 2 }}
+        className="relative rounded-full border bg-slate-950/70 shadow-sm" data-hud-surface
+        style={{ width: radarRadius * 2, height: radarRadius * 2, borderColor: 'var(--accent-line)' }}
       >
         {/* Crosshair guidelines */}
         <div className="absolute inset-0 flex items-center justify-center">
@@ -125,12 +129,13 @@ export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHei
 
       {/* Sector and Hostile Counter readout */}
       <div className="flex items-center gap-2 mt-1 text-[11px] font-medium tracking-wide text-slate-400">
-        <span className="text-orange-400 font-semibold">{sectorLabel}</span>
+        <span className="font-semibold" style={{ color: 'var(--accent-2)' }}>{sectorLabel}</span>
         <span>·</span>
         <span className="tabular-nums text-slate-300">
           <span className="text-red-400 font-medium">{enemyCount}</span> / <span className="text-blue-400">{allyCount}</span>
         </span>
       </div>
+      {zoneName && <div className="mt-0.5 text-[11px] text-slate-300 max-w-[11rem] truncate" data-testid="zone-line">{zoneName} · <span className="tabular-nums text-slate-400">{Math.round(playerPos.x)}, {Math.round(playerPos.y)}</span></div>}
     </div>
   );
 };

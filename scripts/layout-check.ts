@@ -144,6 +144,26 @@ async function main() {
       await page.goto(base);
       await applyInsets();
       await check(page, vp, 'title');
+      // worst-case HUD fixture (long names, 4 target statuses, 3 party members, cooldowns, notices, kill feed, events): normal and left-handed
+      for (const variant of vp.touch ? ['', '&left=1'] : ['']) {
+        const fx = await ctx.newPage();
+        await fx.goto(`${base}/#/hud-fixture?x=1${variant}`); await fx.reload();
+        await fx.addStyleTag({ content: `:root{--safe-top:${inset.top}px !important;--safe-right:${inset.right}px !important;--safe-bottom:${inset.bottom}px !important;--safe-left:${inset.left}px !important}` });
+        await fx.getByTestId('hud-fixture').waitFor({ timeout: 15_000 }); await fx.waitForTimeout(500);
+        await check(fx, vp, `hud-fixture${variant ? '-left' : ''}`);
+        if (!variant) { // interaction: abilities send commands, the chat ticker expands, the bell opens the history
+          const bad = (m: string) => violations.push({ viewport: vp.name, screen: 'hud-fixture', rule: 'hud-interaction', element: 'hud', detail: m });
+          await fx.getByRole('button', { name: /^Repair kit$/ }).first().click({ force: true }).catch(() => bad('repair kit button not clickable'));
+          const cmds = (await fx.evaluate('window.__cmds || []')) as string[];
+          if (!cmds.includes('UseAbility')) bad(`clicking an ability should send UseAbility, got ${JSON.stringify(cmds)}`);
+          await fx.getByRole('button', { name: /^Chat/ }).first().click(); await fx.waitForTimeout(150);
+          if (!(await fx.getByTestId('chat-open').count())) bad('the chat ticker should expand on tap');
+          await fx.keyboard.press('Escape');
+          await fx.getByRole('button', { name: /^Notifications$/ }).first().click({ force: true }); await fx.waitForTimeout(250);
+          if (!(await fx.locator('[data-window=notifications]').count())) bad('the bell should open the notification history');
+        }
+        await fx.close();
+      }
       await page.getByLabel('I am at least 13 years old.').check({ timeout: 15_000 }).catch(async () => { await page.locator('input[type=checkbox]').first().check(); });
       await page.getByRole('button', { name: 'Play', exact: true }).click();
       await page.getByRole('button', { name: /DEPLOY TO BATTLEFIELD/ }).click({ timeout: 20_000 });
@@ -171,7 +191,6 @@ async function main() {
       {
         const wm = (msg: string) => violations.push({ viewport: vp.name, screen: 'windows', rule: 'window-manager', element: 'wm', detail: msg });
         const openIds = async () => (await page.evaluate("Array.from(document.querySelectorAll('[data-window]')).map((e) => e.getAttribute('data-window')).join(',')")) as string;
-        await page.locator('canvas').first().click({ position: { x: Math.round(vp.width / 2), y: 40 }, force: true }).catch(() => {});
         await page.keyboard.press('KeyI'); await page.keyboard.press('KeyJ'); await page.waitForTimeout(250);
         if ((await openIds()) !== 'inventory,quests' && (await openIds()) !== 'quests,inventory') wm(`I and J should open two windows, found "${await openIds()}"`);
         await page.keyboard.press('Escape'); await page.waitForTimeout(150);

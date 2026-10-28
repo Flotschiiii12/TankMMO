@@ -12,13 +12,18 @@ import { rollLoot } from '../../shared/data/loot.ts';
 import * as C from '../../shared/rules/character.ts';
 import type { CharacterState } from '../../shared/rules/character.ts';
 import { AMMO_PRICES, ammoCost, executeAction, ClientAction } from '../../shared/rules/actions.ts';
+import { QUEST_BY_ID } from '../../shared/data/quests.ts';
 import { describeItem } from '../game/actions.ts';
 import { applyQuestEvent, rotateQuests, questName } from '../game/questBridge.ts';
 import type { QuestEvent } from '../../shared/rules/quests.ts';
 import { QuestModal } from './QuestModal.tsx';
 import { SocialModal } from './SocialModal.tsx';
-import { ChatInput } from './ChatInput.tsx';
-import { EMOTES } from './ChatInput.tsx';
+import { ChatDock, EMOTES } from './hud/ChatDock.tsx';
+import { Hotbar } from './hud/Hotbar.tsx';
+import { NotificationHistory, NotificationHost, useNotifications } from './hud/Notifications.tsx';
+import { TargetFrame } from './hud/TargetFrame.tsx';
+import { notifications, diffCharacter, type CharSnapshot } from './hud/notify.ts';
+import { useTouchLayout } from './useTouchLayout.ts';
 import { Banner, BossBar, ProgressChip } from './Overlays.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts';
@@ -34,7 +39,7 @@ import { tutorialStatus, tutorialFlag, questMarkers } from '../../shared/rules/q
 import { TUTORIAL_STEPS } from '../../shared/data/quests.ts';
 import { WAR_MAPS } from '../../shared/sim/war.ts';
 import { activeEvents, eventAppliesToMap, worldBossSlot, WORLD_BOSS_PERIOD_SECONDS } from '../../shared/sim/events.ts';
-import { KillFeed, LowHealthVignette, TargetPanel } from './CombatHud.tsx';
+import { KillFeed, LowHealthVignette } from './CombatHud.tsx';
 import { DamageNumberMerger, killFeedEntry, type KillFeedEntry } from './combatLogic.ts';
 import { impactLevel, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../render/combatFx.ts';
 import { GarageModal } from './GarageModal.tsx';
@@ -770,7 +775,21 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
   // Commands helper
   const eventLinesNow = [...runningEventLines(online ? online.mapId : Number(profile.currentMapId) || 1), ...warLines];
-  const navPips = useNavPips(profile.character, online, inventoryOpen, eventLinesNow.length > 0);
+  const touchLayout = useTouchLayout(profile.settings.touchControls);
+  const { unread } = useNotifications();
+  const navPips = { ...useNavPips(profile.character, online, inventoryOpen, eventLinesNow.length > 0), notifications: unread };
+  // HUD opacity as a CSS variable (panels read it), notices derived from character changes (loot, XP, level-ups, ready quests)
+  useEffect(() => { document.documentElement.style.setProperty('--hud-opacity', String(profile.settings.hudOpacity ?? 0.7)); }, [profile.settings.hudOpacity]);
+  const prevChar = useRef<CharSnapshot | null>(null);
+  useEffect(() => {
+    const ch = profile.character;
+    const snap: CharSnapshot = { xp: ch.xp, level: ch.level, scrap: ch.wallet.scrap, fragments: ch.wallet.fragments, ore: Object.values(ch.wallet.ore).reduce((a, b) => a + b, 0), itemUids: ch.inventory.map((i) => i.uid), readyQuests: Object.values(ch.quests.active).filter((q) => q.ready).map((q) => q.id), honor: ch.wallet.honor };
+    const prev = prevChar.current; prevChar.current = snap;
+    if (!prev || gameState !== 'PLAYING') return;
+    const itemName = (uid: string) => { const it = ch.inventory.find((i) => i.uid === uid); return it ? describeItem(it).name : uid; };
+    const questName = (id: string) => { const d = QUEST_BY_ID.get(id); return d ? nm(d.nameKey, d.name) : id; };
+    for (const n of diffCharacter(prev, snap, itemName, questName, { levelUp: (lv) => tr('Level up! You are now level {n}', { n: lv }), xp: 'XP', scrap: tr('scrap'), fragments: tr('fragments'), ore: tr('ore'), honor: tr('honor'), questReady: tr('Quest ready') })) notifications.push(n);
+  }, [profile.character, gameState]); // eslint-disable-line react-hooks/exhaustive-deps
   // opening the garage by any route (menu, G key) completes the garage lesson of the guided start
   useEffect(() => { if (garageOpen) questEvent({ type: 'tutorial', step: 'garage' }); }, [garageOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const profileRef = useRef(profile);
@@ -952,6 +971,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         <>
           <HUD
             leftHanded={!!profile.settings.leftHanded}
+            minimal={!!profile.settings.minimalHud}
+            hasTarget={playerEntity?.targetId !== undefined}
+            targetNode={<TargetFrame target={playerEntity?.targetId !== undefined ? (clientRef.current?.getEntity(playerEntity.targetId) ?? null) : null} me={playerEntity} ammo={profile.ammoInventory as any} colorBlind={profile.settings.colorBlind} />}
+            feedNode={<KillFeed entries={killFeed.filter((e) => e.until > performance.now())} />}
             tutorialChip={(() => { const t = tutorialStatus(profile.character); return t.step ? <TutorialChip step={t.step} done={t.done} total={t.total} onSkip={() => { void performAction({ kind: 'skip_tutorial' }); }} /> : undefined; })()}
             player={playerEntity}
             entities={activeSnapshot?.entities || []}
@@ -962,7 +985,6 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             eventLines={eventLinesNow}
             isSafeZone={inSafeZone}
             profile={profile}
-            chatMessages={activeSnapshot?.chatHistory || []}
             soundMuted={soundMuted}
             onToggleMute={() => {
               const next = !soundMuted;
@@ -979,9 +1001,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
 
           <HintToast text={hint?.text ?? null} onClose={() => setHint(null)} />
-          <TargetPanel target={playerEntity?.targetId !== undefined ? (clientRef.current?.getEntity(playerEntity.targetId) ?? null) : null} me={playerEntity} ammo={profile.ammoInventory as any} colorBlind={profile.settings.colorBlind} />
           <LowHealthVignette me={playerEntity} />
-          <KillFeed entries={killFeed.filter((e) => e.until > performance.now())} />
           {spectating && online && <SpectateBar client={online} onLeave={() => { void online.social({ op: 'spectate_leave' }); }} />}
           <ControlsOverlay
             player={playerEntity}
@@ -990,7 +1010,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             onCycleTarget={handleCycleTarget}
             onCycleAmmo={handleCycleAmmo}
             leftHanded={!!profile.settings.leftHanded}
+            visual={touchLayout}
           />
+          {!touchLayout && <div className="absolute left-1/2 -translate-x-1/2 z-20" style={{ bottom: 'max(0.75rem, var(--safe-bottom))' }}><Hotbar player={playerEntity} onCommand={handleCommand} onLockNearest={handleLockNearest} /></div>}
+          <NotificationHost leftHanded={!!profile.settings.leftHanded} touchLayout={touchLayout} minimal={!!profile.settings.minimalHud} />
 
           {/* The old 4-card tutorial overlay is gone: the guided start (chip in the HUD) replaces it. */}
         </>
@@ -1005,7 +1028,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       />
 
       {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} character={profile.character} />}
-      {online && gameState === 'PLAYING' && <ChatInput client={online} leftHanded={!!profile.settings.leftHanded} />}
+      {gameState === 'PLAYING' && <ChatDock client={online ?? null} messages={activeSnapshot?.chatHistory || []} leftHanded={!!profile.settings.leftHanded} touchLayout={touchLayout} />}
+      <NotificationHistory />
       {gameState === 'PLAYING' && <Banner text={banner} />}
       {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `${tr('Arena')} · ${tr('Round')} ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? `${tr('Break')} ` : `${tr('Start in')} `}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `${tr('Gate')} · ${tr('Wave')} ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { tr, nm } from '../i18n.ts';
 import { ChatMessage, SimEntity } from '../sim/types.ts';
 import { QUEST_BY_ID } from '../../shared/data/quests.ts';
@@ -9,6 +9,7 @@ import { MainMenu, NavPips } from './MainMenu.tsx';
 import { PlayerCard } from './PlayerCard.tsx';
 import { PartyFrames, StatusCluster } from './hud/StatusCluster.tsx';
 import { controlStrip } from './layoutStrip.ts';
+import { getTracked, trackerOrder } from './career/careerLogic.ts';
 import { useShortScreen } from './useShortScreen.ts';
 
 interface HUDProps {
@@ -49,7 +50,9 @@ export const HUD: React.FC<HUDProps> = ({ player, entities, mapWidth, mapHeight,
   const short = useShortScreen();
   const [bigMap, setBigMap] = useState(false);
   const chipOn = !!tutorialChip;
-  const quests = Object.values(profile.character.quests.active).filter((aq) => !(tutorialChip && aq.id.startsWith('tut_'))).sort((a, b) => Number(b.id.startsWith('tut_')) - Number(a.id.startsWith('tut_')) || Number(b.ready) - Number(a.ready)).slice(0, short ? (chipOn ? 0 : 1) : 3);
+  const [tracked, setTrackedId] = useState<string | null>(() => getTracked());
+  useEffect(() => { const on = () => setTrackedId(getTracked()); window.addEventListener('treadfront-track', on); return () => window.removeEventListener('treadfront-track', on); }, []);
+  const quests = trackerOrder(Object.values(profile.character.quests.active).filter((aq) => !(tutorialChip && aq.id.startsWith('tut_'))), tracked).slice(0, short ? (chipOn ? 0 : 1) : 3);
   return (
     <div className="absolute inset-0 pointer-events-none select-none p-3 pl-[max(0.75rem,var(--safe-left))] pr-[max(0.75rem,var(--safe-right))] pt-[max(0.75rem,var(--safe-top))]" data-minimal={minimal || undefined}>
       <div className={`hud-top ${leftHanded ? 'hud-top--lefty' : ''}`}>
@@ -66,7 +69,7 @@ export const HUD: React.FC<HUDProps> = ({ player, entities, mapWidth, mapHeight,
             const total = aq.targets.reduce((a, b) => a + b, 0);
             return (
               <div key={aq.id} className="text-[11px] flex justify-between gap-2 pt-0.5" style={{ color: 'var(--c-text-2)', borderTop: '1px solid var(--c-line)' }}>
-                <span className="truncate" style={aq.ready ? { color: 'var(--c-good)' } : undefined}>{nm(def.nameKey, def.name)}</span>
+                <span className="truncate" style={aq.ready ? { color: 'var(--c-good)' } : undefined}>{aq.id === tracked ? '📌 ' : ''}{nm(def.nameKey, def.name)}</span>
                 <span className="tabular-nums shrink-0">{aq.ready ? tr('ready') : `${done}/${total}`}</span>
               </div>
             );

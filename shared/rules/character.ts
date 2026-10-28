@@ -163,7 +163,8 @@ export function talentPointsAvailable(ch: CharacterState): number {
   return getEarnedTalentPoints(ch.level) - talentPointsSpent(ch);
 }
 
-export function rankUpTalent(ch: CharacterState, id: string): Result<{ rank: number }> {
+/** Why a talent cannot get another rank right now (same checks, same order as rankUpTalent; the talent screen uses it for its states). */
+export function canRankTalent(ch: CharacterState, id: string): Result {
   const def = TALENT_BY_ID.get(id);
   if (!def) return fail('unknown_talent');
   const rank = ch.talentRanks[id] ?? 0;
@@ -171,8 +172,15 @@ export function rankUpTalent(ch: CharacterState, id: string): Result<{ rank: num
   if (ch.level < def.minLevel) return fail('level_too_low');
   if (talentPointsAvailable(ch) <= 0) return fail('no_points');
   for (const pre of def.prerequisites ?? []) if ((ch.talentRanks[pre] ?? 0) < 1) return fail('prerequisite_missing');
-  ch.talentRanks[id] = rank + 1;
-  return { ok: true, rank: rank + 1 };
+  return { ok: true };
+}
+
+export function rankUpTalent(ch: CharacterState, id: string): Result<{ rank: number }> {
+  const can = canRankTalent(ch, id);
+  if (!can.ok) return can;
+  const rank = (ch.talentRanks[id] ?? 0) + 1;
+  ch.talentRanks[id] = rank;
+  return { ok: true, rank };
 }
 
 export function respecCost(ch: CharacterState): number {

@@ -72,5 +72,5 @@
 .hud-menu-btns { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.25rem; }
 @media (max-height: 799px) {
   .hud-menu { flex-direction: row-reverse; align-items: flex-start; }
-  .hud-menu-btns { display: grid; grid-template-columns: repeat(4, 44px); margin-top: 0; }
+  .hud-menu-btns { display: grid; grid-template-columns: repeat(5, 44px); margin-top: 0; }
 }

@@ -23,6 +23,7 @@ import { Hotbar } from './hud/Hotbar.tsx';
 import { NotificationHistory, NotificationHost, useNotifications } from './hud/Notifications.tsx';
 import { TargetFrame } from './hud/TargetFrame.tsx';
 import { notifications, diffCharacter, type CharSnapshot } from './hud/notify.ts';
+import { CareerWindow } from './career/CareerWindow.tsx';
 import { MarketWindow } from './items/MarketWindow.tsx';
 import { useTouchLayout } from './useTouchLayout.ts';
 import { Banner, BossBar, ProgressChip } from './Overlays.tsx';
@@ -1032,6 +1033,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       {gameState === 'PLAYING' && <ChatDock client={online ?? null} messages={activeSnapshot?.chatHistory || []} leftHanded={!!profile.settings.leftHanded} touchLayout={touchLayout} />}
       <NotificationHistory />
       <MarketWindow client={online ?? null} profile={profile} />
+      <CareerWindow profile={profile} onAction={performAction} />
       {gameState === 'PLAYING' && <Banner text={banner} />}
       {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `${tr('Arena')} · ${tr('Round')} ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? `${tr('Break')} ` : `${tr('Start in')} `}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `${tr('Gate')} · ${tr('Wave')} ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}
@@ -1051,7 +1053,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         onAction={performAction}
       />
 
-      <WorldMapModal isOpen={worldMapOpen} onClose={() => setWorldMapOpen(false)} currentMapId={online ? online.mapId : profile.currentMapId} playerLevel={profile.character.level} onTravelToMap={(id) => { setWorldMapOpen(false); handleTravelToMap(id); }} questMapIds={questMarkers(profile.character).mapIds} />
+      <WorldMapModal isOpen={worldMapOpen} onClose={() => setWorldMapOpen(false)} currentMapId={online ? online.mapId : profile.currentMapId} playerLevel={profile.character.level} onTravelToMap={(id) => { setWorldMapOpen(false); handleTravelToMap(id); }} questMapIds={questMarkers(profile.character).mapIds} visitedMaps={profile.character.visitedMaps} scrap={profile.character.wallet.scrap} inSafeZone={inSafeZone} />
       {gameState === 'PLAYING' && (() => {
         const blocked = garageOpen || inventoryOpen || socialOpen || settingsOpen || worldMapOpen || questOpen || howToOpen;
         const scene = replayScene ?? (blocked ? null : pendingScene(profile.character) ?? null);

@@ -1,31 +1,16 @@
-import { WindowFrame } from './wm/WindowFrame.tsx';
-/**
- * Treadfront - World Map Modal
- * Interactive tactical node-graph map of all 30 world zones.
- * Displays portal topology, safe zones, biome types, level brackets,
- * current player location, and single-player roaming fast travel.
- */
-
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { tr, T, nm } from '../i18n.ts';
+import { MAP_CONNECTIONS, MAP_METADATA_TABLE } from '../../shared/data/maps.ts';
+import { WorldEventKind } from '../../shared/sim/events.ts';
+import { CurrencyIcon } from './GameIcon.tsx';
 import { EventCalendar } from './EventCalendar.tsx';
-import React, { useState, useMemo } from 'react';
-import {
-  Compass,
-  MapPin,
-  Shield,
-  Swords,
-  CloudRain,
-  Sun,
-  Snowflake,
-  Wind,
-  Flame,
-  Zap,
-  ArrowRight,
-  X,
-  Sparkles,
-  Mountain,
-} from 'lucide-react';
-import { MAP_CONNECTIONS, MAP_METADATA_TABLE, MapMetadata } from '../../shared/data/maps.ts';
+import { Badge } from './kit/Indicators.tsx';
+import { Button } from './kit/Button.tsx';
+import { Modal } from './kit/Modal.tsx';
+import { SegmentedControl } from './kit/Tabs.tsx';
+import { WindowFrame } from './wm/WindowFrame.tsx';
+import { useWindowMode } from './wm/useWindows.ts';
+import { MAP_SIZE, NODE_POSITIONS, TERRITORY_COLOR, Territory, levelFit, neighborsOf, territoryOf, travelInfo, zoneMarkers } from './world/worldLogic.ts';
 
 interface WorldMapModalProps {
   isOpen: boolean;
@@ -35,424 +20,105 @@ interface WorldMapModalProps {
   onTravelToMap: (mapId: number | string) => void;
   /** maps named by active quests: pulsing yellow ring on the node */
   questMapIds?: number[];
+  /** zones the player has been to (the rest is fogged) */
+  visitedMaps?: number[];
+  scrap?: number;
+  /** fast travel only works from a safe zone */
+  inSafeZone?: boolean;
 }
 
-// 2D Tactical Layout Coordinates for all 30 nodes on the World Map canvas
-const NODE_POSITIONS: Record<number, { x: number; y: number }> = {
-  // Region 1: Coastal Union (West / Northwest)
-  1: { x: 80, y: 110 },
-  2: { x: 170, y: 150 },
-  3: { x: 260, y: 190 },
-  4: { x: 350, y: 240 },
+const EVENT_LABEL: Record<WorldEventKind, string> = { invasion: 'Invasion', convoy_race: 'Convoy race', storm_event: 'Storm', meteor_shower: 'Meteor shower', weekend_xp: 'Weekend XP' };
+const REASON: Record<string, string> = { not_in_safe_zone: 'Fast travel only works from a safe zone', not_visited: 'You have not been there yet', same_zone: 'You are already here', unreachable: 'No portal route', not_enough_scrap: 'Not enough scrap', level_too_low: 'Your level is too low (at most 5 below the zone)' };
+const FILTERS: Array<[string, Territory | 'all']> = [['All', 'all'], ['Coastal', 'coastal'], ['Highland', 'highland'], ['Steppe', 'steppe'], ['Neutral', 'neutral'], ['PvP', 'pvp'], ['Endgame', 'endgame']];
+const BLOBS: Array<{ t: Territory; x: number; y: number; r: number }> = [
+  { t: 'coastal', x: 210, y: 160, r: 170 }, { t: 'highland', x: 400, y: 120, r: 130 }, { t: 'steppe', x: 240, y: 360, r: 170 }, { t: 'neutral', x: 640, y: 270, r: 190 },
+  { t: 'pvp', x: 720, y: 390, r: 150 }, { t: 'endgame', x: 1040, y: 300, r: 190 }, { t: 'arena', x: 500, y: 440, r: 70 },
+];
 
-  // Region 2: Highland Union (North / Northwest)
-  5: { x: 320, y: 60 },
-  6: { x: 380, y: 110 },
-  7: { x: 440, y: 160 },
-  8: { x: 470, y: 220 },
-
-  // Region 3: Steppe Caravan (Southwest)
-  9: { x: 90, y: 390 },
-  10: { x: 190, y: 370 },
-  11: { x: 290, y: 340 },
-  12: { x: 380, y: 310 },
-
-  // Neutral Middle Chain
-  13: { x: 500, y: 340 }, // Crossfield Hub
-  14: { x: 480, y: 270 }, // Green Crossing
-  15: { x: 580, y: 250 }, // River Delta
-  16: { x: 670, y: 240 }, // Red Canyon
-  17: { x: 750, y: 220 }, // Frost Border
-  18: { x: 820, y: 190 }, // Glacier Lakes
-  19: { x: 850, y: 280 }, // Old Highway
-  20: { x: 890, y: 360 }, // Glowworm Swamp
-
-  // PvP Borderlands
-  21: { x: 610, y: 360 }, // Bridgehead
-  22: { x: 720, y: 350 }, // Customs Station
-  23: { x: 810, y: 380 }, // Ashfield
-  24: { x: 740, y: 440 }, // No Man's Land
-
-  // Endgame
-  25: { x: 950, y: 440 }, // Ruined City Vaelmar
-  26: { x: 1040, y: 410 }, // Obsidian Desert
-  27: { x: 1080, y: 320 }, // Storm Coast
-  28: { x: 1060, y: 210 }, // Iron Crown
-  29: { x: 1120, y: 130 }, // The Burning Valley
-
-  // Arena
-  30: { x: 500, y: 440 }, // The Pit
-};
-
-export const WorldMapModal: React.FC<WorldMapModalProps> = ({
-  isOpen,
-  onClose,
-  currentMapId,
-  playerLevel,
-  onTravelToMap,
-  questMapIds,
-}) => {
-  // Resolve current numeric map id
-  const currentNumericId = useMemo(() => {
+/** World map: 30 zones on a styled node map with fog for unvisited zones, territory colours, level ranges, markers and fast travel with cost. */
+export const WorldMapModal: React.FC<WorldMapModalProps> = ({ isOpen, onClose, currentMapId, playerLevel, onTravelToMap, questMapIds, visitedMaps = [], scrap = 0, inSafeZone = true }) => {
+  const mode = useWindowMode();
+  const currentId = useMemo(() => {
     if (typeof currentMapId === 'number') return currentMapId;
-    for (const meta of Object.values(MAP_METADATA_TABLE)) {
-      if (meta.key === currentMapId || `map_${meta.id}` === currentMapId) {
-        return meta.id;
-      }
-    }
-    if (currentMapId === 'green_valley') return 1;
-    if (currentMapId === 'canyon_flats') return 10;
-    if (currentMapId === 'frostline_pass') return 17;
-    if (currentMapId === 'ash_city') return 25;
+    for (const meta of Object.values(MAP_METADATA_TABLE)) if (meta.key === currentMapId || `map_${meta.id}` === currentMapId || String(meta.id) === currentMapId) return meta.id;
     return 1;
   }, [currentMapId]);
-
-  const [selectedMapId, setSelectedMapId] = useState<number>(currentNumericId);
-  const [activeRegionFilter, setActiveRegionFilter] = useState<string>('ALL');
-
+  const [selected, setSelected] = useState(currentId); const [filter, setFilter] = useState<Territory | 'all'>('all'); const [sheet, setSheet] = useState(false);
+  const scroller = useRef<HTMLDivElement>(null);
+  const markers = useMemo(() => zoneMarkers(Math.floor(Date.now() / 1000)), [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const visited = useMemo(() => [...new Set([...visitedMaps, currentId])], [visitedMaps, currentId]);
+  useEffect(() => { if (isOpen) { setSelected(currentId); const p = NODE_POSITIONS[currentId]; if (p && scroller.current) scroller.current.scrollTo({ left: Math.max(0, p.x - scroller.current.clientWidth / 2), top: Math.max(0, p.y - scroller.current.clientHeight / 2) }); } }, [isOpen, currentId]);
   if (!isOpen) return null;
 
-  const selectedMeta = MAP_METADATA_TABLE[selectedMapId] || MAP_METADATA_TABLE[1];
+  const meta = MAP_METADATA_TABLE[selected] ?? MAP_METADATA_TABLE[1];
+  const known = visited.includes(meta.id); const terr = territoryOf(meta); const fit = levelFit(playerLevel, meta.levelRange);
+  const travel = travelInfo({ from: currentId, to: meta.id, visited, level: playerLevel, scrap, inSafeZone });
+  const mk = markers.get(meta.id)!;
+  const fitText = { low: tr('Far below your level'), fit: tr('Right for your level'), tough: tr('Tough for your level'), too_high: tr('Too high for your level') }[fit];
+  const fitColor = { low: 'var(--c-text-3)', fit: 'var(--c-good)', tough: 'var(--c-warn)', too_high: 'var(--c-bad)' }[fit];
 
-  const getBiomeColor = (biome: string) => {
-    switch (biome) {
-      case 'coastal':
-        return '#3b82f6';
-      case 'highland':
-        return '#22c55e';
-      case 'steppe':
-        return '#eab308';
-      case 'canyon':
-        return '#f97316';
-      case 'snow':
-        return '#38bdf8';
-      case 'marsh':
-        return '#14b8a6';
-      case 'desert':
-        return '#d97706';
-      case 'ash':
-      case 'volcanic':
-        return '#ef4444';
-      case 'ruins':
-        return '#a855f7';
-      case 'arena':
-        return '#ec4899';
-      default:
-        return '#10b981';
-    }
-  };
+  const card = (
+    <div className="grid gap-2 text-sm" data-testid="zone-card">
+      <div>
+        <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: TERRITORY_COLOR[terr] }}>{tr('Zone')} {meta.id} · {tr(meta.region)}</span>
+        <h3 className="text-lg font-bold">{known ? nm(meta.nameKey, meta.name) : tr('Unknown zone')}</h3>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <Badge tone={fit === 'fit' ? 'good' : fit === 'too_high' ? 'bad' : fit === 'tough' ? 'warn' : 'neutral'}>Lv {meta.levelRange[0]}–{meta.levelRange[1]}</Badge>
+        {mk.safe && <Badge tone="good">🛡 {tr('Safe zone')}</Badge>}{mk.pvp && <Badge tone="bad">⚔ PvP</Badge>}{mk.war && <Badge tone="warn">⚑ {tr('Faction war')}</Badge>}{mk.gate && <Badge tone="accent">◈ {tr('Gate')}</Badge>}
+        {meta.type === 'ARENA' && <Badge>{tr('Arena')}</Badge>}{known && <Badge>{tr(meta.weather)}</Badge>}
+      </div>
+      <div className="text-[12px]" style={{ color: fitColor }}>{fitText}</div>
+      {!known ? <p className="text-[12px]" style={{ color: 'var(--c-text-3)' }}>{tr('Find the portal in a neighbouring zone to discover this place.')}</p> : null}
+      {mk.events.length > 0 && <div className="text-[12px]" style={{ color: 'var(--c-warn)' }}>✦ {tr('Running now')}: {mk.events.map((e) => tr(EVENT_LABEL[e])).join(', ')}</div>}
+      {mk.war && <div className="text-[12px]" style={{ color: 'var(--c-text-2)' }}>{tr('Three control points: hold them with your faction for the weekly war score.')}</div>}
+      <div className="text-[12px]" style={{ color: 'var(--c-text-2)' }}>{tr('Connected to')}: {neighborsOf(meta.id).map((n) => <button key={n} type="button" className="underline mr-2 px-2 min-h-[44px] min-w-[44px]" onClick={() => setSelected(n)}>{visited.includes(n) ? nm(MAP_METADATA_TABLE[n].nameKey, MAP_METADATA_TABLE[n].name) : `#${n}`}</button>)}</div>
+      <div className="rounded-lg p-2 grid gap-1" style={{ background: 'var(--c-bg-0)', border: '1px solid var(--c-line)' }}>
+        {meta.id === currentId ? <span style={{ color: 'var(--c-good)' }}>📍 {tr('You are here')}</span> : (
+          <>
+            <div className="flex items-center justify-between"><span>{tr('Fast travel')}</span><span className="tabular-nums" style={{ color: ((travel.reason === 'not_enough_scrap') ? 'var(--c-bad)' : 'var(--c-text-2)') }}><CurrencyIcon kind="scrap" size={14} /> {travel.cost.toLocaleString()} · {travel.hops} {tr('hops')}</span></div>
+            <Button variant="primary" disabled={!travel.allowed} onClick={() => { onTravelToMap(meta.id); }} data-testid="travel">{tr('Travel')}</Button>
+            {!travel.allowed && travel.reason && <span className="text-[11px]" style={{ color: 'var(--c-warn)' }}>{tr(REASON[travel.reason] ?? travel.reason)}</span>}
+          </>
+        )}
+      </div>
+      <details><summary className="text-[12px] cursor-pointer" style={{ color: 'var(--c-text-2)' }}>{tr('World events')}</summary><EventCalendar /></details>
+    </div>
+  );
 
-  const getWeatherIcon = (weather: string) => {
-    switch (weather) {
-      case 'rain':
-        return <CloudRain className="w-3.5 h-3.5 text-blue-400" />;
-      case 'storm':
-        return <Zap className="w-3.5 h-3.5 text-yellow-400" />;
-      case 'snowstorm':
-        return <Snowflake className="w-3.5 h-3.5 text-cyan-300" />;
-      case 'sandstorm':
-        return <Wind className="w-3.5 h-3.5 text-amber-400" />;
-      case 'ashfall':
-        return <Flame className="w-3.5 h-3.5 text-red-400" />;
-      default:
-        return <Sun className="w-3.5 h-3.5 text-amber-300" />;
-    }
-  };
-
-  // Connected adjacent maps
-  const connectedNeighbors = MAP_CONNECTIONS.filter(
-    ([a, b]) => a === selectedMapId || b === selectedMapId
-  ).map(([a, b]) => (a === selectedMapId ? b : a));
-
-  const isLevelAdequate = playerLevel >= selectedMeta.levelRange[0];
+  const canvas = (
+    <div ref={scroller} className="relative overflow-auto rounded-lg h-full" style={{ background: 'radial-gradient(circle at 50% 40%, #0f1b2d, var(--c-bg-0))', border: '1px solid var(--c-line)' }} data-testid="world-canvas">
+      <div className="relative select-none" style={{ width: MAP_SIZE.w, height: MAP_SIZE.h + 30 }}>
+        <svg className="absolute inset-0 pointer-events-none" width={MAP_SIZE.w} height={MAP_SIZE.h + 30} aria-hidden>
+          <defs>{BLOBS.map((b) => <radialGradient key={b.t} id={`blob-${b.t}`}><stop offset="0%" stopColor={TERRITORY_COLOR[b.t]} stopOpacity="0.20" /><stop offset="100%" stopColor={TERRITORY_COLOR[b.t]} stopOpacity="0" /></radialGradient>)}</defs>
+          {BLOBS.map((b) => <circle key={b.t} cx={b.x} cy={b.y} r={b.r} fill={`url(#blob-${b.t})`} opacity={filter === 'all' || filter === b.t ? 1 : 0.25} />)}
+          {MAP_CONNECTIONS.map(([a, b], i) => { const A = NODE_POSITIONS[a]; const B = NODE_POSITIONS[b]; if (!A || !B) return null; const both = visited.includes(a) && visited.includes(b); const sel = a === selected || b === selected;
+            return <line key={i} x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke={sel ? 'var(--accent)' : both ? '#475b7e' : '#243047'} strokeWidth={sel ? 3 : both ? 2 : 1.5} strokeDasharray={both ? undefined : '4 5'} />; })}
+        </svg>
+        {Object.values(MAP_METADATA_TABLE).map((m) => {
+          const pos = NODE_POSITIONS[m.id]; if (!pos) return null;
+          const seen = visited.includes(m.id); const cur = m.id === currentId; const sel = m.id === selected; const t = territoryOf(m); const z = markers.get(m.id)!; const dim = filter !== 'all' && t !== filter;
+          return (
+            <button key={m.id} type="button" onClick={() => { setSelected(m.id); if (mode === 'sheet') setSheet(true); }} aria-label={`${seen ? nm(m.nameKey, m.name) : tr('Unknown zone')} (${m.id})`} aria-pressed={sel} data-node={m.id} data-visited={seen || undefined} data-quest-marker={questMapIds?.includes(m.id) ? 'true' : undefined}
+              className={`absolute w-11 h-11 rounded-xl flex items-center justify-center font-bold text-xs transition-transform ${sel ? 'scale-110' : 'hover:scale-105'}`} style={{ left: pos.x - 22, top: pos.y - 22, opacity: dim ? 0.3 : 1, background: seen ? (cur ? '#064e3b' : 'var(--c-bg-2)') : 'var(--c-bg-0)', border: `2px ${seen ? 'solid' : 'dashed'} ${sel ? 'var(--accent)' : seen ? TERRITORY_COLOR[t] : 'var(--c-line-strong)'}`, color: seen ? 'var(--c-text)' : 'var(--c-text-3)', boxShadow: questMapIds?.includes(m.id) ? '0 0 0 3px #fde047' : cur ? '0 0 0 3px #34d399' : undefined }}>
+              {seen ? m.id : '?'}
+              <span className="absolute -top-2 -right-2 flex gap-0.5">{z.safe && <i className="not-italic text-[11px]" title={tr('Safe zone')}>🛡</i>}{z.pvp && <i className="not-italic text-[11px]">⚔</i>}{z.war && <i className="not-italic text-[11px]">⚑</i>}{z.events.length > 0 && <i className="not-italic text-[11px]" style={{ color: 'var(--c-warn)' }}>✦</i>}{z.gate && seen && <i className="not-italic text-[11px]">◈</i>}</span>
+              {cur && <span className="absolute -top-5 text-[13px]" aria-hidden>📍</span>}
+              <span className="absolute top-full mt-0.5 whitespace-nowrap text-[11px] font-semibold pointer-events-none" style={{ color: seen ? 'var(--c-text)' : 'var(--c-text-3)' }}>{seen ? nm(m.nameKey, m.name) : `Lv ${m.levelRange[0]}+`}</span>
+              {seen && <span className="absolute top-full mt-[14px] whitespace-nowrap text-[11px] pointer-events-none" style={{ color: 'var(--c-text-3)' }}>Lv {m.levelRange[0]}–{m.levelRange[1]}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
-    <WindowFrame id="map" title="World Map & Fast Travel" width="min(1180px, 98vw)" height="min(800px, 95vh)" noPadding headerExtra={
-          <div className="flex items-center gap-2">
-                        <div className="hidden md:flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
-              {['ALL', T('Coastal'), T('Highland'), T('Steppe'), T('Neutral'), T('PvP'), T('Endgame')].map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setActiveRegionFilter(r)}
-                  className={`px-2.5 py-1 rounded-md transition font-medium ${
-                    activeRegionFilter === r
-                      ? 'bg-sky-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                  }`}
-                >
-                  {r === 'ALL' ? tr('All') : tr(r)}
-                </button>
-              ))}
-            </div>
-
-          </div>
-    }>
-
-        {/* Main Body */}
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-          {/* Node Graph Interactive Canvas View */}
-          <div className="flex-1 relative bg-slate-950 overflow-auto border-b lg:border-b-0 lg:border-r border-slate-800">
-            {/* Background Grid Pattern */}
-            <div
-              className="absolute inset-0 opacity-15 pointer-events-none"
-              style={{
-                backgroundImage:
-                  'radial-gradient(circle, #38bdf8 1px, transparent 1px)',
-                backgroundSize: '28px 28px',
-              }}
-            />
-
-            <div className="relative min-w-[1200px] h-[520px] p-6 select-none">
-              {/* SVG Edges connecting map nodes */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                <defs>
-                  <linearGradient id="edgeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.6" />
-                    <stop offset="100%" stopColor="#818cf8" stopOpacity="0.6" />
-                  </linearGradient>
-                </defs>
-
-                {MAP_CONNECTIONS.map(([a, b], idx) => {
-                  const posA = NODE_POSITIONS[a];
-                  const posB = NODE_POSITIONS[b];
-                  if (!posA || !posB) return null;
-
-                  const isConnectedToSelected = a === selectedMapId || b === selectedMapId;
-                  const isCurrentHop = a === currentNumericId || b === currentNumericId;
-
-                  return (
-                    <line
-                      key={`edge_${a}_${b}_${idx}`}
-                      x1={posA.x}
-                      y1={posA.y}
-                      x2={posB.x}
-                      y2={posB.y}
-                      stroke={isConnectedToSelected ? '#38bdf8' : isCurrentHop ? '#10b981' : '#334155'}
-                      strokeWidth={isConnectedToSelected ? 3.5 : isCurrentHop ? 2.5 : 1.5}
-                      strokeDasharray={isConnectedToSelected ? '6 4' : 'none'}
-                      strokeOpacity={isConnectedToSelected ? 0.95 : 0.65}
-                    />
-                  );
-                })}
-              </svg>
-
-              {/* Map Nodes */}
-              {Object.values(MAP_METADATA_TABLE).map((meta) => {
-                const pos = NODE_POSITIONS[meta.id];
-                if (!pos) return null;
-
-                const isCurrent = meta.id === currentNumericId;
-                const isSelected = meta.id === selectedMapId;
-                const isHub = meta.type === 'HUB';
-                const isHome = meta.type === 'HOME';
-                const isPvP = meta.type === 'PVP';
-                const isEndgame = meta.type === 'ENDGAME';
-                const isArena = meta.type === 'ARENA';
-
-                const biomeColor = getBiomeColor(meta.biome);
-
-                return (
-                  <button
-                    data-quest-marker={questMapIds?.includes(meta.id) ? 'true' : undefined}
-                    key={`node_${meta.id}`}
-                    onClick={() => setSelectedMapId(meta.id)}
-                    style={{ left: `${pos.x - 22}px`, top: `${pos.y - 22}px` }}
-                    className={`absolute w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all duration-150 group z-10 ${
-                      questMapIds?.includes(meta.id) && !isSelected && !isCurrent
-                        ? 'ring-2 ring-yellow-300 animate-pulse'
-                        : isSelected
-                        ? 'ring-4 ring-sky-400 ring-offset-2 ring-offset-slate-950 scale-110 shadow-lg shadow-sky-500/30'
-                        : isCurrent
-                        ? 'ring-2 ring-emerald-400 scale-105 shadow-md shadow-emerald-500/20'
-                        : 'hover:scale-105 hover:ring-2 hover:ring-slate-400'
-                    }`}
-                  >
-                    {/* Node Background */}
-                    <div
-                      className="w-full h-full rounded-xl flex items-center justify-center border font-bold text-xs"
-                      style={{
-                        backgroundColor: isCurrent ? '#064e3b' : isSelected ? '#0f172a' : '#1e293b',
-                        borderColor: isSelected ? '#38bdf8' : isCurrent ? '#10b981' : biomeColor,
-                        color: isCurrent ? '#34d399' : '#f8fafc',
-                      }}
-                    >
-                      {meta.id}
-                    </div>
-
-                    {/* Safe Zone Badge Icon */}
-                    {(isHome || isHub) && (
-                      <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shadow">
-                        <Shield className="w-2.5 h-2.5" />
-                      </div>
-                    )}
-
-                    {/* PvP Swords Badge */}
-                    {isPvP && (
-                      <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white flex items-center justify-center shadow">
-                        <Swords className="w-2.5 h-2.5" />
-                      </div>
-                    )}
-
-                    {/* Arena Badge */}
-                    {isArena && (
-                      <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-pink-600 text-white flex items-center justify-center shadow">
-                        <Mountain className="w-2.5 h-2.5" />
-                      </div>
-                    )}
-
-                    {/* Current Player Beacon Pin */}
-                    {isCurrent && (
-                      <div className="absolute -top-4 text-emerald-400 animate-bounce">
-                        <MapPin className="w-4 h-4 fill-emerald-400 text-emerald-950" />
-                      </div>
-                    )}
-
-                    {/* Small Node Name Label */}
-                    <div className="absolute -bottom-5 whitespace-nowrap text-[11px] font-semibold text-slate-300 drop-shadow-md pointer-events-none group-hover:text-white">
-                      {nm(meta.nameKey, meta.name)}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Selected Map Inspection & Roam Panel */}
-          <div className="w-full lg:w-80 shrink-0 bg-slate-900/95 flex flex-col p-4 overflow-y-auto border-t lg:border-t-0 border-slate-800">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[11px] font-bold text-sky-400 uppercase tracking-wider">
-                  {tr('Zone')} {selectedMeta.id} · {tr(selectedMeta.region)}
-                </span>
-                <h3 className="text-xl font-bold text-white tracking-tight mt-0.5">
-                  {nm(selectedMeta.nameKey, selectedMeta.name)}
-                </h3>
-              </div>
-              <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700">
-                {getWeatherIcon(selectedMeta.weather)}
-                <span className="text-xs text-slate-300 capitalize">
-                  {selectedMeta.weather}
-                </span>
-              </div>
-            </div>
-
-            {/* Badges */}
-            <div className="flex flex-wrap gap-1.5 mt-2.5">
-              <span
-                className="text-[11px] font-semibold px-2 py-0.5 rounded border"
-                style={{
-                  backgroundColor: `${getBiomeColor(selectedMeta.biome)}22`,
-                  borderColor: `${getBiomeColor(selectedMeta.biome)}66`,
-                  color: getBiomeColor(selectedMeta.biome),
-                }}
-              >
-                {selectedMeta.biome.toUpperCase()}
-              </span>
-
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                {tr('Level')} {selectedMeta.levelRange[0]}-{selectedMeta.levelRange[1]}
-              </span>
-
-              <span
-                className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${
-                  selectedMeta.type === 'HOME'
-                    ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
-                    : selectedMeta.type === 'HUB'
-                    ? 'bg-sky-950/80 border-sky-500/50 text-sky-300'
-                    : selectedMeta.type === 'PVP'
-                    ? 'bg-red-950/80 border-red-500/50 text-red-300'
-                    : selectedMeta.type === 'ENDGAME'
-                    ? 'bg-purple-950/80 border-purple-500/50 text-purple-300'
-                    : 'bg-slate-800 border-slate-700 text-slate-300'
-                }`}
-              >
-                {tr(selectedMeta.type)}
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-400 mt-3 leading-relaxed">
-              {nm(`${selectedMeta.nameKey}.desc`, selectedMeta.description)}
-            </p>
-            <EventCalendar />
-
-            {/* Zone Telemetry */}
-            <div className="mt-4 space-y-2 bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-400">{tr('Atmosphere / Time:')}</span>
-                <span className="text-slate-200 capitalize font-medium">
-                  {selectedMeta.timeOfDay} · {selectedMeta.weather}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">{tr('Safe Zone Protected:')}</span>
-                <span className={selectedMeta.type === 'HOME' || selectedMeta.type === 'HUB' ? 'text-emerald-400 font-medium' : 'text-slate-500'}>
-                  {selectedMeta.type === 'HOME' || selectedMeta.type === 'HUB' ? tr('Yes (Allied Base)') : tr('Portals Only (400u)')}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">{tr('Dimensions:')}</span>
-                <span className="text-slate-200 font-mono">
-                  {selectedMeta.width} × {selectedMeta.height} px
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">{tr('Server Capacity:')}</span>
-                <span className="text-slate-200">
-                  {selectedMeta.instanceCapacity} {tr('drivers / inst')}
-                </span>
-              </div>
-            </div>
-
-            {/* Connected Portals */}
-            <div className="mt-4">
-              <span className="text-xs font-semibold text-slate-300 block mb-1.5">
-                Connected Portals ({connectedNeighbors.length})
-              </span>
-              <div className="grid grid-cols-2 gap-1.5">
-                {connectedNeighbors.map((nid) => {
-                  const targetMeta = MAP_METADATA_TABLE[nid];
-                  if (!targetMeta) return null;
-                  return (
-                    <button
-                      key={`conn_${nid}`}
-                      onClick={() => setSelectedMapId(nid)}
-                      className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-left transition text-xs"
-                    >
-                      <div className="font-bold text-white flex items-center justify-between">
-                        <span>{targetMeta.id}. {nm(targetMeta.nameKey, targetMeta.name)}</span>
-                        <ArrowRight className="w-3 h-3 text-slate-400" />
-                      </div>
-                      <span className="text-[11px] text-slate-400">
-                        Lv.{targetMeta.levelRange[0]}-{targetMeta.levelRange[1]}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Travel / Roam Action */}
-            <div className="mt-auto pt-4">
-              {selectedMeta.id === currentNumericId ? (
-                <div className="w-full py-2.5 px-3 rounded-xl bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 text-center text-xs font-bold flex items-center justify-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  {tr('Currently Here')}
-                </div>
-              ) : (
-                <button
-                  onClick={() => {
-                    onTravelToMap(selectedMeta.id);
-                    onClose();
-                  }}
-                  className="w-full py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-sky-600/30"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  {tr('Roam to')} {nm(selectedMeta.nameKey, selectedMeta.name)}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+    <WindowFrame id="map" title="World Map & Fast Travel" width="min(1180px, 98vw)" height="min(780px, 95vh)" headerExtra={<div className="max-[1000px]:hidden"><SegmentedControl label={tr('Region')} value={filter} onChange={(v) => setFilter(v as Territory | 'all')} options={FILTERS.map(([l, v]) => ({ id: v, label: l === 'All' ? tr('All') : tr(T(l)) }))} /></div>}>
+      <div className={mode === 'sheet' ? 'h-full min-h-0' : 'grid gap-3 h-full min-h-0'} style={mode === 'sheet' ? undefined : { gridTemplateColumns: 'minmax(0, 1fr) 300px' }}>
+        {canvas}
+        {mode === 'sheet' ? <Modal open={sheet} sheet onClose={() => setSheet(false)} title={known ? nm(meta.nameKey, meta.name) : tr('Unknown zone')} closeLabel={tr('Close')}>{card}</Modal> : <div className="overflow-y-auto rounded-lg p-3" style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-line)' }}>{card}</div>}
+      </div>
     </WindowFrame>
   );
 };

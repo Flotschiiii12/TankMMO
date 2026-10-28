@@ -268,6 +268,28 @@ async function main() {
         for (const t of ['Browse', 'Sell', 'My listings', 'Trade', 'Mail']) { await page.getByRole('tab', { name: new RegExp(`^${t}`) }).first().click({ force: true }).catch(() => violations.push({ viewport: vp.name, screen: 'modal-market', rule: 'market', element: t, detail: 'tab missing' })); await page.waitForTimeout(350); await check(page, vp, `modal-market-${t.toLowerCase().replace(/\W+/g, '')}`, { modal: true }); }
         await closeModal(page, vp, 'modal-market');
       }
+      // world map (30 nodes, fog, zone card), quest log tabs, career window tabs
+      {
+        const bad = (screen: string, rule: string, m: string) => violations.push({ viewport: vp.name, screen, rule, element: rule, detail: m });
+        await page.keyboard.press('KeyM'); await page.waitForTimeout(400);
+        if ((await page.locator('[data-node]').count()) !== 30) bad('modal-worldmap', 'worldmap', 'the world map should show 30 zone nodes');
+        if ((await page.locator('[data-node]:not([data-visited])').count()) < 20) bad('modal-worldmap', 'worldmap', 'a new player should see most zones fogged');
+        await page.locator('[data-node="13"]').click({ force: true }); await page.waitForTimeout(300);
+        if (!(await page.getByTestId('zone-card').count())) bad('modal-worldmap', 'worldmap', 'selecting a node should show the zone card'); else await check(page, vp, 'modal-worldmap-card', { modal: true });
+        if (vp.touch) { await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+        await closeModal(page, vp, 'modal-worldmap');
+        await page.keyboard.press('KeyJ'); await page.waitForTimeout(350);
+        for (const t of ['Active', 'Available', 'Journal']) { await page.getByRole('tab', { name: new RegExp(`^${t}`) }).first().click({ force: true }).catch(() => bad('modal-quests', 'quests', `tab ${t} missing`)); await page.waitForTimeout(250); await check(page, vp, `modal-quests-${t.toLowerCase()}`, { modal: true }); }
+        await closeModal(page, vp, 'modal-quests');
+        await page.keyboard.press('KeyX'); await page.waitForTimeout(350);
+        for (const t of ['Talents', 'Achievements', 'Codex', 'Season pass']) {
+          await page.getByRole('tab', { name: new RegExp(`^${t}`) }).first().click({ force: true }).catch(() => bad('modal-career', 'career', `tab ${t} missing`)); await page.waitForTimeout(300);
+          if (t === 'Talents') { const node = page.locator('[data-talent]').first(); if (await node.count()) { await node.click({ force: true }); await page.waitForTimeout(150); if (!(await page.getByTestId('talent-detail').count())) bad('modal-career', 'career', 'talent detail missing'); } else bad('modal-career', 'career', 'no talent nodes'); }
+          if (t === 'Season pass' && (await page.locator('[data-tier]').count()) !== 50) bad('modal-career', 'career', 'season track should have 50 tiers');
+          await check(page, vp, `modal-career-${t.toLowerCase().replace(/\W+/g, '')}`, { modal: true });
+        }
+        await closeModal(page, vp, 'modal-career');
+      }
       // left-handed layout and performance mode (settings toggles): controls swap sides, the DPR cap drops to 1.5
       if (vp.touch && (await page.getByRole('button', { name: /^Settings$/ }).count())) {
         const toggle = async (label: string) => { await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200); await page.getByRole('button', { name: label }).first().evaluate((el) => (el as HTMLElement).click()).catch(() => {}); };

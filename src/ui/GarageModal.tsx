@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import { tr, nm } from '../i18n.ts';
 import { CurrencyIcon } from './GameIcon.tsx';
 import { AMMO_TYPES, AMMO_SIM_ID } from '../data/parts.ts';
-import { TALENTS_CATALOG } from '../../shared/data/talents.ts';
 import * as C from '../../shared/rules/character.ts';
 import { errorText } from '../game/actions.ts';
 import type { ClientAction } from '../../shared/rules/actions.ts';
@@ -11,6 +10,9 @@ import { UserProfile } from '../save/profile.ts';
 import { AmmoType } from '../sim/types.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { Tabs } from './kit/Tabs.tsx';
+import { Button } from './kit/Button.tsx';
+import { careerIntent } from './career/careerIntent.ts';
+import { windows } from './wm/windowStore.ts';
 import { HangarView, HangarSubView } from './hangar/HangarView.tsx';
 import { useWindowMode } from './wm/useWindows.ts';
 
@@ -19,10 +21,6 @@ interface GarageModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAction: (action: ClientAction) => Promise<{ ok: boolean; error?: string }>;
-}
-
-function talentLabel(t: { id: string; nameKey: string }): string {
-  return nm(t.nameKey, t.id.replace(/^(off|def|log)_/, '').split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' '));
 }
 
 /** The garage window: Hangar (vehicles and loadout), Talents, Ammunition Depot. */
@@ -56,41 +54,10 @@ export const GarageModal: React.FC<GarageModalProps> = ({ profile, isOpen, onAct
         <div className="flex-1 min-h-0 overflow-y-auto">
         {activeTab === 'vehicles' && <HangarView profile={profile} onAction={onAction} onMessage={setMsg} view={hview} onView={setHview} />}
 
-        {/* TAB 2: TALENTS */}
         {activeTab === 'parts' && (
-          <div className="mt-3 overflow-y-auto">
-            <div className="flex items-center justify-between text-xs mb-3">
-              <span className="text-slate-300">{tr('Talent points available')}: <b className="text-orange-400">{C.talentPointsAvailable(ch)}</b> ({tr('from level 5, one per level')})</span>
-              <button
-                onClick={() => run({ kind: 'respec' })}
-                className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
-              >
-                {tr('Reset talents')} ({C.respecCost(ch).toLocaleString()} {tr('scrap')})
-              </button>
-            </div>
-            {msg && <div className="text-xs text-orange-300 mb-2">{msg}</div>}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {(['offense', 'defense', 'logistics'] as const).map((branch) => (
-                <div key={branch} className="rounded-lg border border-slate-800 bg-slate-900/40 p-2.5">
-                  <div className="text-[11px] uppercase tracking-wide text-orange-400 mb-1.5">{branch}</div>
-                  <div className="space-y-1">
-                    {TALENTS_CATALOG.filter((t) => t.branch === branch).sort((x, y) => x.tier - y.tier).map((t) => {
-                      const rank = ch.talentRanks[t.id] ?? 0;
-                      return (
-                        <button
-                          key={t.id}
-                          onClick={() => run({ kind: 'rank_talent', talentId: t.id })}
-                          className="w-full flex items-center justify-between p-1.5 rounded border border-slate-800 hover:border-slate-600 text-left text-xs"
-                        >
-                          <span className="text-slate-200">{talentLabel(t)} <span className="text-[11px] text-slate-500">{t.effectPerRank.isPercent ? `+${Math.round(t.effectPerRank.valuePerRank * 1000) / 10}%` : `+${t.effectPerRank.valuePerRank}`}/{tr('rank')} · Lv {t.minLevel}</span></span>
-                          <span className={`tabular-nums ${rank === t.maxRank ? 'text-emerald-400' : 'text-slate-400'}`}>{rank}/{t.maxRank}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="grid gap-3 max-w-md mx-auto pt-6 text-center">
+            <p className="text-sm" style={{ color: 'var(--c-text-2)' }}>{tr('Talent points available')}: <b style={{ color: 'var(--accent-2)' }}>{C.talentPointsAvailable(ch)}</b></p>
+            <Button variant="primary" large onClick={() => { careerIntent.set('talents'); windows.open('career'); }}>{tr('Open the talent tree')}</Button>
           </div>
         )}
 

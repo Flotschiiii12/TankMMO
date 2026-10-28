@@ -18,6 +18,17 @@ export function getLang(): Lang {
 export function setLang(l: Lang): void { try { localStorage.setItem(KEY, l); } catch { /* ignore */ } window.location.reload(); }
 
 const DE: Record<string, string> = {
+  'Sending failed, please try again.': 'Senden fehlgeschlagen, bitte versuche es noch einmal.',
+  'Too many reports in the last hour, thank you! Try again later.': 'Zu viele Meldungen in der letzten Stunde, danke! Versuche es später noch einmal.',
+  'Please write a little more.': 'Bitte schreib etwas mehr.',
+  'Sent along: the map, your level, the game version and the last error codes. No chat, no personal data.': 'Mitgesendet werden: Karte, dein Level, die Spielversion und die letzten Fehlercodes. Kein Chat, keine persönlichen Daten.',
+  'What happened? What did you expect?': 'Was ist passiert? Was hast du erwartet?',
+  'Other': 'Sonstiges',
+  'Idea': 'Idee',
+  'Bug': 'Fehler',
+  'Thank you! Your report was sent.': 'Danke! Deine Meldung wurde gesendet.',
+  'Feedback needs an online connection.': 'Feedback braucht eine Online-Verbindung.',
+  'Send feedback': 'Feedback senden',
   // generic
   'Back': 'Zurück', 'Close': 'Schließen', 'Send': 'Senden', 'Play': 'Spielen', 'Sign in': 'Anmelden', 'Try again': 'Erneut versuchen', 'Reconnect': 'Neu verbinden',
   'Disconnected': 'Verbindung getrennt', 'No connection': 'Keine Verbindung', 'Connecting…': 'Verbinde …', 'Looking for the server…': 'Suche den Server …',

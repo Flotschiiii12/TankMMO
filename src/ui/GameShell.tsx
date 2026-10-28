@@ -40,6 +40,7 @@ import { impactLevel, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../render/combatFx.
 import { GarageModal } from './GarageModal.tsx';
 import { InventoryModal } from './InventoryModal.tsx';
 import { SettingsModal } from './SettingsModal.tsx';
+import { FeedbackModal } from './FeedbackModal.tsx';
 import { TutorialOverlay } from './TutorialOverlay.tsx';
 import { DebugPanel } from './DebugPanel.tsx';
 import { TitleScreen } from './TitleScreen.tsx';
@@ -103,6 +104,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const mergerRef = useRef(new DamageNumberMerger());
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([]);
   const [howToOpen, setHowToOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [replayScene, setReplayScene] = useState<StoryScene | null>(null);
   const warRef = useRef<Array<{ id: string; x: number; y: number; radius: number; owner: string | null; progress: Record<string, number>; contested: boolean }>>([]);
   const warOwnersRef = useRef<Record<string, string | null>>({});
@@ -1043,8 +1045,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         return <DialogueModal scene={scene} onDone={(id) => { if (replayScene) setReplayScene(null); else void performAction({ kind: 'scene_seen', sceneId: id }); }} />;
       })()}
       <HowToPlay open={howToOpen} onClose={() => setHowToOpen(false)} done={TUTORIAL_STEPS.filter((s) => profile.character.stats[tutorialFlag(s)] === 1)} />
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} send={online ? (r) => online.social({ op: 'feedback', ...r }) : null} />
       <SettingsModal
         onHowToPlay={() => { setSettingsOpen(false); setHowToOpen(true); }}
+        onFeedback={() => { setSettingsOpen(false); setFeedbackOpen(true); }}
         profile={profile}
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}

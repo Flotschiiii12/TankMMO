@@ -11,6 +11,7 @@ interface SettingsModalProps {
   onUpdateSettings: (newSettings: UserProfile['settings']) => void;
   onResetProgress: () => void;
   onHowToPlay?: () => void;
+  onFeedback?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -20,6 +21,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateSettings,
   onResetProgress,
   onHowToPlay,
+  onFeedback,
 }) => {
   const [confirmReset, setConfirmReset] = useState(false);
 
@@ -205,6 +207,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
           </div>
         </div>
+
+        {onFeedback && (
+          <button onClick={() => { soundEngine.playUIClick(); onFeedback(); }} className="mt-4 min-h-[44px] px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-white">
+            {tr('Send feedback')}
+          </button>
+        )}
 
         <div className="mt-5 text-right">
           <button

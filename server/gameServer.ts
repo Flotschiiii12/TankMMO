@@ -13,6 +13,8 @@ import * as C from '../shared/rules/character.ts';
 import { AMMO_PRICES, ammoCost, executeAction } from '../shared/rules/actions.ts';
 import { calculateKillXP } from '../shared/rules/progression.ts';
 import * as Q from '../shared/rules/quests.ts';
+import { FeedbackRepo, LEVEL_MILESTONES, sanitizeState, TelemetryRepo } from './telemetry.ts';
+import { TUTORIAL_STEPS } from '../shared/data/quests.ts';
 import { canEngage, BOUNTY_SCRAP_PER_STREAK, BOUNTY_STREAK, HONOR_LOSS_ON_DEATH, HONOR_REPEAT_SECONDS, honorOutcome, KILL_CAP_COUNT, KILL_CAP_IMMUNITY_SECONDS, KILL_CAP_WINDOW_SECONDS, PVP_DAMAGE_MULT, PVP_LEVEL_WINDOW, PVP_MIN_LEVEL, registerPvpKill } from '../shared/sim/pvp.ts';
 import { refreshPlayerStats, spawnPlayerFromCharacter } from '../shared/sim/playerEntity.ts';
 import { createWorld, stepWorld, World } from '../shared/sim/world.ts';
@@ -106,6 +108,10 @@ interface Instance {
 }
 
 interface Session {
+  /** telemetry milestones already sent this session, and the last server error codes (for bug reports) */
+  teleSeen?: Set<string>;
+  errors?: string[];
+  connectedAt?: number;
   ws: WebSocket;
   accountId: string;
   name: string;
@@ -164,6 +170,8 @@ export interface ServerDeps {
   alliances: AllianceRepo;
   arena: SqliteArenaRepo;
   war: SqliteWarRepo;
+  telemetry: TelemetryRepo;
+  feedback: FeedbackRepo;
   market: MarketRepo;
   premium: PremiumWallet;
   receipts?: ReceiptValidator;
@@ -532,6 +540,7 @@ export class GameServer {
         if (session.spectating) this.stopSpectating(session, false);
         this.leave(session);
         this.save(session);
+        if (this.deps.accounts.get(session.accountId)) this.deps.telemetry.log('session_end', session.accountId, String(Math.max(0, Math.round((this.clock.nowMs() - (session.connectedAt ?? this.clock.nowMs())) / 1000))));
         this.antiCheat.leave(session.accountId);
         this.sessions.delete(session.accountId);
       }
@@ -597,6 +606,9 @@ export class GameServer {
       rng: new SimRNG((this.clock.nowMs() ^ auth.account.id.length) >>> 0),
     };
     this.sessions.set(s.accountId, s);
+    s.connectedAt = this.clock.nowMs();
+    if (!row) this.deps.telemetry.log('account_created', s.accountId);
+    this.deps.telemetry.log('session_start', s.accountId);
     this.antiCheat.join(s.accountId, s.name, this.clock.nowMs());
     this.deps.accounts.touch(s.accountId, this.clock.nowMs());
     Q.refreshQuests(character, Math.floor(this.clock.nowMs() / 1000));
@@ -1001,6 +1013,11 @@ export class GameServer {
       }
       case 'war_status': return reply({ ok: true, data: this.warStatus(s) });
       case 'war_claim': return reply(this.warClaim(s));
+      case 'feedback': {
+        if (typeof req.text !== 'string' || typeof req.kind !== 'string') return reply({ ok: false, error: 'bad_request' });
+        const state = sanitizeState({ map: s.instance?.mapId, level: s.character.level, version: req.version }, s.errors ?? []);
+        return reply(this.deps.feedback.submit(s.accountId, req.kind, req.text, state));
+      }
     }
   }
 
@@ -1028,6 +1045,7 @@ export class GameServer {
     });
     this.send(s, { type: 's_action_result', id: p.id, ok: r.ok, error: r.ok ? undefined : (r as any).error });
     if (r.ok) {
+      if (p.action.kind.startsWith('buy_')) this.deps.telemetry.log('first_purchase', s.accountId);
       if (p.action.kind === 'buy_ammo') Q.onQuestEvent(s.character, { type: 'tutorial', step: 'ammo' }); // buying special ammo counts for the ammo lesson too
       const ent = s.instance.world.entities.get(s.entityId);
       if (ent) refreshPlayerStats(ent, s.character);
@@ -1325,6 +1343,7 @@ export class GameServer {
         if (market.volumeToday(s.accountId) + l.price > DAILY_TRADE_VOLUME_CAP) return reply({ ok: false, error: 'daily_trade_cap' });
         if (market.volumeToday(l.seller) + l.price > DAILY_TRADE_VOLUME_CAP) return reply({ ok: false, error: 'seller_trade_cap' });
         if (!market.close(l.id, 'sold')) return reply({ ok: false, error: 'not_found' }); // someone else was faster
+        this.deps.telemetry.log('first_purchase', s.accountId);
         const sellerSession = this.sessions.get(l.seller);
         const taxChar = sellerSession?.character ?? this.deps.profiles.get(l.seller)?.character ?? ch;
         const tax = auctionTax(l.price, taxChar, sellerSession ? this.warDiscount(sellerSession) : 0);
@@ -1523,6 +1542,7 @@ export class GameServer {
       else { if (m === s) return { ok: false, error: 'no_keys' }; continue; }
       entering.push(m);
     }
+    for (const m of entering) this.deps.telemetry.log('gate_entered', m.accountId);
     const map = getMapById(def.unlockMapId) as MapDef;
     const world = createDungeonWorld(def, entering.length, 5000 + ++this.dungeonCounter);
     const inst: Instance = { id: `d${this.dungeonCounter}`, mapId: def.unlockMapId, map, world, sessions: new Set(), chatSent: 0 };
@@ -1783,7 +1803,7 @@ export class GameServer {
       this.announce(text);
       for (const s of this.sessions.values()) this.send(s, { type: 's_social_event', kind: 'war_result', data: { winner } });
     }
-    if (this.lastDay && day !== this.lastDay) { try { this.deps.onDaily?.(); } catch (e) { log('error', 'daily_hook_failed', { error: String(e) }); } }
+    if (this.lastDay && day !== this.lastDay) { try { this.deps.telemetry.prune(180); this.deps.onDaily?.(); } catch (e) { log('error', 'daily_hook_failed', { error: String(e) }); } }
     this.lastDay = day; this.lastWeek = week;
     log('info', 'scheduler', { day, week, players: this.sessions.size, instances: this.instanceInfo().length });
   }
@@ -1956,9 +1976,27 @@ export class GameServer {
     this.deps.profiles.save({ accountId: s.accountId, character: s.character, ammo: s.ammo, mapId: s.instance?.mapId ?? 1, updatedAt: this.clock.nowMs() });
     s.dirty = false;
     s.lastSave = this.clock.nowMs();
+    this.telemetryScan(s);
   }
 
-  private send(s: Session, msg: ServerMessage): void { this.sendRaw(s.ws, msg); }
+  /** Milestones are derived from the saved character, so one cheap pass per save covers levels, tutorial steps, first kill and first craft. */
+  private telemetryScan(s: Session): void {
+    const seen = s.teleSeen ??= new Set<string>();
+    const once = (kind: Parameters<TelemetryRepo['log']>[0], detail = '') => { const k = `${kind}:${detail}`; if (seen.has(k)) return; seen.add(k); this.deps.telemetry.log(kind, s.accountId, detail); };
+    const ch = s.character;
+    for (const lv of LEVEL_MILESTONES) if (ch.level >= lv) once('level', String(lv));
+    for (const step of TUTORIAL_STEPS) if (ch.stats[Q.tutorialFlag(step)] === 1) once('tutorial_step', step);
+    if ((ch.stats['kills'] ?? 0) > 0) once('first_kill');
+    if ((ch.stats['crafted'] ?? 0) > 0) once('first_craft');
+    if ((ch.stats['gates_cleared'] ?? 0) > 0) once('gate_cleared');
+  }
+
+  private send(s: Session, msg: ServerMessage): void {
+    // the last 20 error codes travel with a bug report (codes only, never texts)
+    const code = msg.type === 's_error' ? msg.code : (msg.type === 's_action_result' || msg.type === 's_social_result') && !msg.ok ? msg.error : undefined;
+    if (code) { const list = s.errors ??= []; list.push(String(code)); if (list.length > 20) list.shift(); }
+    this.sendRaw(s.ws, msg);
+  }
 
   private sendRaw(ws: WebSocket, msg: ServerMessage): void {
     if (ws.readyState !== WebSocket.OPEN) return;

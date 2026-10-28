@@ -220,6 +220,30 @@ CREATE TABLE IF NOT EXISTS war_claims (
   PRIMARY KEY (week, account_id)
 );`),
   },
+  {
+    version: 6,
+    name: 'anonymous telemetry and feedback reports',
+    up: (db) => db.exec(`
+CREATE TABLE IF NOT EXISTS telemetry_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS telemetry (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  who TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_telemetry_ts ON telemetry(ts);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_telemetry_once ON telemetry(kind, who, detail) WHERE kind NOT IN ('session_start', 'session_end');
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts INTEGER NOT NULL,
+  who TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  text TEXT NOT NULL,
+  state_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open'
+);`),
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

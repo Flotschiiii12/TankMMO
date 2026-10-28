@@ -37,7 +37,7 @@ Live server: https://treadfront.213-199-44-82.sslip.io. Read `docs/GDD.md` (desi
 The generated art sheets (`docs/bildprompts-*.md` are the prompts) and the scripts that cut them live on the owner's server, not in Git. Do not try to regenerate art. Only wire up sprites that already exist in `public/assets`.
 
 ## Known gaps / good tasks for a cloud session (code only, no server or art tools needed)
-1. Clan emblems: the 40 sprites exist (`public/assets/badges/emblem_*.png`), clans have no emblem field yet -> DB column + `social.ts` + clan create/edit UI + tests.
+1. ~~Clan emblems~~ done (see `docs/CLOUD_REPORT.md`). Possible follow-up: draw the emblem on name plates.
 2. Wire the existing icons into the remaining UI: rarity gems (`icons/rarity_*.png`) in inventory/workshop, currency/ore icons in wallet bars, status icons (`st_*`) over name plates (`src/ui/GameIcon.tsx` has the helper).
 3. i18n: many UI strings are still English literals (`src/i18n.ts`, `shared/data/i18n.ts`).
 4. Capacitor mobile builds (see `docs/DEPLOY.md`; `VITE_SERVER_URL` is supported).

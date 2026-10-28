@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { normalizeCharacter, type CharacterState } from '../shared/rules/character.ts';
+import { MIGRATIONS, runMigrations } from './migrations.ts';
 
 export interface AccountRow {
   id: string;
@@ -53,158 +54,16 @@ export interface ChatRepo {
   recent(channel: string, limit: number): Array<{ sender: string; text: string; ts: number }>;
 }
 
-export const SCHEMA = `
-CREATE TABLE IF NOT EXISTS accounts (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  secret_hash TEXT NOT NULL,
-  recovery_hash TEXT,
-  created_at INTEGER NOT NULL,
-  banned_until INTEGER NOT NULL DEFAULT 0,
-  muted_until INTEGER NOT NULL DEFAULT 0,
-  age_confirmed INTEGER NOT NULL DEFAULT 0,
-  last_seen INTEGER NOT NULL DEFAULT 0,
-  start_faction TEXT NOT NULL DEFAULT 'coastal'
-);
-CREATE INDEX IF NOT EXISTS idx_accounts_recovery ON accounts(recovery_hash);
-CREATE TABLE IF NOT EXISTS profiles (
-  account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
-  character_json TEXT NOT NULL,
-  ammo_json TEXT NOT NULL,
-  map_id INTEGER NOT NULL,
-  level INTEGER NOT NULL DEFAULT 1,
-  updated_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_profiles_level ON profiles(level DESC);
-CREATE TABLE IF NOT EXISTS chat (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  channel TEXT NOT NULL,
-  sender TEXT NOT NULL,
-  text TEXT NOT NULL,
-  ts INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_chat_channel ON chat(channel, id DESC);
-CREATE TABLE IF NOT EXISTS friends (
-  a TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  b TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  status TEXT NOT NULL, -- 'pending' (a asked b) | 'accepted'
-  created_at INTEGER NOT NULL,
-  PRIMARY KEY (a, b)
-);
-CREATE TABLE IF NOT EXISTS blocks (
-  blocker TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  blocked TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  PRIMARY KEY (blocker, blocked)
-);
-CREATE TABLE IF NOT EXISTS reports (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  reporter TEXT NOT NULL,
-  target TEXT NOT NULL,
-  reason TEXT NOT NULL,
-  context TEXT NOT NULL DEFAULT '',
-  ts INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'open'
-);
-CREATE TABLE IF NOT EXISTS clans (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  tag TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  scrap INTEGER NOT NULL DEFAULT 0,
-  research_json TEXT NOT NULL DEFAULT '{}',
-  quest_json TEXT NOT NULL DEFAULT '{}',
-  created_at INTEGER NOT NULL,
-  emblem TEXT
-);
-CREATE TABLE IF NOT EXISTS clan_members (
-  account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
-  clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
-  role TEXT NOT NULL, -- leader | officer | member
-  joined_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS clan_invites (
-  clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
-  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  ts INTEGER NOT NULL,
-  PRIMARY KEY (clan_id, account_id)
-);
-CREATE TABLE IF NOT EXISTS clan_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
-  ts INTEGER NOT NULL,
-  actor TEXT NOT NULL,
-  text TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS announcements (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  ts INTEGER NOT NULL,
-  text TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS arena_ratings (
-  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  mode TEXT NOT NULL,
-  season INTEGER NOT NULL DEFAULT 1,
-  rating INTEGER NOT NULL,
-  wins INTEGER NOT NULL DEFAULT 0,
-  losses INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (account_id, mode, season)
-);
-CREATE TABLE IF NOT EXISTS war_scores (
-  week TEXT NOT NULL,
-  faction TEXT NOT NULL,
-  score INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (week, faction)
-);
-CREATE TABLE IF NOT EXISTS auctions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  seller TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  item_json TEXT NOT NULL,
-  def_id TEXT NOT NULL,
-  price INTEGER NOT NULL,
-  listed_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active' -- active | sold | expired | cancelled
-);
-CREATE INDEX IF NOT EXISTS idx_auctions_active ON auctions(status, expires_at);
-CREATE TABLE IF NOT EXISTS mail (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL, -- item | scrap
-  payload TEXT NOT NULL,
-  note TEXT NOT NULL,
-  ts INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS trade_volume (
-  account_id TEXT NOT NULL,
-  day TEXT NOT NULL,
-  scrap INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (account_id, day)
-);
-CREATE TABLE IF NOT EXISTS wallet_tx (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  account_id TEXT NOT NULL,
-  currency TEXT NOT NULL,
-  amount INTEGER NOT NULL,
-  reason TEXT NOT NULL,
-  ref TEXT,
-  ts INTEGER NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_tx_ref ON wallet_tx(account_id, currency, ref) WHERE ref IS NOT NULL;
-CREATE TABLE IF NOT EXISTS audit_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  ts INTEGER NOT NULL,
-  actor TEXT NOT NULL,
-  action TEXT NOT NULL,
-  detail TEXT NOT NULL
-);
-`;
-
+/** Opens (and migrates) the database. Throws SchemaTooNewError when the file was written by a newer server. */
 export function openDatabase(path = ':memory:'): DatabaseSync {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;');
-  db.exec(SCHEMA);
-  // Backwards-compatible column additions for databases created before the column existed.
-  const clanCols = db.prepare('PRAGMA table_info(clans)').all() as Array<{ name: string }>;
-  if (!clanCols.some((c) => c.name === 'emblem')) db.exec('ALTER TABLE clans ADD COLUMN emblem TEXT');
+  try {
+    runMigrations(db, MIGRATIONS, { path });
+  } catch (err) {
+    db.close();
+    throw err;
+  }
   return db;
 }
 

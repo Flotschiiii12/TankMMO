@@ -186,3 +186,18 @@ describe('Inventory and workshop', () => {
     expect((C.equipItem(ch, 'veh_medium_t1', 'main0', a.uid) as any).error).toBe('wrong_slot_type');
   });
 });
+
+describe('Modules and drones affect stats', () => {
+  it('an auto-repair module raises hull, a drone adds damage and hull', () => {
+    const ch = rich(C.createCharacter('M')); ch.level = 40;
+    const base = C.computeLoadoutStats(ch)!;
+    const mod = (C.createItem(ch, 'mod_plating_hardener', 'Rare', new SimRNG(1)) as any).item;
+    expect(C.equipItem(ch, 'veh_medium_t1', 'module0', mod.uid).ok).toBe(true);
+    expect(C.computeLoadoutStats(ch)!.maxArmor).toBeGreaterThan(base.maxArmor);
+    const d = (C.createItem(ch, 'drn_guardian_t1', 'Rare', new SimRNG(2)) as any).item;
+    expect(C.equipItem(ch, 'veh_medium_t1', 'drone0', d.uid).ok).toBe(true);
+    const s = C.computeLoadoutStats(ch)!;
+    expect(s.maxHull).toBeGreaterThan(base.maxHull);
+    expect(s.mainDamage).toBeGreaterThan(base.mainDamage);
+  });
+});

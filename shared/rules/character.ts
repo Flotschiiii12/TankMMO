@@ -470,6 +470,14 @@ export interface LoadoutStats {
   dps: number;
 }
 
+/** Module effects per tier (percent, or flat for 'flat_reduction'). Modules without a stat entry are utility only. */
+export const MODULE_EFFECTS: Record<string, { stat: 'dps' | 'hull' | 'armor' | 'speed' | 'crit_chance' | 'flat_reduction' | 'reload_speed' | 'range'; perTier: number }> = {
+  targeting_aid: { stat: 'crit_chance', perTier: 1 }, auto_repair: { stat: 'hull', perTier: 2 }, plating_hardener: { stat: 'armor', perTier: 3 },
+  reinforced_tracks: { stat: 'speed', perTier: 2 }, stabilizer: { stat: 'range', perTier: 2 }, overclocker: { stat: 'reload_speed', perTier: 2 },
+  energy_absorber: { stat: 'flat_reduction', perTier: 2 }, blast_shield: { stat: 'flat_reduction', perTier: 2 }, optics_suite: { stat: 'range', perTier: 3 },
+  ammo_drum: { stat: 'dps', perTier: 2 }, emergency_shield: { stat: 'hull', perTier: 2 }, fuel_saver: { stat: 'speed', perTier: 1 },
+};
+
 export function itemStatMultiplier(item: ItemInstance): number {
   return RARITY_CONFIGS[item.rarity].multiplier * UPGRADE_LEVEL_STATS[item.upgrade].statMult;
 }
@@ -491,11 +499,14 @@ export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVeh
     const m = itemStatMultiplier(item);
     if (def.slotType === 'main') { dmgAdd += (def.baseDPS ?? 0) * m * 0.5; range = Math.max(range, def.baseRange ?? range); }
     if (def.slotType === 'secondary') { mgAdd += (def.baseDPS ?? 0) * m * 0.15; mgRange = Math.max(mgRange, def.baseRange ?? mgRange); }
+    if (def.slotType === 'drone') dmgAdd += (def.baseDPS ?? 0) * m * 0.25;
     hullBonus += (def.baseHullBonus ?? 0) * m;
     armorBonus += (def.baseArmorBonus ?? 0) * m;
     speedBonus += (def.baseSpeedBonus ?? 0) * m;
     flat += (def.baseFlatReduction ?? 0) * m;
-    for (const a of item.affixes) {
+    const mod = def.slotType === 'module' ? MODULE_EFFECTS[def.id.replace('mod_', '')] : undefined;
+    const affixes = mod ? [...item.affixes, { stat: mod.stat, value: mod.perTier * def.tier * m, nameKey: 'module' }] : item.affixes;
+    for (const a of affixes) {
       if (a.stat === 'dps') affDps += a.value / 100;
       else if (a.stat === 'hull') affHull += a.value / 100;
       else if (a.stat === 'armor') affArmor += a.value / 100;

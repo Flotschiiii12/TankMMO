@@ -226,7 +226,7 @@ export function claimQuest(ch: CharacterState, id: string, rng: SimRNG, clockSec
   ch.wallet.scrap += reward.scrap;
   ch.wallet.fragments += reward.fragments ?? 0;
   ch.wallet.gateKeys += reward.gateKeys ?? 0;
-  if (reward.reputation) ch.reputation[def.nameKey.split('.')[2] ?? 'general'] = (ch.reputation[def.nameKey.split('.')[2] ?? 'general'] ?? 0) + reward.reputation;
+  if (reward.reputation) ch.reputation[ch.faction] = (ch.reputation[ch.faction] ?? 0) + reward.reputation;
   if (reward.seasonPoints) addSeasonPoints(ch, reward.seasonPoints, clockSeconds);
   if (reward.itemRarity) {
     const tier = Math.max(1, Math.min(8, Math.ceil(ch.level / 12)));

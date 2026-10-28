@@ -644,6 +644,8 @@ function updateSecondaryWeapons(world: World): void {
     if (ent.hull <= 0 || ent.mgReloadRemaining > 0 || ent.mgDamage <= 0) continue;
     if (!(ent.kind === 'player' || ent.kind === 'npc_driver' || ent.kind === 'boss')) continue;
     if (isPosInSafeZone(world, ent.pos) || ent.statusEffects.some((s) => s.type === 'stunned')) continue;
+    // A player's machine gun only fires once the attack was started (auto-fire on or a target locked): driving up to an enemy does not hurt it.
+    if (ent.kind === 'player' && !ent.autoFire && ent.targetId === undefined) continue;
     let target: SimEntity | undefined;
     let best = ent.mgRange;
     for (const o of world.entities.values()) {

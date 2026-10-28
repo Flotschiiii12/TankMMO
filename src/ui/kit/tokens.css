@@ -1,0 +1,78 @@
+/*
+ * Treadfront design tokens: the ONE place for colours, spacing, type, radii, elevation, motion and layers.
+ * Components (kit.css) and new screens use only these variables. Faction themes override the accent roles.
+ * Rule: light text on dark surfaces; text-2/text-3 keep >= 4.5:1 against bg-1 (checked in test/ui_a11y.test.ts).
+ */
+:root {
+  /* surfaces (dark) */
+  --c-bg-0: #070b12;
+  --c-bg-1: #0d131d;
+  --c-bg-2: #141c2a;
+  --c-bg-3: #1c2638;
+  --c-scrim: rgba(4, 7, 12, 0.78);
+  --c-line: #2a3650;
+  --c-line-strong: #3d4e72;
+  /* text */
+  --c-text: #e8eef9;
+  --c-text-2: #b0bbd0;
+  --c-text-3: #8794ad;
+  /* status */
+  --c-good: #4ade80;
+  --c-bad: #f87171;
+  --c-warn: #fbbf24;
+  --c-info: #38bdf8;
+  /* bars */
+  --c-hull: #34d399;
+  --c-armor: #38bdf8;
+  --c-xp: #c084fc;
+  /* rarity (same hex values as RARITY_CONFIGS in shared/data/items.ts) */
+  --r-common: #94a3b8;
+  --r-uncommon: #22c55e;
+  --r-rare: #3b82f6;
+  --r-epic: #a855f7;
+  --r-legendary: #eab308;
+  /* accent roles: default = the classic orange; [data-faction] below overrides */
+  --accent: #f97316;
+  --accent-2: #fb923c;
+  --accent-ink: #1a0c02;
+  --accent-soft: rgba(249, 115, 22, 0.16);
+  --accent-line: rgba(249, 115, 22, 0.55);
+
+  /* spacing scale (4 px base) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+  /* type scale (never below 11 px) */
+  --t-xs: 11px; --t-sm: 12px; --t-md: 14px; --t-lg: 16px; --t-xl: 20px; --t-2xl: 28px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* radii */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-pill: 999px;
+  /* elevation (box-shadow only, never on canvas) */
+  --e-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --e-2: 0 4px 14px rgba(0, 0, 0, 0.5);
+  --e-3: 0 14px 40px rgba(0, 0, 0, 0.6);
+  /* motion */
+  --m-fast: 120ms; --m-med: 200ms; --m-slow: 320ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  /* layers */
+  --z-hud: 10; --z-rail: 20; --z-window: 40; --z-modal: 60; --z-toast: 80; --z-tooltip: 90; --z-overlay: 100;
+  /* control size on touch (>= 44 px) */
+  --hit: 44px;
+}
+
+:root[data-faction="coastal"] {
+  --accent: #38bdf8; --accent-2: #7dd3fc; --accent-ink: #04202e;
+  --accent-soft: rgba(56, 189, 248, 0.16); --accent-line: rgba(56, 189, 248, 0.55);
+}
+:root[data-faction="highland"] {
+  --accent: #fb923c; --accent-2: #4ade80; --accent-ink: #1f0e02;
+  --accent-soft: rgba(251, 146, 60, 0.16); --accent-line: rgba(251, 146, 60, 0.55);
+}
+:root[data-faction="steppe"] {
+  --accent: #fbbf24; --accent-2: #f87171; --accent-ink: #261a00;
+  --accent-soft: rgba(251, 191, 36, 0.16); --accent-line: rgba(251, 191, 36, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --m-fast: 0ms; --m-med: 0ms; --m-slow: 0ms; }
+}
+:root.reduced-motion { --m-fast: 0ms; --m-med: 0ms; --m-slow: 0ms; }

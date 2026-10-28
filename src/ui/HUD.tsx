@@ -6,6 +6,7 @@ import { UserProfile } from '../save/profile.ts';
 import { Radar } from './Radar.tsx';
 import { ChatLog } from './ChatLog.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
+import { GameIcon } from './GameIcon.tsx';
 import { Volume2, VolumeX, Wrench, Package, ScrollText, Users, Map as MapIcon, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
 
 interface HUDProps {
@@ -129,7 +130,7 @@ export const HUD: React.FC<HUDProps> = ({
                   : 'bg-slate-900/90 border border-slate-700/80 text-slate-300 hover:text-white active:scale-95'
               }`}
             >
-              <Wrench size={18} />
+              <GameIcon name="anvil" size={26} />
             </button>
 
             {onOpenSocial && (
@@ -138,7 +139,7 @@ export const HUD: React.FC<HUDProps> = ({
                 title={tr('Social (friends, party, clan)')}
                 className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-violet-400 flex items-center justify-center hover:text-white active:scale-95"
               >
-                <Users size={18} />
+                <GameIcon name="friends" size={26} />
               </button>
             )}
 
@@ -151,7 +152,7 @@ export const HUD: React.FC<HUDProps> = ({
               title={tr('Quests (J)')}
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-emerald-400 flex items-center justify-center hover:text-white active:scale-95"
             >
-              <ScrollText size={18} />
+              <GameIcon name="quests" size={26} />
             </button>
 
             {/* Inventory button */}
@@ -163,7 +164,7 @@ export const HUD: React.FC<HUDProps> = ({
               title={tr('Inventory & Loadout (I)')}
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
-              <Package size={18} />
+              <GameIcon name="inventory" size={26} />
             </button>
 
             {/* World Map button */}
@@ -175,7 +176,7 @@ export const HUD: React.FC<HUDProps> = ({
               title={tr('World Map & Fast Travel (M)')}
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-sky-400 flex items-center justify-center hover:text-white hover:border-sky-500 active:scale-95 shadow-sm"
             >
-              <MapIcon size={18} />
+              <GameIcon name="map" size={26} />
             </button>
 
 
@@ -188,7 +189,7 @@ export const HUD: React.FC<HUDProps> = ({
               title="Combat Field Manual"
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
-              <HelpCircle size={18} />
+              <GameIcon name="tutorial" size={26} />
             </button>
 
             {/* Mute button */}
@@ -212,7 +213,7 @@ export const HUD: React.FC<HUDProps> = ({
               title="Settings & Diagnostics"
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
-              <SettingsIcon size={18} />
+              <GameIcon name="settings" size={26} />
             </button>
           </div>
         </div>

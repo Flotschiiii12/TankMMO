@@ -341,7 +341,7 @@ function updateAI(world: World, dt: number): void {
 
     let target = ent.targetId !== undefined ? world.entities.get(ent.targetId) : undefined;
     const aggro = ent.aggroRange ?? 750;
-    if (target && (target.hull <= 0 || isSmoked(target) || target.isInSafeZone || distSq(ent.pos, target.pos) > (aggro * 1.6) ** 2)) {
+    if (target && (target.hull <= 0 || isSmoked(target) || isPosInSafeZone(world, target.pos) || distSq(ent.pos, target.pos) > (aggro * 1.6) ** 2)) {
       ent.targetId = undefined;
       target = undefined;
     }
@@ -349,7 +349,7 @@ function updateAI(world: World, dt: number): void {
       let best = aggro;
       for (const o of world.entities.values()) {
         if (o.id === ent.id || o.hull <= 0 || o.isHostile === ent.isHostile || isInertKind(o.kind) || isSmoked(o)) continue;
-        if (o.isInSafeZone) continue;
+        if (isPosInSafeZone(world, o.pos)) continue; // nobody is hunted inside a safe zone
         const d = dist(ent.pos, o.pos);
         if (d < best) { best = d; target = o; }
       }

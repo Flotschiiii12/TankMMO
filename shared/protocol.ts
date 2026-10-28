@@ -9,8 +9,8 @@ import type { CharacterState } from './rules/character.ts';
 import type { ClientAction } from './rules/actions.ts';
 
 /** Bump on breaking changes; the server rejects clients below MIN_PROTOCOL_VERSION with s_error 'update_required'. */
-export const PROTOCOL_VERSION = '1.1.0';
-export const MIN_PROTOCOL_VERSION = '1.1.0';
+export const PROTOCOL_VERSION = '1.2.0';
+export const MIN_PROTOCOL_VERSION = '1.2.0';
 
 // ==========================================
 // Client -> Server Messages

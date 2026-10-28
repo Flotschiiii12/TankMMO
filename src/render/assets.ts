@@ -12,22 +12,22 @@ export class SpriteRegistry {
   private allowedFiles = new Set<string>();
   private manifestLoaded = false;
   private pending = new Set<string>();
-  private listeners: Array<() => void> = [];
+  private listeners: Array<(path?: string) => void> = [];
 
   constructor() {
     this.loadManifest();
   }
 
-  public onChange(listener: () => void) {
+  public onChange(listener: (path?: string) => void) {
     this.listeners.push(listener);
     return () => {
       this.listeners = this.listeners.filter((l) => l !== listener);
     };
   }
 
-  private notify() {
+  private notify(path?: string) {
     for (const listener of this.listeners) {
-      listener();
+      listener(path);
     }
   }
 
@@ -84,7 +84,7 @@ export class SpriteRegistry {
     img.onload = () => {
       this.images.set(path, img);
       this.pending.delete(path);
-      this.notify();
+      this.notify(path);
     };
     img.onerror = () => {
       this.images.set(path, null);
@@ -129,9 +129,9 @@ export class SpriteRegistry {
     return `/assets/landmarks/${mapId}.png`;
   }
 
-  /** Painted base ground per world map (ids of public/assets/ground/*.png). Map 1 keeps its coastal overlay art. */
+  /** Painted base ground per world map (ids of public/assets/ground/*.png). Map 1 (Gravel Bay) uses the pebble beach with the coastal overlays on top. */
   private static readonly GROUND_BY_MAP: Record<number, string> = {
-    2: 'dune_sand', 3: 'salt_marsh', 4: 'cliff_turf', 5: 'birch_meadow', 6: 'quarry_slabs', 7: 'mist_forest', 8: 'pass_scree',
+    1: 'river_pebbles', 2: 'dune_sand', 3: 'salt_marsh', 4: 'cliff_turf', 5: 'birch_meadow', 6: 'quarry_slabs', 7: 'mist_forest', 8: 'pass_scree',
     9: 'wheat_stubble', 10: 'copper_canyon', 11: 'salt_flat', 12: 'plateau_grass', 13: 'cobble_square', 14: 'prairie', 15: 'river_delta',
     16: 'red_dust', 17: 'frozen_tundra', 18: 'glacier_shore', 19: 'old_highway', 20: 'glow_swamp', 21: 'bridgehead_dirt', 22: 'customs_apron',
     23: 'ash_field', 24: 'no_mans_land', 25: 'ruin_paving', 26: 'obsidian_sand', 27: 'storm_rock', 28: 'iron_plates', 29: 'burning_ground', 30: 'arena_sand',

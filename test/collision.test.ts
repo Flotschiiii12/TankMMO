@@ -48,3 +48,12 @@ describe('Collision & Movement Rules (Section 2)', () => {
     expect(clamped.y).toBe(3970);
   });
 });
+
+describe('walk-through decoration', () => {
+  it('obstacles with blocks=false do not push vehicles, solid ones do', () => {
+    const solid = { x: 0, y: 0, radius: 20, type: 'rock' as const, blocks: true };
+    const deco = { x: 0, y: 0, radius: 20, type: 'prop' as const, blocks: false };
+    expect(resolveObstacleCollision({ x: 5, y: 0 }, 10, [deco]).collided).toBe(false);
+    expect(resolveObstacleCollision({ x: 5, y: 0 }, 10, [solid]).collided).toBe(true);
+  });
+});

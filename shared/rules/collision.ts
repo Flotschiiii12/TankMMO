@@ -24,6 +24,7 @@ export function resolveObstacleCollision(
   let slowFactor = 1.0;
 
   for (const obs of obstacles) {
+    if (obs.blocks === false && obs.type !== 'water') continue; // walk-through decoration (ferns, reeds, flowers...)
     const dSq = distSq(adjustedPos, obs);
     const minDist = radius + obs.radius;
 

@@ -93,6 +93,12 @@ export function drawVehicle(
   if (bodyImg) {
     const w = radius * 2.4;
     const h = radius * 2.0;
+    // cheap blob shadow instead of canvas shadowBlur (a blur pass per sprite is very slow on phones)
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.26)';
+    ctx.beginPath();
+    ctx.ellipse(3 * zoom, 4.5 * zoom, w * 0.45, h * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.drawImage(bodyImg, -w / 2, -h / 2, w, h);
   } else {
     drawChassisByTier(ctx, tier, radius, ent.isHostile, ent.distanceDriven || 0, ent.isWreck);
@@ -117,6 +123,7 @@ export function drawVehicle(
   if (turretImg) {
     const tw = radius * 2.2;
     const th = radius * 1.4;
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
     ctx.drawImage(turretImg, -tw / 4, -th / 2, tw, th);
   } else {
     drawTurretByTier(

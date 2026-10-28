@@ -15,6 +15,12 @@ import {
 
 const CHUNK_SIZE = 1000;
 
+/** Props that lie flat on the ground and cast no shadow. */
+const FLAT_PROPS = /(scree|crater|fissure|ash_pile|reed|lily|drift|barbed|glow|waterfall|fern|camp|bedroll|fence|mushroom|rake|overpass|jetty|mangrove|thorn|tumble|wheat|cairn|slab|plant_|harbor_0[3-6])/;
+
+/** Textures whose painted detail is too coarse at 1:1 are tiled smaller. */
+const GROUND_TILE_SCALE: Record<string, number> = { river_pebbles: 0.45 };
+
 export class WorldRenderer {
   /** Faction of the local player: players of other factions get red name plates. */
   public viewerFaction?: string;
@@ -32,8 +38,9 @@ export class WorldRenderer {
     this.camera = camera;
     this.particles = particles;
 
-    // Invalidate chunk cache whenever newly discovered sprites finish loading
-    spriteRegistry.onChange(() => {
+    // The cached chunks only hold the ground: rebuild them when a ground image arrives, not for every prop or vehicle sprite
+    spriteRegistry.onChange((path) => {
+      if (path && !path.startsWith('/assets/ground/')) return;
       this.chunkCanvases.clear();
       this.terrainPatternCanvases.clear();
     });
@@ -62,6 +69,8 @@ export class WorldRenderer {
       if (pattern && typeof DOMMatrix !== 'undefined') {
         const m = new DOMMatrix();
         m.translateSelf(-worldX, -worldY);
+        const tile = GROUND_TILE_SCALE[baseGroundName];
+        if (tile) m.scaleSelf(tile, tile);
         pattern.setTransform(m);
         cctx.fillStyle = pattern;
       } else {
@@ -665,12 +674,6 @@ export class WorldRenderer {
           ctx.save();
           ctx.translate(s.x, s.y);
 
-          // Soft drop shadow cast to bottom-right
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.38)';
-          ctx.shadowBlur = 6 * zoom;
-          ctx.shadowOffsetX = 4 * zoom;
-          ctx.shadowOffsetY = 6 * zoom;
-
           let pw = (obs.width || obs.radius * 2.2) * zoom;
           let ph = (obs.height || obs.radius * 2.2) * zoom;
           if (/^(hl|st|mt|eg)_/.test(obs.propId)) {
@@ -690,6 +693,13 @@ export class WorldRenderer {
             ph = 56 * zoom;
           }
 
+          // cheap blob shadow (a canvas shadowBlur per prop is far too slow); flat decals get none
+          if (!FLAT_PROPS.test(obs.propId)) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+            ctx.beginPath();
+            ctx.ellipse(3 * zoom, 5 * zoom, pw * 0.4, ph * 0.36, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
           ctx.drawImage(propImg, -pw / 2, -ph / 2, pw, ph);
           ctx.restore();
           continue;

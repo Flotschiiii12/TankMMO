@@ -18,6 +18,8 @@ const CHUNK_SIZE = 1000;
 export class WorldRenderer {
   /** Faction of the local player: players of other factions get red name plates. */
   public viewerFaction?: string;
+  /** speech bubbles by player name (emotes), expire at `until` (performance.now) */
+  public bubbles = new Map<string, { text: string; until: number }>();
 
   private camera: Camera;
   private particles: ParticleSystem;
@@ -820,6 +822,15 @@ export class WorldRenderer {
 
     ctx.fillStyle = isHostile ? '#f87171' : '#60a5fa';
     ctx.fillText(label, 0, -6);
+
+    const bubble = this.bubbles.get(ent.name);
+    if (bubble && bubble.until > performance.now()) {
+      ctx.font = `${Math.max(18, Math.round(22 * zoom))}px sans-serif`;
+      ctx.fillStyle = 'rgba(15,23,42,0.85)';
+      ctx.fillRect(-20, -48, 40, 30);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(bubble.text, 0, -25);
+    }
 
     // Health & Armor bar
     const barW = Math.max(42, r * 1.6);

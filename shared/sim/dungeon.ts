@@ -59,7 +59,7 @@ function spawnWave(world: World, st: DungeonState): void {
       spawnEnemy(world, group.type, st.def.recommendedLevel, ringPos(world, i++, total), { hullMult });
     }
   }
-  world.events.push({ type: 'dungeon_wave', wave: st.wave + 1, total: st.def.waves.length });
+  world.events.push({ type: 'dungeon_wave', wave: st.wave + 1, total: st.def.waves.length, timeLeft: Math.round(st.timeLeft) });
 }
 
 function spawnDungeonBoss(world: World, st: DungeonState): SimEntity {

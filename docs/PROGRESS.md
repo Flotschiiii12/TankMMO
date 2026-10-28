@@ -135,3 +135,4 @@ npm run build
 - Update 2026-10-28 (2): faction chat (F), party markers on the radar, accessibility (colour-blind radar, reduced effects, UI size), automatic daily DB backup (BACKUP_DIR, newest 14) - no cron needed.
 - Update 2026-10-28 (3): PvP targeting + red name plates, Social tab crash fixed, HUD live refresh, reputation ammo discount, VITE_SERVER_URL for native builds.
 - Update 2026-10-28 (4): persistent gate-wave / arena-round chip in the HUD (event driven; no timer yet because snapshots carry no dungeon state).
+- Update 2026-10-28 (5): PACE pass (shared/rules/movement.ts): real acceleration (1.1 s) and braking (0.6 s), base speed 180->125, turn 2.4->1.7, enemies x0.75, main reload x1.3; click-to-move (desktop, gold marker, WASD cancels); gate timer (dungeon_wave.timeLeft); emotes (Alt+1-5 / buttons, map chat glyph -> bubble).

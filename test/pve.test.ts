@@ -31,15 +31,15 @@ describe('PvE layer on the deterministic world', () => {
 
   it('enemies attack a player in range, die, drop loot and respawn', () => {
     const w = createWorld({ map: maps[1], seed: 3, populate: false });
-    const player = spawnVehicle(w, 'player', 'P', 10, { x: 2000, y: 2000 }, { maxHull: 100000, maxArmor: 100000, mainDamage: 5000 });
+    const player = spawnVehicle(w, 'player', 'P', 10, { x: 2000, y: 2000 }, { maxHull: 100000, maxArmor: 100000, mainDamage: 1000 });
     w.safeZones = [];
     const { spawnEnemy } = require_pve();
     const foe = spawnEnemy(w, 'scout_buggy', 1, { x: 2250, y: 2000 });
-    foe.maxHull = foe.hull = 300;
+    foe.maxHull = foe.hull = 1200;
     player.targetId = foe.id;
     player.autoFire = true;
     let hurt = false, killed = false, looted = false;
-    for (let i = 0; i < 900; i++) {
+    for (let i = 0; i < 2400; i++) {
       stepWorld(w, NONE);
       for (const ev of w.events) {
         if (ev.type === 'damage_dealt' && ev.targetId === player.id) hurt = true;

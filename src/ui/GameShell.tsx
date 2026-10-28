@@ -17,6 +17,7 @@ import type { QuestEvent } from '../../shared/rules/quests.ts';
 import { QuestModal } from './QuestModal.tsx';
 import { SocialModal } from './SocialModal.tsx';
 import { ChatInput } from './ChatInput.tsx';
+import { EMOTES } from './ChatInput.tsx';
 import { Banner, BossBar, ProgressChip } from './Overlays.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts';
@@ -37,6 +38,8 @@ function isInClientSafeZone(def: { safeZones?: Array<{ x: number; y: number; rad
   return zones.some((z) => (pos.x - z.x) ** 2 + (pos.y - z.y) ** 2 <= z.radius * z.radius);
 }
 
+const fmtClock = (sec: number) => { const s = Math.max(0, Math.floor(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
 export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ online }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -51,6 +54,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [socialOpen, setSocialOpen] = useState(false);
   const [notices, setNotices] = useState<string[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
+  const lastEmoteTs = useRef(0);
+  const gateRef = useRef<{ wave: number; total: number; endsAt: number } | null>(null);
+  const moveTargetRef = useRef<{ x: number; y: number } | null>(null);
+  const lastMoveSend = useRef(0);
   const [progress, setProgress] = useState<string | null>(null);
   const [, forceRender] = useState(0);
   const [partyNames, setPartyNames] = useState<string[]>([]);
@@ -236,9 +243,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         }
 
         case 'event_started': { showBanner(`Event: ${event.kind.replace(/_/g, ' ')}`); break; }
-        case 'dungeon_wave': { showBanner(`Wave ${event.wave} / ${event.total}`); setProgress(`Gate · Wave ${event.wave} / ${event.total}`); break; }
-        case 'dungeon_cleared': { showBanner('Gate cleared!'); setProgress(null); break; }
-        case 'dungeon_failed': { showBanner(`Gate failed (${event.reason})`); setProgress(null); break; }
+        case 'dungeon_wave': { showBanner(`Wave ${event.wave} / ${event.total}`); gateRef.current = { wave: event.wave, total: event.total, endsAt: event.timeLeft != null ? Date.now() + event.timeLeft * 1000 : 0 }; setProgress('gate'); break; }
+        case 'dungeon_cleared': { showBanner('Gate cleared!'); setProgress(null); gateRef.current = null; break; }
+        case 'dungeon_failed': { showBanner(`Gate failed (${event.reason})`); setProgress(null); gateRef.current = null; break; }
         case 'boss_rewards': { showBanner('Boss defeated'); break; }
         case 'explosion': {
           particles.emitExplosion(event.pos, true);
@@ -464,6 +471,40 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             renderer.render(ctx, entities, player, currentMap, snapshot.time);
           }
 
+          // Emotes arrive as map chat consisting only of an emote glyph: show them as bubbles
+          for (const m of snapshot.chatHistory || []) {
+            if (m.channel === 'M' && m.timestamp !== lastEmoteTs.current && (EMOTES as readonly string[]).includes(m.text) && Date.now() - m.timestamp < 4000) {
+              renderer.bubbles.set(m.sender, { text: m.text, until: performance.now() + 4000 });
+              lastEmoteTs.current = m.timestamp;
+            }
+          }
+
+          // Click-to-move: steer toward the clicked ground point, stop on arrival
+          const mt = moveTargetRef.current;
+          if (mt && player && player.hull > 0) {
+            const dx = mt.x - player.pos.x, dy = mt.y - player.pos.y;
+            const d = Math.hypot(dx, dy);
+            if (d < 50) {
+              moveTargetRef.current = null;
+              client.sendCommand({ type: 'Drive', x: 0, y: 0 });
+            } else {
+              // slow down for the last 250 units so the tank does not overshoot
+              const k = Math.min(1, d / 250);
+              if (performance.now() - lastMoveSend.current > 100) {
+                lastMoveSend.current = performance.now();
+                client.sendCommand({ type: 'Drive', x: (dx / d) * Math.max(0.35, k), y: (dy / d) * Math.max(0.35, k) });
+              }
+              const sp = camera.worldToScreen(mt);
+              const pulse = 1 + 0.15 * Math.sin(performance.now() / 150);
+              ctx.save();
+              ctx.strokeStyle = 'rgba(251,191,36,0.9)';
+              ctx.lineWidth = 2;
+              ctx.beginPath(); ctx.arc(sp.x, sp.y, 14 * pulse, 0, Math.PI * 2); ctx.stroke();
+              ctx.beginPath(); ctx.arc(sp.x, sp.y, 3, 0, Math.PI * 2); ctx.fillStyle = 'rgba(251,191,36,0.9)'; ctx.fill();
+              ctx.restore();
+            }
+          }
+
           // Update profiler telemetry
           if (showDebug && player) {
             const stats = client.getTickStats();
@@ -492,6 +533,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   // Keyboard shortcuts listener for M (Map), I (Inventory), V (Garage), F3 (Debug)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) moveTargetRef.current = null;
       if (e.code === 'F3') {
         e.preventDefault();
         setShowDebug((prev) => !prev);
@@ -596,6 +638,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     if (clickedEntity) {
       soundEngine.playLockOn();
       clientRef.current.sendCommand({ type: 'SetTarget', targetId: clickedEntity.id });
+    } else {
+      // empty ground: drive there (DarkOrbit style)
+      moveTargetRef.current = worldPos;
+      lastMoveSend.current = 0;
     }
   };
 
@@ -838,7 +884,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} character={profile.character} />}
       {online && gameState === 'PLAYING' && <ChatInput client={online} />}
       {gameState === 'PLAYING' && <Banner text={banner} />}
-      {gameState === 'PLAYING' && <ProgressChip text={progress} />}
+      {gameState === 'PLAYING' && <ProgressChip text={progress === 'gate' && gateRef.current ? `Gate · Wave ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}
 
       <QuestModal

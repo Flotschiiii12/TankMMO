@@ -19,6 +19,7 @@
 
 import { VehicleClass } from '../types.ts';
 
+import { PACE } from '../rules/movement.ts';
 export interface VehicleDefinition {
   id: string;
   nameKey: string;
@@ -130,8 +131,8 @@ export const CLASS_MULTIPLIERS: Record<VehicleClass, ClassMultiplier> = {
 
 const BASE_HULL = 1200;
 const BASE_ARMOR = 800;
-const BASE_SPEED = 180;
-const BASE_TURN_RATE = 2.4;
+const BASE_SPEED = PACE.baseSpeed;
+const BASE_TURN_RATE = PACE.baseTurnRate;
 const BASE_TURRET_TURN_RATE = 3.2;
 const BASE_DAMAGE = 150;
 const BASE_RELOAD = 1.8;

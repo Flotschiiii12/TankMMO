@@ -3,6 +3,7 @@
  * wrecks, loot crates, resource nodes, portals and respawns.
  * Pure and deterministic: only world.rng and the tick delta are used.
  */
+import { PACE } from '../rules/movement.ts';
 import { ENEMY_ARCHETYPES, BOSS_CATALOG, EnemyArchetype } from '../data/enemies.ts';
 import {
   angleDiff,
@@ -129,7 +130,7 @@ export function spawnEnemy(world: World, type: string, level: number, pos: Vec2,
   const e = spawnVehicle(world, arch.kind, `${arch.displayName} [Lv.${level}]`, level, pos, {
     maxHull: Math.round(arch.baseHull * mult * hullMult),
     maxArmor: Math.round(arch.baseArmor * mult * hullMult),
-    maxSpeed: arch.maxSpeed,
+    maxSpeed: Math.round(arch.maxSpeed * PACE.enemySpeed),
     turnRate: arch.turnRate,
     turretTurnRate: arch.turretTurnRate,
     mainDamage: Math.round(arch.baseDamage * mult * eliteDmg),
@@ -163,7 +164,7 @@ export function spawnBoss(world: World): SimEntity | undefined {
   const boss = spawnVehicle(world, 'boss', def.name, def.level, def.pos, {
     maxHull: bd.baseHull,
     maxArmor: bd.baseArmor,
-    maxSpeed: bd.maxSpeed,
+    maxSpeed: Math.round(bd.maxSpeed * PACE.enemySpeed),
     turnRate: 1.2,
     turretTurnRate: 2.0,
     mainDamage: bd.damage,

@@ -1,3 +1,4 @@
+import { approachSpeed } from '../../shared/rules/movement.ts';
 import { applyPatch } from '../../shared/net/delta.ts';
 import { PROTOCOL_VERSION, ServerMessage, SocialOp } from '../../shared/protocol.ts';
 import type { ClientAction } from '../../shared/rules/actions.ts';
@@ -185,7 +186,7 @@ export class OnlineGameClient implements GameClient {
     }
     const speed = Math.hypot(p.vel.x, p.vel.y);
     const target = len > 0.05 ? Math.min(1, len) * p.maxSpeed : 0;
-    const ns = lerp(speed, target, Math.min(1, 350 * dt));
+    const ns = approachSpeed(speed, target, p.maxSpeed, dt);
     p.vel = { x: Math.cos(p.chassisAngle) * ns, y: Math.sin(p.chassisAngle) * ns };
     p.pos = { x: clamp(p.pos.x + p.vel.x * dt, p.radius, this.clientWorld.mapDef.width - p.radius), y: clamp(p.pos.y + p.vel.y * dt, p.radius, this.clientWorld.mapDef.height - p.radius) };
   }

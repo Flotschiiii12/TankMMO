@@ -224,15 +224,9 @@ export class LocalGameClient implements GameClient {
         const turnStep = this.predictedPlayer.turnRate * 0.033;
         this.predictedPlayer.chassisAngle += clamp(diff, -turnStep, turnStep);
 
-        const fwdX = Math.cos(this.predictedPlayer.chassisAngle);
-        const fwdY = Math.sin(this.predictedPlayer.chassisAngle);
-        this.predictedPlayer.vel.x = fwdX * this.predictedPlayer.targetSpeed;
-        this.predictedPlayer.vel.y = fwdY * this.predictedPlayer.targetSpeed;
       } else {
         this.predictedPlayer.desiredDriveAngle = undefined;
         this.predictedPlayer.targetSpeed = 0;
-        this.predictedPlayer.vel.x *= 0.7;
-        this.predictedPlayer.vel.y *= 0.7;
       }
     } else if (command.type === 'SetTarget') {
       this.predictedPlayer.targetId = command.targetId ?? undefined;

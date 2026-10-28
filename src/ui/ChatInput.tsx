@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { tr } from '../i18n.ts';
 import type { OnlineGameClient } from '../net/onlineClient.ts';
 
+export const EMOTES = ['👍', '😂', '😡', '🆘', '👋'] as const;
 const CHANNELS = [['G', 'Global'], ['M', 'Map'], ['F', 'Faction'], ['C', 'Clan'], ['P', 'Party'], ['T', 'Trade']] as const;
 
 /** Chat line for the online game. Enter opens it; "/w Name text" whispers. */
@@ -15,9 +16,15 @@ export const ChatInput: React.FC<{ client: OnlineGameClient }> = ({ client }) =>
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Enter' && !open && !(e.target instanceof HTMLInputElement)) { e.preventDefault(); setOpen(true); setTimeout(() => ref.current?.focus(), 0); }
     };
+    const onEmote = (e: KeyboardEvent) => {
+      if (!e.altKey || e.target instanceof HTMLInputElement) return;
+      const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);
+      if (i >= 0) { e.preventDefault(); client.sendChat(EMOTES[i], 'M'); }
+    };
+    window.addEventListener('keydown', onEmote);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keydown', onEmote); };
+  }, [open, client]);
 
   const submit = () => {
     const t = text.trim();
@@ -31,7 +38,10 @@ export const ChatInput: React.FC<{ client: OnlineGameClient }> = ({ client }) =>
   };
 
   if (!open) return (
-    <button onClick={() => { setOpen(true); setTimeout(() => ref.current?.focus(), 0); }} className="absolute left-3 bottom-3 z-30 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-700 text-[11px] text-slate-300 pointer-events-auto">{tr('Chat (Enter)')}</button>
+    <div className="absolute left-3 bottom-3 z-30 flex gap-1 items-center pointer-events-auto">
+      <button onClick={() => { setOpen(true); setTimeout(() => ref.current?.focus(), 0); }} className="px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-700 text-[11px] text-slate-300">{tr('Chat (Enter)')}</button>
+      {EMOTES.map((em, i) => <button key={em} title={`Alt+${i + 1}`} onClick={() => client.sendChat(em, 'M')} className="w-7 h-7 rounded-full bg-slate-900/70 border border-slate-700 text-sm">{em}</button>)}
+    </div>
   );
   return (
     <div className="absolute left-3 bottom-3 z-30 flex gap-1 items-center pointer-events-auto bg-slate-950/90 border border-slate-700 rounded-lg p-1.5 max-w-[60vw]">

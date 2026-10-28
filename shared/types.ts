@@ -330,7 +330,7 @@ export type SimEvent =
   | { type: 'status_applied'; entityId: number; status: StatusEffectType; duration: number }
   | { type: 'player_died'; entityId: number }
   | { type: 'explosion'; pos: Vec2; radius: number }
-  | { type: 'dungeon_wave'; wave: number; total: number }
+  | { type: 'dungeon_wave'; wave: number; total: number; timeLeft?: number }
   | { type: 'dungeon_cleared'; dungeonId: string; timeLeft: number }
   | { type: 'dungeon_failed'; dungeonId: string; reason: 'timeout' | 'wipe' }
   | { type: 'boss_rewards'; bossId: number; rewards: Array<{ entityId: number; share: number; tier: 'gold' | 'silver' | 'bronze' }> }

@@ -5,6 +5,7 @@
  * Uses deterministic SimRNG and rules modules.
  */
 
+import { PACE, approachSpeed } from '../rules/movement.ts';
 import { SimRNG } from '../prng.ts';
 import { generateProceduralMap } from './mapGenerator.ts';
 import type { DungeonState } from './dungeon.ts';
@@ -188,8 +189,8 @@ export function spawnVehicle(
 
   const maxHull = options.maxHull || Math.round(1200 * baseScale);
   const maxArmor = options.maxArmor || Math.round(800 * baseScale);
-  const maxSpeed = options.maxSpeed || Math.round(180 * speedScale);
-  const turnRate = options.turnRate || 2.4;
+  const maxSpeed = options.maxSpeed || Math.round(PACE.baseSpeed * speedScale);
+  const turnRate = options.turnRate || PACE.baseTurnRate;
   const turretTurnRate = options.turretTurnRate || 3.2;
 
   const entity: SimEntity = {
@@ -220,7 +221,7 @@ export function spawnVehicle(
     targetSpeed: 0,
 
     mainReloadRemaining: 0,
-    mainReloadTime: options.mainReloadTime || 1.8,
+    mainReloadTime: (options.mainReloadTime || 1.8) * PACE.reloadScale,
     mainDamage: options.mainDamage || Math.round(150 * baseScale),
     mainRange: 700,
     mainProjectileSpeed: 620,
@@ -474,8 +475,7 @@ function updatePhysicsAndCollisions(world: World, dt: number): void {
 
     const currentSpeed = Math.hypot(ent.vel.x, ent.vel.y);
     const targetSpeed = (ent.targetSpeed || 0) * speedMod;
-    const accel = 350 * dt;
-    const newSpeed = lerp(currentSpeed, targetSpeed, Math.min(1, accel));
+    const newSpeed = approachSpeed(currentSpeed, targetSpeed, ent.maxSpeed, dt);
 
     ent.vel.x = Math.cos(ent.chassisAngle) * newSpeed;
     ent.vel.y = Math.sin(ent.chassisAngle) * newSpeed;

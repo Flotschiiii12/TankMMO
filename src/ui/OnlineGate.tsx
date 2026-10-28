@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FactionCrest } from './GameIcon.tsx';
-import { tr, currentLang, setLang } from '../i18n.ts';
+import { tr, T, currentLang, setLang } from '../i18n.ts';
 import { createGuest, clearCredential, detectServer, getCredential, recoverAccount, serverBase, setCredential } from '../net/connect.ts';
 import { OnlineGameClient } from '../net/onlineClient.ts';
 import { createDefaultProfile } from '../save/profile.ts';
@@ -8,9 +8,9 @@ import { createDefaultProfile } from '../save/profile.ts';
 type Phase = 'probing' | 'welcome' | 'recover' | 'connecting' | 'error' | 'offline';
 
 const MESSAGES: Record<string, string> = {
-  update_required: 'A new version of the game is available. Please reload the page / update the app.',
-  banned: 'This account is banned.',
-  logged_in_elsewhere: 'You signed in from another device.',
+  update_required: T('A new version of the game is available. Please reload the page / update the app.'),
+  banned: T('This account is banned.'),
+  logged_in_elsewhere: T('You signed in from another device.'),
 };
 
 /**
@@ -32,12 +32,12 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
     const c = new OnlineGameClient(serverBase(), credential, createDefaultProfile());
     try {
       await c.connect();
-      c.onClose(() => setLost(MESSAGES[c.closeReason] || (c.closeCode === 4409 ? MESSAGES.logged_in_elsewhere : 'Connection lost.')));
+      c.onClose(() => setLost(tr(MESSAGES[c.closeReason] || (c.closeCode === 4409 ? MESSAGES.logged_in_elsewhere : T('Connection lost.')))));
       setClient(c);
     } catch (e: any) {
       const reason = String(e?.message || '');
-      if (reason === 'bad_credentials' || reason === 'unknown' || reason === 'closed_4404') { clearCredential(); setPhase('welcome'); setMsg('This device is no longer signed in. Start a new account or use your recovery code.'); return; }
-      setMsg(MESSAGES[reason] || 'Could not connect to the server.');
+      if (reason === 'bad_credentials' || reason === 'unknown' || reason === 'closed_4404') { clearCredential(); setPhase('welcome'); setMsg(tr('This device is no longer signed in. Start a new account or use your recovery code.')); return; }
+      setMsg(tr(MESSAGES[reason] || T('Could not connect to the server.')));
       setPhase('error');
     }
   }, []);
@@ -68,7 +68,7 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
       </div></div>
     );
   }
-  if (phase === 'probing' || phase === 'connecting') return <div className={box}><div className="text-sm text-slate-400">{phase === 'probing' ? 'Looking for the server…' : 'Connecting…'}</div></div>;
+  if (phase === 'probing' || phase === 'connecting') return <div className={box}><div className="text-sm text-slate-400">{phase === 'probing' ? tr('Looking for the server…') : tr('Connecting…')}</div></div>;
   if (phase === 'error') {
     return (
       <div className={box}><div className={card}>
@@ -86,7 +86,7 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
         {msg && <p className="text-xs text-rose-400">{msg}</p>}
         <button className={btn} disabled={code.trim().length < 20} onClick={async () => {
           const r = await recoverAccount(code);
-          if (r.ok) { setCredential(r.credential); void connect(r.credential); } else setMsg('That code is not valid.');
+          if (r.ok) { setCredential(r.credential); void connect(r.credential); } else setMsg(tr('That code is not valid.'));
         }}>{tr('Sign in')}</button>
         <button className="w-full text-xs text-slate-500" onClick={() => { setMsg(''); setPhase('welcome'); }}>{tr('Back')}</button>
       </div></div>
@@ -98,8 +98,8 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
       <p className="text-sm text-slate-400">{tr('An online tank MMO. Your progress lives on the server.')}</p>
       <div className="text-xs text-slate-400">{tr('Choose your faction (your start region):')}</div>
       <div className="grid grid-cols-3 gap-1.5">
-        {[['coastal', 'Coastal Union'], ['highland', 'Highland Union'], ['steppe', 'Steppe Caravan']].map(([k, n]) => (
-          <button key={k} onClick={() => setFaction(k)} className={`py-2 rounded-lg text-[11px] border flex flex-col items-center gap-1 ${faction === k ? 'border-orange-500 text-orange-300' : 'border-slate-800 text-slate-400'}`}><FactionCrest faction={k} size={44} />{n}</button>
+        {[['coastal', T('Coastal Union')], ['highland', T('Highland Union')], ['steppe', T('Steppe Caravan')]].map(([k, n]) => (
+          <button key={k} onClick={() => setFaction(k)} className={`py-2 rounded-lg text-[11px] border flex flex-col items-center gap-1 ${faction === k ? 'border-orange-500 text-orange-300' : 'border-slate-800 text-slate-400'}`}><FactionCrest faction={k} size={44} />{tr(n)}</button>
         ))}
       </div>
       <label className="flex items-start gap-2 text-xs text-slate-300">
@@ -109,7 +109,7 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
       {msg && <p className="text-xs text-orange-300">{msg}</p>}
       <button className={btn} disabled={!age} onClick={async () => {
         const r = await createGuest(faction);
-        if (r.ok) { setCredential(r.credential); void connect(r.credential); } else setMsg(r.error === 'network' ? 'Could not reach the server.' : 'Could not create the account.');
+        if (r.ok) { setCredential(r.credential); void connect(r.credential); } else setMsg(r.error === 'network' ? tr('Could not reach the server.') : tr('Could not create the account.'));
       }}>{tr('Play')}</button>
       <button className="w-full text-xs text-slate-500" onClick={() => setLang(currentLang === 'de' ? 'en' : 'de')}>{currentLang === 'de' ? 'English' : 'Deutsch'}</button>
       <button className="w-full text-xs text-slate-500 underline" onClick={() => { setMsg(''); setPhase('recover'); }}>{tr('I already have an account')}</button>

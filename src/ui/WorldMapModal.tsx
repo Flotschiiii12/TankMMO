@@ -5,6 +5,7 @@
  * current player location, and single-player roaming fast travel.
  */
 
+import { tr, T } from '../i18n.ts';
 import React, { useState, useMemo } from 'react';
 import {
   Compass,
@@ -172,14 +173,14 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base sm:text-lg font-bold text-white tracking-wide uppercase">
-                  World Map & Portal Graph
+                  {tr('World Map & Portal Graph')}
                 </h2>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                  30 Zones
+                  {tr('30 Zones')}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Connected portal network. Standing in portal circle for 3s initiates transit.
+                {tr('Connected portal network. Standing in portal circle for 3s initiates transit.')}
               </p>
             </div>
           </div>
@@ -187,7 +188,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
           <div className="flex items-center gap-2">
             {/* Region Filter Chips */}
             <div className="hidden md:flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
-              {['ALL', 'Coastal', 'Highland', 'Steppe', 'Neutral', 'PvP', 'Endgame'].map((r) => (
+              {['ALL', T('Coastal'), T('Highland'), T('Steppe'), T('Neutral'), T('PvP'), T('Endgame')].map((r) => (
                 <button
                   key={r}
                   onClick={() => setActiveRegionFilter(r)}
@@ -197,7 +198,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                       : 'text-slate-400 hover:text-white hover:bg-slate-800'
                   }`}
                 >
-                  {r}
+                  {r === 'ALL' ? tr('All') : tr(r)}
                 </button>
               ))}
             </div>
@@ -205,7 +206,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition"
-              title="Close Map (Esc / M)"
+              title={tr('Close Map (Esc / M)')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -343,7 +344,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-[11px] font-bold text-sky-400 uppercase tracking-wider">
-                  Zone {selectedMeta.id} · {selectedMeta.region}
+                  {tr('Zone')} {selectedMeta.id} · {tr(selectedMeta.region)}
                 </span>
                 <h3 className="text-xl font-bold text-white tracking-tight mt-0.5">
                   {selectedMeta.name}
@@ -371,7 +372,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
               </span>
 
               <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                Level {selectedMeta.levelRange[0]}-{selectedMeta.levelRange[1]}
+                {tr('Level')} {selectedMeta.levelRange[0]}-{selectedMeta.levelRange[1]}
               </span>
 
               <span
@@ -387,7 +388,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                     : 'bg-slate-800 border-slate-700 text-slate-300'
                 }`}
               >
-                {selectedMeta.type}
+                {tr(selectedMeta.type)}
               </span>
             </div>
 
@@ -398,27 +399,27 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
             {/* Zone Telemetry */}
             <div className="mt-4 space-y-2 bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-400">Atmosphere / Time:</span>
+                <span className="text-slate-400">{tr('Atmosphere / Time:')}</span>
                 <span className="text-slate-200 capitalize font-medium">
                   {selectedMeta.timeOfDay} · {selectedMeta.weather}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Safe Zone Protected:</span>
+                <span className="text-slate-400">{tr('Safe Zone Protected:')}</span>
                 <span className={selectedMeta.type === 'HOME' || selectedMeta.type === 'HUB' ? 'text-emerald-400 font-medium' : 'text-slate-500'}>
-                  {selectedMeta.type === 'HOME' || selectedMeta.type === 'HUB' ? 'Yes (Allied Base)' : 'Portals Only (400u)'}
+                  {selectedMeta.type === 'HOME' || selectedMeta.type === 'HUB' ? tr('Yes (Allied Base)') : tr('Portals Only (400u)')}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Dimensions:</span>
+                <span className="text-slate-400">{tr('Dimensions:')}</span>
                 <span className="text-slate-200 font-mono">
                   {selectedMeta.width} × {selectedMeta.height} px
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Server Capacity:</span>
+                <span className="text-slate-400">{tr('Server Capacity:')}</span>
                 <span className="text-slate-200">
-                  {selectedMeta.instanceCapacity} drivers / inst
+                  {selectedMeta.instanceCapacity} {tr('drivers / inst')}
                 </span>
               </div>
             </div>
@@ -456,7 +457,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
               {selectedMeta.id === currentNumericId ? (
                 <div className="w-full py-2.5 px-3 rounded-xl bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 text-center text-xs font-bold flex items-center justify-center gap-2">
                   <MapPin className="w-4 h-4" />
-                  Currently Here
+                  {tr('Currently Here')}
                 </div>
               ) : (
                 <button
@@ -467,7 +468,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                   className="w-full py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-sky-600/30"
                 >
                   <Sparkles className="w-4 h-4" />
-                  Roam to {selectedMeta.name}
+                  {tr('Roam to')} {selectedMeta.name}
                 </button>
               )}
             </div>

@@ -65,7 +65,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   : 'bg-slate-800 text-slate-400'
               }`}
             >
-              {profile.settings.soundEnabled ? 'Enabled' : 'Muted'}
+              {profile.settings.soundEnabled ? tr('Enabled') : tr('Muted')}
             </button>
           </div>
 
@@ -113,9 +113,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-full accent-orange-500 cursor-pointer"
             />
             <div className="flex justify-between text-[10px] text-slate-500">
-              <span>0.5x (Wide)</span>
-              <span>0.85x (Default)</span>
-              <span>1.2x (Close)</span>
+              <span>{tr('0.5x (Wide)')}</span>
+              <span>{tr('0.85x (Default)')}</span>
+              <span>{tr('1.2x (Close)')}</span>
             </div>
           </div>
 
@@ -124,7 +124,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div>
               <span className="font-medium text-white">{tr('Developer Diagnostics Overlay (F3)')}</span>
               <div className="text-[11px] text-slate-400 mt-0.5">
-                Displays real-time FPS, tick time, and entity counts
+                {tr('Displays real-time FPS, tick time, and entity counts')}
               </div>
             </div>
             <button
@@ -138,7 +138,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   : 'bg-slate-800 text-slate-400'
               }`}
             >
-              {profile.settings.showDebug ? 'ON' : 'OFF'}
+              {profile.settings.showDebug ? tr('ON') : tr('OFF')}
             </button>
           </div>
 
@@ -146,11 +146,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between text-xs text-slate-300 py-2"><span>{tr('Language')}</span><select value={currentLang} onChange={(e) => setLang(e.target.value as any)} className="bg-slate-950 border border-slate-700 rounded px-2 py-1"><option value="en">English</option><option value="de">Deutsch</option></select></div>
           <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
             <div><span className="font-medium text-white">{tr('Colour-blind mode')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('Radar uses amber instead of red for enemies')}</div></div>
-            <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, colorBlind: !profile.settings.colorBlind }); }} className={`px-3 py-1 rounded text-xs font-semibold ${profile.settings.colorBlind ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{profile.settings.colorBlind ? 'ON' : 'OFF'}</button>
+            <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, colorBlind: !profile.settings.colorBlind }); }} className={`px-3 py-1 rounded text-xs font-semibold ${profile.settings.colorBlind ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{profile.settings.colorBlind ? tr('ON') : tr('OFF')}</button>
           </div>
           <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
             <div><span className="font-medium text-white">{tr('Reduced effects')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('No particles or tread marks (less motion, better on slow phones)')}</div></div>
-            <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, reducedEffects: !profile.settings.reducedEffects }); }} className={`px-3 py-1 rounded text-xs font-semibold ${profile.settings.reducedEffects ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{profile.settings.reducedEffects ? 'ON' : 'OFF'}</button>
+            <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, reducedEffects: !profile.settings.reducedEffects }); }} className={`px-3 py-1 rounded text-xs font-semibold ${profile.settings.reducedEffects ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{profile.settings.reducedEffects ? tr('ON') : tr('OFF')}</button>
           </div>
           <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
             <span className="font-medium text-white">{tr('UI size')} {Math.round((profile.settings.uiScale || 1) * 100)}%</span>
@@ -164,7 +164,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span>{tr('Reset Game Progress')}</span>
             </div>
             <div className="text-[11px] text-slate-400 mt-1">
-              Clears saved vehicles, scrap, and returns profile to starter Patchwork Scout.
+              {tr('Clears saved vehicles, scrap, and returns profile to starter Patchwork Scout.')}
             </div>
 
             {confirmReset ? (
@@ -178,13 +178,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   }}
                   className="px-3 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-semibold transition-colors"
                 >
-                  Confirm Reset
+                  {tr('Confirm Reset')}
                 </button>
                 <button
                   onClick={() => setConfirmReset(false)}
                   className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
                 >
-                  Cancel
+                  {tr('Cancel')}
                 </button>
               </div>
             ) : (
@@ -192,7 +192,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClick={() => setConfirmReset(true)}
                 className="mt-2.5 px-3 py-1 rounded bg-red-900/50 hover:bg-red-800/80 text-red-200 font-medium transition-colors"
               >
-                Reset Progress
+                {tr('Reset Progress')}
               </button>
             )}
           </div>

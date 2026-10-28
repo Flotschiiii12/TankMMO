@@ -1,4 +1,5 @@
 import React from 'react';
+import { tr } from '../i18n.ts';
 import type { SimEntity } from '../sim/types.ts';
 
 /** Center-top announcement (events, waves, arena rounds). */
@@ -22,7 +23,7 @@ export const BossBar: React.FC<{ player: SimEntity | null; entities: SimEntity[]
   const armorPct = boss.maxArmor > 0 ? Math.max(0, Math.min(100, (boss.armor / boss.maxArmor) * 100)) : 0;
   return (
     <div className="absolute top-24 left-1/2 -translate-x-1/2 z-20 pointer-events-none w-[min(520px,60vw)]">
-      <div className="text-center text-xs font-semibold text-rose-200 mb-0.5">{boss.name}{boss.isWorldBoss ? ' · World Boss' : ''} {boss.bossPhase ? `· Phase ${boss.bossPhase}` : ''}</div>
+      <div className="text-center text-xs font-semibold text-rose-200 mb-0.5">{boss.name}{boss.isWorldBoss ? ` · ${tr('World Boss')}` : ''} {boss.bossPhase ? `· ${tr('Phase')} ${boss.bossPhase}` : ''}</div>
       <div className="h-3 rounded bg-slate-900/80 border border-slate-700 overflow-hidden"><div className="h-full bg-rose-600" style={{ width: `${pct}%` }} /></div>
       <div className="h-1 mt-0.5 rounded bg-slate-900/80 overflow-hidden"><div className="h-full bg-sky-500" style={{ width: `${armorPct}%` }} /></div>
     </div>

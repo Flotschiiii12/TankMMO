@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../i18n.ts';
 import { Smartphone } from 'lucide-react';
 
 export const PortraitWarning: React.FC = () => {
@@ -28,10 +29,10 @@ export const PortraitWarning: React.FC = () => {
       </div>
 
       <h2 className="text-xl font-bold tracking-tight text-white mb-2">
-        Rotate Device to Landscape
+        {tr('Rotate Device to Landscape')}
       </h2>
       <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
-        Treadfront is optimized for dual-thumb landscape armor combat. Turn your device horizontally to deploy onto the battlefield.
+        {tr('Treadfront is optimized for dual-thumb landscape armor combat. Turn your device horizontally to deploy onto the battlefield.')}
       </p>
     </div>
   );

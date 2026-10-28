@@ -69,10 +69,10 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
         <div className="mt-2 overflow-y-auto space-y-1.5 pr-1">
           {tab === 'friends' && (
             <>
-              <div className="flex gap-1.5"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Player name" className="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><button className={btn} onClick={() => call({ op: 'friend_request', name })}>{tr('Add friend')}</button><button className={ghost} onClick={() => call({ op: 'party_invite', name }, false)}>{tr('Invite to party')}</button></div>
+              <div className="flex gap-1.5"><input value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('Player name')} className="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><button className={btn} onClick={() => call({ op: 'friend_request', name })}>{tr('Add friend')}</button><button className={ghost} onClick={() => call({ op: 'party_invite', name }, false)}>{tr('Invite to party')}</button></div>
               {(data ?? []).map((f: any) => (
                 <div key={f.id} className={row}>
-                  <span><b className="text-white">{f.name}</b> <span className="text-slate-500">{f.status === 'accepted' ? (f.online ? 'online' : 'offline') : f.status}</span></span>
+                  <span><b className="text-white">{f.name}</b> <span className="text-slate-500">{f.status === 'accepted' ? (f.online ? tr('online') : tr('offline')) : tr(f.status)}</span></span>
                   <span className="flex gap-1">
                     {f.status === 'incoming' && <button className={btn} onClick={() => call({ op: 'friend_accept', name: f.name })}>{tr('Accept')}</button>}
                     <button className={ghost} onClick={() => call({ op: 'friend_remove', name: f.name })}>{tr('Remove')}</button>
@@ -87,30 +87,30 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
           {tab === 'party' && (
             data ? (
               <>
-                <div className="text-xs text-slate-400">Leader: <b className="text-white">{data.leader}</b> · shared XP +10 % per extra member</div>
+                <div className="text-xs text-slate-400">{tr('Leader')}: <b className="text-white">{data.leader}</b> · {tr('shared XP +10 % per extra member')}</div>
                 {data.members.map((m: any) => <div key={m.name} className={row}><span><b className="text-white">{m.name}</b> Lv {m.level}</span><span className="flex gap-1"><button className={ghost} onClick={() => call({ op: 'party_kick', name: m.name })}>{tr('Kick')}</button></span></div>)}
                 <button className={ghost} onClick={() => call({ op: 'party_leave' })}>{tr('Leave party')}</button>
               </>
-            ) : <div className="text-xs text-slate-500 p-2">Not in a party. Invite someone from the Friends tab (up to 5 players).</div>
+            ) : <div className="text-xs text-slate-500 p-2">{tr('Not in a party. Invite someone from the Friends tab (up to 5 players).')}</div>
           )}
 
           {tab === 'clan' && (
             data && !data.none ? (
               <>
-                <div className="text-sm text-white font-semibold flex items-center gap-1.5"><ClanEmblemBadge emblem={data.emblem} size={28} />[{data.tag}] {data.name} <span className="text-xs text-slate-400">storage {data.scrap?.toLocaleString()} scrap · you are {data.myRole}</span>{data.myRole !== 'member' && <button className={ghost} onClick={() => setPickEmblem(!pickEmblem)}>{tr('Emblem')}</button>}</div>
+                <div className="text-sm text-white font-semibold flex items-center gap-1.5"><ClanEmblemBadge emblem={data.emblem} size={28} />[{data.tag}] {data.name} <span className="text-xs text-slate-400">{tr('storage')} {data.scrap?.toLocaleString()} {tr('scrap')} · {tr('you are')} {tr(data.myRole)}</span>{data.myRole !== 'member' && <button className={ghost} onClick={() => setPickEmblem(!pickEmblem)}>{tr('Emblem')}</button>}</div>
                 {pickEmblem && <EmblemGrid value={data.emblem ?? ''} onPick={(id) => { setPickEmblem(false); void call({ op: 'clan_emblem', emblem: id }); }} />}
-                <div className="flex gap-1.5"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Invite player" className="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><button className={btn} onClick={() => call({ op: 'clan_invite', name })}>{tr('Invite')}</button><button className={ghost} onClick={() => call({ op: 'clan_donate', amount: 1000 })}>{tr('Donate 1,000')}</button></div>
+                <div className="flex gap-1.5"><input value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('Invite player')} className="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><button className={btn} onClick={() => call({ op: 'clan_invite', name })}>{tr('Invite')}</button><button className={ghost} onClick={() => call({ op: 'clan_donate', amount: 1000 })}>{tr('Donate 1,000')}</button></div>
                 {data.members.map((m: any) => (
-                  <div key={m.id} className={row}><span><b className="text-white">{m.name}</b> Lv {m.level} <span className="text-slate-500">{m.role}</span></span>
+                  <div key={m.id} className={row}><span><b className="text-white">{m.name}</b> Lv {m.level} <span className="text-slate-500">{tr(m.role)}</span></span>
                     <span className="flex gap-1">{m.role === 'member' && <button className={ghost} onClick={() => call({ op: 'clan_role', name: m.name, role: 'officer' })}>{tr('Promote')}</button>}<button className={ghost} onClick={() => call({ op: 'clan_kick', name: m.name })}>{tr('Kick')}</button></span></div>
                 ))}
-                <div className="text-[11px] text-slate-500">Log: {(data.log ?? []).slice(0, 5).map((l: any) => `${l.actor}: ${l.text}`).join(' | ')}</div>
+                <div className="text-[11px] text-slate-500">{tr('Log')}: {(data.log ?? []).slice(0, 5).map((l: any) => `${l.actor}: ${l.text}`).join(' | ')}</div>
                 <button className={ghost} onClick={() => call({ op: 'clan_leave' })}>{tr('Leave clan')}</button>
               </>
             ) : (
               <>
                 <div className="text-xs text-slate-400">{tr('Create a clan (10,000 scrap) or accept an invite.')}</div>
-                <div className="flex gap-1.5"><input value={clanName} onChange={(e) => setClanName(e.target.value)} placeholder="Clan name" className="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><input value={clanTag} onChange={(e) => setClanTag(e.target.value)} placeholder="TAG" className="w-16 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><button className={btn} onClick={() => call({ op: 'clan_create', name: clanName, tag: clanTag, emblem: clanEmblem || undefined })}>{tr('Create')}</button></div>
+                <div className="flex gap-1.5"><input value={clanName} onChange={(e) => setClanName(e.target.value)} placeholder={tr('Clan name')} className="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><input value={clanTag} onChange={(e) => setClanTag(e.target.value)} placeholder={tr('TAG')} className="w-16 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" /><button className={btn} onClick={() => call({ op: 'clan_create', name: clanName, tag: clanTag, emblem: clanEmblem || undefined })}>{tr('Create')}</button></div>
                 <EmblemGrid value={clanEmblem} onPick={(id) => setClanEmblem(clanEmblem === id ? '' : id)} />
                 {(data?.invites ?? []).map((i: any) => <div key={i.clanId} className={row}><span className="flex items-center gap-1"><ClanEmblemBadge emblem={i.emblem} size={18} />[{i.tag}] {i.name}</span><button className={btn} onClick={() => call({ op: 'clan_accept', clanId: i.clanId })}>{tr('Join')}</button></div>)}
               </>
@@ -119,9 +119,9 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
 
           {tab === 'gates' && data && (
             <>
-              <div className="text-xs text-slate-300">Free keys left today: <b className="text-orange-400">{data.freeKeysLeft}</b> · Gate keys: <b className="text-white">{data.gateKeys}</b>. Parties (up to 5) enter together; enemies scale with party size. 15 minute limit.</div>
+              <div className="text-xs text-slate-300">{tr('Free keys left today')}: <b className="text-orange-400">{data.freeKeysLeft}</b> · {tr('Gate keys')}: <b className="text-white">{data.gateKeys}</b>. {tr('Parties (up to 5) enter together; enemies scale with party size. 15 minute limit.')}</div>
               {data.dungeons.map((d: any) => (
-                <div key={d.id} className={row}><span><b className="text-white">{d.name}</b> <span className="text-slate-500">Lv {d.minLevel}+ · {d.waves} waves + boss {d.cleared ? '· cleared' : ''}</span></span>
+                <div key={d.id} className={row}><span><b className="text-white">{d.name}</b> <span className="text-slate-500">Lv {d.minLevel}+ · {d.waves} {tr('waves + boss')} {d.cleared ? `· ${tr('cleared')}` : ''}</span></span>
                   <button className={btn} onClick={() => call({ op: 'dungeon_enter', dungeonId: d.id })}>{tr('Enter')}</button></div>
               ))}
               <button className={ghost} onClick={() => call({ op: 'dungeon_leave' })}>{tr('Leave current gate')}</button>
@@ -136,14 +136,14 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
                 <div className="flex items-center gap-2">
                   <RankBadge level={rank.level} size={48} />
                   <FactionCrest faction={character.faction} size={40} />
-                  <div className="text-xs text-slate-300"><CurrencyIcon kind="honor" /> Honor <b className="text-white">{character.wallet.honor}</b> · rank {rank.level} / 21 · <CurrencyIcon kind="marks" /> season marks {character.wallet.seasonMarks} · faction <b className="capitalize text-white">{character.faction}</b></div>
+                  <div className="text-xs text-slate-300"><CurrencyIcon kind="honor" /> {tr('Honor')} <b className="text-white">{character.wallet.honor}</b> · {tr('rank')} {rank.level} / 21 · <CurrencyIcon kind="marks" /> {tr('season marks')} {character.wallet.seasonMarks} · {tr('faction')} <b className="capitalize text-white">{character.faction}</b></div>
                 </div>
-                <div className="text-xs text-slate-400">Titles: {character.season.titles.join(', ') || 'none yet'}</div>
-                <div className="text-[11px] text-slate-400">Codex: {Object.entries(prog).map(([k, v]) => `${k} ${v.have}/${v.total}`).join(' · ')}</div>
+                <div className="text-xs text-slate-400">{tr('Titles')}: {character.season.titles.join(', ') || tr('none yet')}</div>
+                <div className="text-[11px] text-slate-400">{tr('Codex')}: {Object.entries(prog).map(([k, v]) => `${k} ${v.have}/${v.total}`).join(' · ')}</div>
                 {ACHIEVEMENTS_CATALOG.map((a) => {
                   const p = Math.min(a.targetValue, progressOf(character, a.id));
                   const done = character.achievements.includes(a.id);
-                  return <div key={a.id} className={row}><span className={done ? 'text-emerald-400' : 'text-slate-200'}>{a.id.replace('ach_', '').replace(/_/g, ' ')}</span><span className="text-slate-400 tabular-nums">{done ? 'done' : `${p} / ${a.targetValue}`}</span></div>;
+                  return <div key={a.id} className={row}><span className={done ? 'text-emerald-400' : 'text-slate-200'}>{a.id.replace('ach_', '').replace(/_/g, ' ')}</span><span className="text-slate-400 tabular-nums">{done ? tr('done') : `${p} / ${a.targetValue}`}</span></div>;
                 })}
               </>
             );
@@ -151,42 +151,42 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
 
           {tab === 'market' && (
             <>
-              <div className="text-[11px] text-slate-400">Auction house works in the hub (map 13). 5 % tax on sales, listings last 12/24/48 h.</div>
+              <div className="text-[11px] text-slate-400">{tr('Auction house works in the hub (map 13). 5 % tax on sales, listings last 12/24/48 h.')}</div>
               <div className="flex gap-1.5 items-center">
                 <select value={sellUid} onChange={(e) => setSellUid(e.target.value)} className="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs">
-                  <option value="">Item to sell…</option>
-                  {character.inventory.map((i) => <option key={i.uid} value={i.uid}>{describeItem(i).name} ({i.rarity})</option>)}
+                  <option value="">{tr('Item to sell…')}</option>
+                  {character.inventory.map((i) => <option key={i.uid} value={i.uid}>{describeItem(i).name} ({tr(i.rarity)})</option>)}
                 </select>
-                <input value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} placeholder={(() => { const it = character.inventory.find((i) => i.uid === sellUid); const b = it && priceBandClient(it.defId); return b ? `${b.min}-${b.max}` : 'price'; })()} className="w-28 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" />
+                <input value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} placeholder={(() => { const it = character.inventory.find((i) => i.uid === sellUid); const b = it && priceBandClient(it.defId); return b ? `${b.min}-${b.max}` : tr('price'); })()} className="w-28 px-2 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs" />
                 <button className={btn} onClick={() => call({ op: 'ah_sell', uid: sellUid, price: Number(sellPrice), hours: 24 })}>{tr('List 24h')}</button>
               </div>
               {(data ?? []).map((l: any) => (
-                <div key={l.id} className={row}><span><b className="text-white">{describeItem(l.item).name}</b> <span className="text-slate-500">{l.item.rarity} · {l.sellerName}</span></span>
+                <div key={l.id} className={row}><span><b className="text-white">{describeItem(l.item).name}</b> <span className="text-slate-500">{tr(l.item.rarity)} · {l.sellerName}</span></span>
                   <span className="flex gap-2 items-center"><b className="text-amber-300 tabular-nums">{l.price.toLocaleString()}</b><button className={btn} onClick={() => call({ op: 'ah_buy', id: l.id })}>{tr('Buy')}</button></span></div>
               ))}
               {(data ?? []).length === 0 && <div className="text-xs text-slate-500 p-2">{tr('No listings.')}</div>}
               <button className={ghost} onClick={async () => { const r = await call({ op: 'mail_list' }, false); for (const m of r.data ?? []) await call({ op: 'mail_claim', id: m.id }, false); void load(); }}>{tr('Collect mail')}</button>
-              <button className={ghost} onClick={async () => { const mine = await client.social({ op: 'ah_mine' }); setMsg(`${mine.data?.length ?? 0} of your listings are active`); }}>{tr('My listings')}</button>
+              <button className={ghost} onClick={async () => { const mine = await client.social({ op: 'ah_mine' }); setMsg(tr('{n} of your listings are active', { n: mine.data?.length ?? 0 })); }}>{tr('My listings')}</button>
             </>
           )}
 
           {tab === 'arena' && data && (
             <>
-              <div className="text-xs text-slate-300">Your vehicle power <b className="text-orange-400">{data.power}</b> → league <b className="text-white capitalize">{data.league}</b>. Everyone fights with their own vehicle and gear.</div>
-              {Object.entries(data.ratings).map(([m, r]: any) => <div key={m} className={row}><span className="text-white">{m}</span><span className="text-slate-400">rating {r.rating} · {r.wins}W/{r.losses}L</span></div>)}
-              {data.banMinutes > 0 && <div className="text-xs text-rose-300">Queue ban: {data.banMinutes} min (left a match early)</div>}
+              <div className="text-xs text-slate-300">{tr('Your vehicle power')} <b className="text-orange-400">{data.power}</b> → {tr('league')} <b className="text-white capitalize">{data.league}</b>. {tr('Everyone fights with their own vehicle and gear.')}</div>
+              {Object.entries(data.ratings).map(([m, r]: any) => <div key={m} className={row}><span className="text-white">{m}</span><span className="text-slate-400">{tr('rating')} {r.rating} · {r.wins}W/{r.losses}L</span></div>)}
+              {data.banMinutes > 0 && <div className="text-xs text-rose-300">{tr('Queue ban')}: {data.banMinutes} min ({tr('left a match early')})</div>}
               <div className="flex gap-1.5 items-center">
                 {(['1v1', '3v3', '5v5'] as const).map((m) => <button key={m} onClick={() => setMode(m)} className={`px-2 py-1 rounded text-xs ${mode === m ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{m}</button>)}
-                {data.queued ? <button className={ghost} onClick={() => call({ op: 'arena_leave' })}>Leave queue ({data.queued})</button> : <button className={btn} onClick={() => call({ op: 'arena_queue', mode })}>{tr('Queue')}</button>}
+                {data.queued ? <button className={ghost} onClick={() => call({ op: 'arena_leave' })}>{tr('Leave queue')} ({data.queued})</button> : <button className={btn} onClick={() => call({ op: 'arena_queue', mode })}>{tr('Queue')}</button>}
               </div>
-              <button className={ghost} onClick={async () => { const r = await client.social({ op: 'war_status' }); setMsg(r.ok ? `War week ${r.data.week}: ${Object.entries(r.data.scores).map(([f, v]) => `${f} ${v}`).join(' · ')}` : ''); }}>{tr('Faction war scores')}</button>
+              <button className={ghost} onClick={async () => { const r = await client.social({ op: 'war_status' }); setMsg(r.ok ? `${tr('War week')} ${r.data.week}: ${Object.entries(r.data.scores).map(([f, v]) => `${f} ${v}`).join(' · ')}` : ''); }}>{tr('Faction war scores')}</button>
             </>
           )}
 
           {tab === 'ranking' && (
             <>
               <div className="flex gap-1.5">{(['level', 'clans'] as const).map((k) => <button key={k} onClick={() => setRankKind(k)} className={`px-2 py-1 rounded text-xs ${rankKind === k ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{k}</button>)}</div>
-              {(data ?? []).map((r: any, i: number) => <div key={i} className={row}><span>#{i + 1} <b className="text-white inline-flex items-center gap-1">{r.emblem && <ClanEmblemBadge emblem={r.emblem} size={16} />}{r.name}{r.tag ? ` [${r.tag}]` : ''}</b></span><span className="text-slate-400">{r.level ? `Lv ${r.level}` : `${r.members} members · ${r.totalLevel} levels`}</span></div>)}
+              {(data ?? []).map((r: any, i: number) => <div key={i} className={row}><span>#{i + 1} <b className="text-white inline-flex items-center gap-1">{r.emblem && <ClanEmblemBadge emblem={r.emblem} size={16} />}{r.name}{r.tag ? ` [${r.tag}]` : ''}</b></span><span className="text-slate-400">{r.level ? `Lv ${r.level}` : tr('{m} members · {l} levels', { m: r.members, l: r.totalLevel })}</span></div>)}
             </>
           )}
         </div>

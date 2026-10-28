@@ -18,21 +18,21 @@ interface Props {
 
 const objectiveText = (o: QuestObjective, target: number): string => {
   const t = o.target !== undefined ? ` ${String(o.target).replace(/_/g, ' ')}` : '';
-  const e = o.elite ? ' elite' : '';
+  const e = o.elite ? ` ${tr('elite')}` : '';
   switch (o.type) {
-    case 'kill': return `Defeat ${target}${e}${t} enemies`;
-    case 'collect_ore': return `Collect ${target}${t} ore`;
-    case 'deliver': return `Deliver ${target} scrap`;
-    case 'reach_map': return `Reach map ${o.target}`;
-    case 'defeat_boss': return `Defeat a boss${t}`;
-    case 'clear_gate': return `Clear a gate${t}`;
-    case 'win_arena': return `Win ${target} arena match(es)`;
-    case 'craft': return `Craft ${target} item(s)`;
-    case 'upgrade': return `Upgrade items ${target} times`;
-    case 'explore': return `Discover ${target} secret(s)`;
-    case 'escort': return `Complete ${target} convoy escort(s)`;
-    case 'use_portal': return `Use portals ${target} times`;
-    case 'tutorial': return `Tutorial: ${o.target}`;
+    case 'kill': return tr('Defeat {n}{e}{t} enemies', { n: target, e, t });
+    case 'collect_ore': return tr('Collect {n}{t} ore', { n: target, t });
+    case 'deliver': return tr('Deliver {n} scrap', { n: target });
+    case 'reach_map': return tr('Reach map {t}', { t: String(o.target) });
+    case 'defeat_boss': return tr('Defeat a boss{t}', { t });
+    case 'clear_gate': return tr('Clear a gate{t}', { t });
+    case 'win_arena': return tr('Win {n} arena match(es)', { n: target });
+    case 'craft': return tr('Craft {n} item(s)', { n: target });
+    case 'upgrade': return tr('Upgrade items {n} times', { n: target });
+    case 'explore': return tr('Discover {n} secret(s)', { n: target });
+    case 'escort': return tr('Complete {n} convoy escort(s)', { n: target });
+    case 'use_portal': return tr('Use portals {n} times', { n: target });
+    case 'tutorial': return tr('Tutorial: {t}', { t: String(o.target) });
   }
 };
 
@@ -62,7 +62,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
         <div className="flex gap-2 mt-2 text-xs">
           {(['active', 'available', 'season'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded capitalize ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>
-              {t === 'active' ? `Active (${active.length})` : t === 'available' ? `Available (${available.length})` : `Season ${ch.season.seasonId || ''}`}
+              {t === 'active' ? `${tr('Active')} (${active.length})` : t === 'available' ? `${tr('Available')} (${available.length})` : `${tr('Season')} ${ch.season.seasonId || ''}`}
             </button>
           ))}
           {msg && <span className="ml-auto text-[11px] text-orange-300 self-center">{msg}</span>}
@@ -79,7 +79,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
                   <div><span className="text-white font-medium">{def.name}</span> <span className="text-[10px] uppercase text-slate-500">{def.kind}</span></div>
                   <div className="flex gap-2">
                     {aq.ready && <button onClick={() => run({ kind: 'claim_quest', questId: aq.id })} className="px-2 py-1 rounded bg-emerald-600/80 text-white">{tr('Claim')}</button>}
-                    {def.kind !== 'daily' && def.kind !== 'weekly' && <button onClick={() => run({ kind: 'abandon_quest', questId: aq.id })} className="text-[10px] text-slate-500 hover:text-slate-300">abandon</button>}
+                    {def.kind !== 'daily' && def.kind !== 'weekly' && <button onClick={() => run({ kind: 'abandon_quest', questId: aq.id })} className="text-[10px] text-slate-500 hover:text-slate-300">{tr('abandon')}</button>}
                   </div>
                 </div>
                 {def.objectives.map((o, i) => (
@@ -88,7 +88,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
                     <div className="h-1 rounded bg-slate-800 mt-0.5"><div className="h-1 rounded bg-orange-500" style={{ width: `${Math.min(100, (aq.progress[i] / aq.targets[i]) * 100)}%` }} /></div>
                   </div>
                 ))}
-                <div className="mt-1 text-[10px] text-slate-500">Reward: {rw.xp} XP, {rw.scrap} scrap{rw.gateKeys ? `, ${rw.gateKeys} key` : ''}{rw.itemRarity ? `, ${rw.itemRarity} item` : ''}</div>
+                <div className="mt-1 text-[10px] text-slate-500">{tr('Reward')}: {rw.xp} XP, {rw.scrap} {tr('scrap')}{rw.gateKeys ? `, ${rw.gateKeys} ${tr('key')}` : ''}{rw.itemRarity ? `, ${rw.itemRarity} ${tr('item')}` : ''}</div>
               </div>
             );
           })}
@@ -106,15 +106,15 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
 
           {tab === 'season' && (
             <>
-              <div className="text-xs text-slate-300 p-2">{tr('Tier ')}<b className="text-orange-400">{tier}</b> / 50 · {ch.season.points % SEASON_POINTS_PER_TIER} / {SEASON_POINTS_PER_TIER} points · today {ch.season.pointsToday} / 150 (daily cap). Points come from daily and weekly quests.</div>
+              <div className="text-xs text-slate-300 p-2">{tr('Tier ')}<b className="text-orange-400">{tier}</b> / 50 · {ch.season.points % SEASON_POINTS_PER_TIER} / {SEASON_POINTS_PER_TIER} {tr('points')} · {tr('today')} {ch.season.pointsToday} / 150 ({tr('daily cap')}). {tr('Points come from daily and weekly quests.')}</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 {SEASON_REWARDS.map((r) => {
                   const claimed = ch.season.claimed.includes(r.tier);
                   const reached = r.tier <= tier;
                   return (
                     <div key={r.tier} className={`flex items-center justify-between p-2 rounded border text-xs ${reached ? 'border-slate-700' : 'border-slate-800 opacity-60'}`}>
-                      <div><b>Tier {r.tier}</b> <span className="text-slate-400">{[r.scrap && `${r.scrap} scrap`, r.fragments && `${r.fragments} frag`, r.ore && `${r.ore} ore`, r.gateKeys && `${r.gateKeys} key`, r.seasonMarks && `${r.seasonMarks} marks`, r.skin && `skin`, r.title && `title: ${r.title}`].filter(Boolean).join(', ')}</span></div>
-                      <button disabled={!reached || claimed} onClick={() => run({ kind: 'claim_season_tier', tier: r.tier })} className={`px-2 py-0.5 rounded ${claimed ? 'text-emerald-400' : reached ? 'bg-emerald-600/80 text-white' : 'text-slate-600'}`}>{claimed ? 'Claimed' : 'Claim'}</button>
+                      <div><b>{tr('Tier ')}{r.tier}</b> <span className="text-slate-400">{[r.scrap && `${r.scrap} ${tr('scrap')}`, r.fragments && `${r.fragments} ${tr('frag')}`, r.ore && `${r.ore} ${tr('ore')}`, r.gateKeys && `${r.gateKeys} ${tr('key')}`, r.seasonMarks && `${r.seasonMarks} ${tr('marks')}`, r.skin && tr('skin'), r.title && `${tr('title')}: ${r.title}`].filter(Boolean).join(', ')}</span></div>
+                      <button disabled={!reached || claimed} onClick={() => run({ kind: 'claim_season_tier', tier: r.tier })} className={`px-2 py-0.5 rounded ${claimed ? 'text-emerald-400' : reached ? 'bg-emerald-600/80 text-white' : 'text-slate-600'}`}>{claimed ? tr('Claimed') : tr('Claim')}</button>
                     </div>
                   );
                 })}

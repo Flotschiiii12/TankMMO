@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { tr } from '../i18n.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { Play } from 'lucide-react';
 
@@ -25,8 +26,8 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStart, playerLevel }
     <div className="absolute inset-0 z-50 flex flex-col items-center justify-between p-8 bg-gradient-to-b from-slate-950/70 via-slate-950/40 to-slate-950/90 select-none pointer-events-auto">
       {/* Top Quiet Meta */}
       <div className="w-full flex items-center justify-between text-xs text-slate-400 max-w-4xl">
-        <span className="font-semibold tracking-wider text-orange-400">TREADFRONT PROTOTYPE</span>
-        <span>MMO-Style Top-Down Tactical Armor</span>
+        <span className="font-semibold tracking-wider text-orange-400">{tr('TREADFRONT PROTOTYPE')}</span>
+        <span>{tr('MMO-Style Top-Down Tactical Armor')}</span>
       </div>
 
       {/* Centerpiece: Bespoke SVG Title Lockup */}
@@ -47,7 +48,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStart, playerLevel }
           TREADFRONT
         </h1>
         <p className="text-sm md:text-base text-slate-300 font-light max-w-md mx-auto leading-relaxed">
-          Command your armored combat platform across hostile biomes, engage siege fortifications, scavenge enemy scrap, and forge an apex war machine.
+          {tr('Command your armored combat platform across hostile biomes, engage siege fortifications, scavenge enemy scrap, and forge an apex war machine.')}
         </p>
 
         {/* Primary Start CTA */}
@@ -61,20 +62,20 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onStart, playerLevel }
             className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-orange-500 hover:bg-orange-400 active:scale-95 text-slate-950 font-bold text-sm tracking-wide transition-all shadow-lg shadow-orange-500/20"
           >
             <Play size={18} className="fill-slate-950" />
-            <span>DEPLOY TO BATTLEFIELD</span>
+            <span>{tr('DEPLOY TO BATTLEFIELD')}</span>
           </button>
         </div>
 
         {playerLevel > 1 && (
           <div className="text-xs text-slate-400 mt-3 tabular-nums">
-            Saved Profile: Pilot Level {playerLevel}
+            {tr('Saved Profile: Pilot Level')} {playerLevel}
           </div>
         )}
       </div>
 
       {/* Flat Control Hints Footer */}
       <div className="text-xs text-slate-500 text-center tracking-wide font-medium">
-        WASD Move · Space Auto-Fire · Q/E/F Abilities · Left Stick + Target Ring on Touch · Esc Pause
+        {tr('WASD Move · Space Auto-Fire · Q/E/F Abilities · Left Stick + Target Ring on Touch · Esc Pause')}
       </div>
     </div>
   );

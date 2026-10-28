@@ -136,13 +136,13 @@ export const GarageModal: React.FC<GarageModalProps> = ({
         {/* Currency Strip */}
         <div className="flex items-center gap-5 text-xs">
           <span className="tabular-nums">
-            <CurrencyIcon kind="scrap" /> Scrap: <span className="font-semibold text-white">{ch.wallet.scrap.toLocaleString()}</span>
+            <CurrencyIcon kind="scrap" /> {tr('Scrap')}: <span className="font-semibold text-white">{ch.wallet.scrap.toLocaleString()}</span>
           </span>
           <span className="tabular-nums">
-            <CurrencyIcon kind="ore" /> Ore: <span className="font-semibold text-white">{oreHave.toLocaleString()}</span>
+            <CurrencyIcon kind="ore" /> {tr('Ore')}: <span className="font-semibold text-white">{oreHave.toLocaleString()}</span>
           </span>
           <span className="tabular-nums">
-            Level: <span className="font-semibold text-orange-400">{ch.level}</span>
+            {tr('Level')}: <span className="font-semibold text-orange-400">{ch.level}</span>
           </span>
           <button
             onClick={() => {
@@ -246,12 +246,12 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                         <span className="text-[10px] text-orange-400 font-medium">T{v.tier}</span>
                         {equipped && (
                           <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
-                            <Check size={12} /> Active
+                            <Check size={12} /> {tr('Active')}
                           </span>
                         )}
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        Hull: {v.baseHull.toLocaleString()} · Armor: {v.baseArmor.toLocaleString()}
+                        {tr('Hull')}: {v.baseHull.toLocaleString()} · {tr('Armor')}: {v.baseArmor.toLocaleString()}
                       </div>
                     </div>
 
@@ -260,7 +260,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                         <span className="text-[11px] text-slate-300">{tr('Owned')}</span>
                       ) : (
                         <span className="text-[11px] text-slate-400 tabular-nums">
-                          {v.costScrap} Scrap
+                          {v.costScrap} {tr('Scrap')}
                         </span>
                       )}
                     </div>
@@ -279,7 +279,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                       {selectedVehicle.name}
                     </h3>
                     <div className="text-xs text-orange-400 font-medium">
-                      Tier {selectedVehicle.tier} Combat Platform · Min Level {selectedVehicle.minLevel}
+                      {tr('Tier ')}{selectedVehicle.tier} {tr('Combat Platform')} · {tr('Min Level')} {selectedVehicle.minLevel}
                     </div>
                   </div>
 
@@ -310,7 +310,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                           : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       }`}
                     >
-                      Unlock ({selectedVehicle.costScrap.toLocaleString()} Scrap · {oreNeeded.toLocaleString()} Ore)
+                      {tr('Unlock')} ({selectedVehicle.costScrap.toLocaleString()} {tr('Scrap')} · {oreNeeded.toLocaleString()} {tr('Ore')})
                     </button>
                   )}
                 </div>
@@ -380,12 +380,12 @@ export const GarageModal: React.FC<GarageModalProps> = ({
         {activeTab === 'parts' && (
           <div className="mt-3 overflow-y-auto">
             <div className="flex items-center justify-between text-xs mb-3">
-              <span className="text-slate-300">Talent points available: <b className="text-orange-400">{C.talentPointsAvailable(ch)}</b> (from level 5, one per level)</span>
+              <span className="text-slate-300">{tr('Talent points available')}: <b className="text-orange-400">{C.talentPointsAvailable(ch)}</b> ({tr('from level 5, one per level')})</span>
               <button
                 onClick={() => run({ kind: 'respec' })}
                 className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
               >
-                Reset talents ({C.respecCost(ch).toLocaleString()} scrap)
+                {tr('Reset talents')} ({C.respecCost(ch).toLocaleString()} {tr('scrap')})
               </button>
             </div>
             {msg && <div className="text-xs text-orange-300 mb-2">{msg}</div>}
@@ -402,7 +402,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                           onClick={() => run({ kind: 'rank_talent', talentId: t.id })}
                           className="w-full flex items-center justify-between p-1.5 rounded border border-slate-800 hover:border-slate-600 text-left text-xs"
                         >
-                          <span className="text-slate-200">{talentLabel(t.id)} <span className="text-[10px] text-slate-500">{t.effectPerRank.isPercent ? `+${Math.round(t.effectPerRank.valuePerRank * 1000) / 10}%` : `+${t.effectPerRank.valuePerRank}`}/rank · Lv {t.minLevel}</span></span>
+                          <span className="text-slate-200">{talentLabel(t.id)} <span className="text-[10px] text-slate-500">{t.effectPerRank.isPercent ? `+${Math.round(t.effectPerRank.valuePerRank * 1000) / 10}%` : `+${t.effectPerRank.valuePerRank}`}/{tr('rank')} · Lv {t.minLevel}</span></span>
                           <span className={`tabular-nums ${rank === t.maxRank ? 'text-emerald-400' : 'text-slate-400'}`}>{rank}/{t.maxRank}</span>
                         </button>
                       );
@@ -440,31 +440,31 @@ export const GarageModal: React.FC<GarageModalProps> = ({
 
                     <div className="mt-4 space-y-1.5 text-xs text-slate-300">
                       <div>
-                        Base Damage: <span className="font-semibold text-white">{ammo.damage}</span>
+                        {tr('Base Damage')}: <span className="font-semibold text-white">{ammo.damage}</span>
                       </div>
                       <div>
-                        Penetration:{' '}
+                        {tr('Penetration')}:{' '}
                         <span className="font-semibold text-white">
                           {ammo.armorPiercingRatio > 0
-                            ? `Ignores ${ammo.armorPiercingRatio * 100}% Armor`
-                            : 'Standard'}
+                            ? tr('Ignores {n}% Armor', { n: ammo.armorPiercingRatio * 100 })
+                            : tr('Standard')}
                         </span>
                       </div>
                       <div>
-                        Area Splash:{' '}
+                        {tr('Area Splash')}:{' '}
                         <span className="font-semibold text-white">
-                          {ammo.splashRadius > 0 ? `${ammo.splashRadius} Radius` : 'Direct hit'}
+                          {ammo.splashRadius > 0 ? tr('{n} Radius', { n: ammo.splashRadius }) : tr('Direct hit')}
                         </span>
                       </div>
                       <div className="pt-2 text-slate-400 tabular-nums">
-                        Current In Reserve: <span className="text-white font-medium">{currentStock}</span>
+                        {tr('Current In Reserve')}: <span className="text-white font-medium">{currentStock}</span>
                       </div>
                     </div>
                   </div>
 
                   {ammo.id === 'standard' ? (
                     <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-400">
-                      Unlimited Free Fallback
+                      {tr('Unlimited Free Fallback')}
                     </div>
                   ) : (
                     <button
@@ -479,7 +479,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                           : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       }`}
                     >
-                      Buy +{ammo.packSize} Shells ({ammo.costScrapPerPack} Scrap)
+                      {tr('Buy')} +{ammo.packSize} {tr('Shells')} ({ammo.costScrapPerPack} {tr('Scrap')})
                     </button>
                   )}
                 </div>

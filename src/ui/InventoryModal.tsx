@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { tr } from '../i18n.ts';
+import { tr, T } from '../i18n.ts';
 import { RarityGem, CurrencyIcon, SlotIcon, FamilyIcon } from './GameIcon.tsx';
 import { X, Package } from 'lucide-react';
 import { UserProfile } from '../save/profile.ts';
@@ -32,7 +32,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
   const run = async (action: ClientAction, ok?: string) => {
     soundEngine.playUIClick();
     const r = await onAction(action);
-    setMsg(r.ok ? ok || '' : errorText(r.error || 'failed'));
+    setMsg(r.ok ? (ok ? tr(ok) : '') : errorText(r.error || 'failed'));
     return r;
   };
 
@@ -48,8 +48,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
     const candidates = slots.filter((s) => s.type === selInfo.def.slotType);
     const g = ch.garage.find((x) => x.vehicleId === vehicleId)!;
     const target = candidates.find((s) => !g.loadout[s.key]) || candidates[0];
-    if (!target) return setMsg('This vehicle has no matching slot');
-    void run({ kind: 'equip', vehicleId, slot: target.key, uid: sel.uid }, 'Equipped');
+    if (!target) return setMsg(tr('This vehicle has no matching slot'));
+    void run({ kind: 'equip', vehicleId, slot: target.key, uid: sel.uid }, T('Equipped'));
   };
 
   const fusionCandidates = sel ? ch.inventory.filter((i) => i.defId === sel.defId && i.rarity === sel.rarity && !C.isEquipped(ch, i.uid)) : [];
@@ -78,7 +78,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
             <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{t === 'gear' ? tr('Gear') : tr('Craft')}</button>
           ))}
           {ch.season.skins.length > 0 && (
-            <select value={ch.activeSkin ?? ''} onChange={(e) => void run({ kind: 'set_skin', skin: e.target.value || null }, 'Skin changed')} className="px-2 py-1 rounded bg-slate-800 text-slate-200">
+            <select value={ch.activeSkin ?? ''} onChange={(e) => void run({ kind: 'set_skin', skin: e.target.value || null }, T('Skin changed'))} className="px-2 py-1 rounded bg-slate-800 text-slate-200">
               <option value="">{tr('No skin')}</option>
               {ch.season.skins.map((k) => <option key={k} value={k}>{k.replace('skin_season_', '')}</option>)}
             </select>
@@ -126,7 +126,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                 ))}
               </div>
               <div className="text-[10px] text-slate-500 mb-1">{ch.inventory.length} / {C.inventoryCapacity(ch)} slots
-                <button onClick={() => run({ kind: 'expand_inventory' }, 'Inventory expanded')} className="ml-2 text-orange-400 hover:text-orange-300">Expand (+10) {C.expansionCost(ch).toLocaleString()} scrap</button>
+                <button onClick={() => run({ kind: 'expand_inventory' }, T('Inventory expanded'))} className="ml-2 text-orange-400 hover:text-orange-300">{tr('Expand (+10)')} {C.expansionCost(ch).toLocaleString()} {tr('scrap')}</button>
               </div>
               <div className="overflow-y-auto space-y-1 pr-1">
                 {items.length === 0 && <div className="text-xs text-slate-500 p-3">{tr('Nothing here yet. Enemies drop gear.')}</div>}
@@ -151,21 +151,21 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                 <div className="space-y-2">
                   <div>
                     <div className="text-sm font-semibold flex items-center gap-1" style={{ color: selInfo.color }}><RarityGem rarity={sel.rarity} size={18} />{selInfo.name}</div>
-                    <div className="text-[11px] text-slate-400">{sel.rarity} · {selInfo.def.slotType} · needs level {selInfo.def.minLevel}</div>
+                    <div className="text-[11px] text-slate-400">{tr(sel.rarity)} · {tr(selInfo.def.slotType)} · {tr('needs level')} {selInfo.def.minLevel}</div>
                   </div>
                   <div className="text-[11px] text-slate-300 space-y-0.5">
-                    {selInfo.def.baseDPS ? <div>Damage {Math.round(selInfo.def.baseDPS * C.itemStatMultiplier(sel))}</div> : null}
-                    {selInfo.def.baseHullBonus ? <div>Hull +{Math.round(selInfo.def.baseHullBonus * C.itemStatMultiplier(sel))}</div> : null}
-                    {selInfo.def.baseArmorBonus ? <div>Armor +{Math.round(selInfo.def.baseArmorBonus * C.itemStatMultiplier(sel))}</div> : null}
-                    {selInfo.def.baseFlatReduction ? <div>Flat reduction {Math.round(selInfo.def.baseFlatReduction * C.itemStatMultiplier(sel))}</div> : null}
-                    {selInfo.def.baseSpeedBonus ? <div>Speed +{Math.round(selInfo.def.baseSpeedBonus * C.itemStatMultiplier(sel))}</div> : null}
+                    {selInfo.def.baseDPS ? <div>{tr('Damage')} {Math.round(selInfo.def.baseDPS * C.itemStatMultiplier(sel))}</div> : null}
+                    {selInfo.def.baseHullBonus ? <div>{tr('Hull')} +{Math.round(selInfo.def.baseHullBonus * C.itemStatMultiplier(sel))}</div> : null}
+                    {selInfo.def.baseArmorBonus ? <div>{tr('Armor')} +{Math.round(selInfo.def.baseArmorBonus * C.itemStatMultiplier(sel))}</div> : null}
+                    {selInfo.def.baseFlatReduction ? <div>{tr('Flat reduction')} {Math.round(selInfo.def.baseFlatReduction * C.itemStatMultiplier(sel))}</div> : null}
+                    {selInfo.def.baseSpeedBonus ? <div>{tr('Speed')} +{Math.round(selInfo.def.baseSpeedBonus * C.itemStatMultiplier(sel))}</div> : null}
                     {sel.affixes.map((a, i) => (
                       <div key={i} className="flex items-center justify-between text-sky-300">
-                        <span>{a.stat.replace('_', ' ')} +{a.value}{a.stat === 'flat_reduction' ? '' : '%'}</span>
-                        <button onClick={() => run({ kind: 'reroll', uid: sel.uid, index: i }, 'Affix rerolled')} className="text-[10px] text-slate-400 hover:text-white">reroll ({C.rerollCost(sel).scrap})</button>
+                        <span>{tr(a.stat.replace('_', ' '))} +{a.value}{a.stat === 'flat_reduction' ? '' : '%'}</span>
+                        <button onClick={() => run({ kind: 'reroll', uid: sel.uid, index: i }, T('Affix rerolled'))} className="text-[10px] text-slate-400 hover:text-white">{tr('reroll')} ({C.rerollCost(sel).scrap})</button>
                       </div>
                     ))}
-                    <div className="text-[10px] text-slate-500">Rerolls used {sel.rerolls}/{C.MAX_REROLLS}</div>
+                    <div className="text-[10px] text-slate-500">{tr('Rerolls used')} {sel.rerolls}/{C.MAX_REROLLS}</div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {!equippedSlot && <button onClick={equipSel} className="px-2 py-1 rounded bg-emerald-600/80 text-white">{tr('Equip')}</button>}
@@ -174,17 +174,17 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                       const chance = Math.round(UPGRADE_LEVEL_STATS[sel.upgrade + 1].successChance * 100);
                       return (
                         <>
-                          <button onClick={() => run({ kind: 'upgrade', uid: sel.uid }, 'Upgrade attempted')} className="px-2 py-1 rounded bg-orange-600/80 text-white">Upgrade +{sel.upgrade + 1} ({chance}%)</button>
-                          {sel.upgrade >= 9 && <button onClick={() => run({ kind: 'upgrade', uid: sel.uid, safe: true }, 'Safe upgrade attempted')} className="px-2 py-1 rounded bg-sky-700/80 text-white">{tr('Safe mode')}</button>}
-                          <span className="w-full text-[10px] text-slate-500">Cost {c1.scrap.toLocaleString()} scrap, {c1.ore} ore, {c1.fragments} fragments</span>
+                          <button onClick={() => run({ kind: 'upgrade', uid: sel.uid }, T('Upgrade attempted'))} className="px-2 py-1 rounded bg-orange-600/80 text-white">{tr('Upgrade')} +{sel.upgrade + 1} ({chance}%)</button>
+                          {sel.upgrade >= 9 && <button onClick={() => run({ kind: 'upgrade', uid: sel.uid, safe: true }, T('Safe upgrade attempted'))} className="px-2 py-1 rounded bg-sky-700/80 text-white">{tr('Safe mode')}</button>}
+                          <span className="w-full text-[10px] text-slate-500">{tr('Cost')} {c1.scrap.toLocaleString()} {tr('scrap')}, {c1.ore} {tr('ore')}, {c1.fragments} {tr('fragments')}</span>
                         </>
                       );
                     })()}
-                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { void run({ kind: 'sell_item', uid: sel.uid }, 'Sold to vendor'); setSelected(null); }} className="px-2 py-1 rounded bg-slate-700 text-white">Sell ({C.npcSellValue(sel, ch)})</button>}
-                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { run({ kind: 'dismantle', uid: sel.uid }, 'Dismantled'); setSelected(null); }} className="px-2 py-1 rounded bg-rose-700/70 text-white">{tr('Dismantle')}</button>}
+                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { void run({ kind: 'sell_item', uid: sel.uid }, T('Sold to vendor')); setSelected(null); }} className="px-2 py-1 rounded bg-slate-700 text-white">Sell ({C.npcSellValue(sel, ch)})</button>}
+                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { run({ kind: 'dismantle', uid: sel.uid }, T('Dismantled')); setSelected(null); }} className="px-2 py-1 rounded bg-rose-700/70 text-white">{tr('Dismantle')}</button>}
                   </div>
                   {fusionCandidates.length >= 3 && (
-                    <button onClick={() => { const uids = fusionCandidates.slice(0, 3).map((i) => i.uid); run({ kind: 'fuse', uids }, 'Fusion done'); setSelected(null); }} className="px-2 py-1 rounded bg-violet-700/80 text-white">Fuse 3 identical ({fusionCandidates.length} available)</button>
+                    <button onClick={() => { const uids = fusionCandidates.slice(0, 3).map((i) => i.uid); run({ kind: 'fuse', uids }, T('Fusion done')); setSelected(null); }} className="px-2 py-1 rounded bg-violet-700/80 text-white">{tr('Fuse 3 identical')} ({fusionCandidates.length} {tr('available')})</button>
                   )}
                 </div>
               )}
@@ -201,9 +201,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                 <div key={r.id} className="flex items-center justify-between p-2 rounded border border-slate-800 bg-slate-900/40 text-xs">
                   <div>
                     <div className="text-white">{itemName(def)}</div>
-                    <div className="text-[10px] text-slate-500">Lv {r.minLevel} · {r.costScrap} scrap · {Object.entries(r.costOre).map(([k, v]) => `${v} ${k}`).join(', ')} · {r.costFragments} frag</div>
+                    <div className="text-[10px] text-slate-500">Lv {r.minLevel} · {r.costScrap} {tr('scrap')} · {Object.entries(r.costOre).map(([k, v]) => `${v} ${tr(k)}`).join(', ')} · {r.costFragments} {tr('frag')}</div>
                   </div>
-                  <button disabled={locked} onClick={() => run({ kind: 'craft', recipeId: r.id }, 'Crafted')} className={`px-2 py-1 rounded ${locked ? 'bg-slate-800 text-slate-600' : 'bg-orange-600/80 text-white'}`}>{tr('Craft')}</button>
+                  <button disabled={locked} onClick={() => run({ kind: 'craft', recipeId: r.id }, T('Crafted'))} className={`px-2 py-1 rounded ${locked ? 'bg-slate-800 text-slate-600' : 'bg-orange-600/80 text-white'}`}>{tr('Craft')}</button>
                 </div>
               );
             })}

@@ -74,17 +74,17 @@ export const HUD: React.FC<HUDProps> = ({
           {/* Currencies: Scrap & Parts */}
           <div className="flex items-center gap-2.5 text-xs text-slate-400">
             <span className="tabular-nums">
-              <CurrencyIcon kind="scrap" size={13} /> Scrap: <span className="font-semibold text-slate-100">{profile.character.wallet.scrap.toLocaleString()}</span>
+              <CurrencyIcon kind="scrap" size={13} /> {tr('Scrap')}: <span className="font-semibold text-slate-100">{profile.character.wallet.scrap.toLocaleString()}</span>
             </span>
             <span>·</span>
             <span className="tabular-nums">
-              <CurrencyIcon kind="fragments" size={13} /> Frag: <span className="font-semibold text-slate-100">{profile.character.wallet.fragments.toLocaleString()}</span>
+              <CurrencyIcon kind="fragments" size={13} /> {tr('Frag')}: <span className="font-semibold text-slate-100">{profile.character.wallet.fragments.toLocaleString()}</span>
             </span>
           </div>
 
           {/* Active Ammo Stack */}
           <div className="text-[11px] text-slate-300 tabular-nums">
-            Ammo: <span className="font-semibold text-orange-400">{player?.selectedAmmo.replace('_', ' ')}</span> (
+            {tr('Ammo')}: <span className="font-semibold text-orange-400">{player?.selectedAmmo.replace('_', ' ')}</span> (
             {player ? (player.ammoInventory[player.selectedAmmo] < 0 ? '∞' : player.ammoInventory[player.selectedAmmo]) : '∞'})
           </div>
 
@@ -97,7 +97,7 @@ export const HUD: React.FC<HUDProps> = ({
             return (
               <div key={aq.id} className="text-[10px] flex justify-between gap-2 text-slate-400 border-t border-slate-800/60 pt-0.5">
                 <span className={`truncate ${aq.ready ? 'text-emerald-400' : ''}`}>{def.name}</span>
-                <span className="tabular-nums shrink-0">{aq.ready ? 'ready' : `${done}/${total}`}</span>
+                <span className="tabular-nums shrink-0">{aq.ready ? tr('ready') : `${done}/${total}`}</span>
               </div>
             );
           })}
@@ -123,7 +123,7 @@ export const HUD: React.FC<HUDProps> = ({
                 soundEngine.playUIClick();
                 onOpenGarage();
               }}
-              title={isSafeZone ? 'Open Garage' : 'Garage (Available in Safe Zone)'}
+              title={isSafeZone ? tr('Open Garage') : tr('Garage (Available in Safe Zone)')}
               className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${
                 isSafeZone
                   ? 'bg-orange-500 text-slate-950 shadow-md hover:bg-orange-400 active:scale-95'
@@ -186,7 +186,7 @@ export const HUD: React.FC<HUDProps> = ({
                 soundEngine.playUIClick();
                 onOpenTutorial();
               }}
-              title="Combat Field Manual"
+              title={tr('Combat Field Manual')}
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
               <GameIcon name="tutorial" size={26} />
@@ -198,7 +198,7 @@ export const HUD: React.FC<HUDProps> = ({
                 soundEngine.playUIClick();
                 onToggleMute();
               }}
-              title={soundMuted ? 'Unmute Audio' : 'Mute Audio'}
+              title={soundMuted ? tr('Unmute Audio') : tr('Mute Audio')}
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
               {soundMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
@@ -210,7 +210,7 @@ export const HUD: React.FC<HUDProps> = ({
                 soundEngine.playUIClick();
                 onOpenSettings();
               }}
-              title="Settings & Diagnostics"
+              title={tr('Settings & Diagnostics')}
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
               <GameIcon name="settings" size={26} />

@@ -1,4 +1,5 @@
 import { GameIcon, AMMO_ICON } from './GameIcon.tsx';
+import { tr } from '../i18n.ts';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AmmoType, SimCommand, SimEntity } from '../sim/types.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
@@ -214,7 +215,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onCommand({ type: 'UseAbility', abilityId: 'smoke' });
             }}
             disabled={smokeCd > 0}
-            title="Smoke" aria-label="Smoke"
+            title={tr('Smoke')} aria-label={tr('Smoke')}
             className={`absolute top-0 left-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
               smokeCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
@@ -232,7 +233,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onCommand({ type: 'UseAbility', abilityId: 'repair_kit' });
             }}
             disabled={repairCd > 0}
-            title="Repair kit" aria-label="Repair kit"
+            title={tr('Repair kit')} aria-label={tr('Repair kit')}
             className={`absolute -top-4 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
               repairCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
@@ -250,7 +251,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onCommand({ type: 'UseAbility', abilityId: 'boost' });
             }}
             disabled={overdriveCd > 0}
-            title="Boost" aria-label="Boost"
+            title={tr('Boost')} aria-label={tr('Boost')}
             className={`absolute top-0 right-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
               overdriveCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
@@ -267,7 +268,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               soundEngine.playUIClick();
               onCycleTarget();
             }}
-            title="Next target" aria-label="Next target"
+            title={tr('Next target')} aria-label={tr('Next target')}
             className="absolute left-0 w-11 h-11 rounded-full border border-slate-700 bg-slate-900/90 text-slate-300 text-[10px] font-semibold flex items-center justify-center active:scale-95 hover:border-slate-500"
           >
             <GameIcon name="switch_target" size={26} />
@@ -279,7 +280,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               soundEngine.playUIClick();
               onCycleAmmo();
             }}
-            title="Change ammo" aria-label="Change ammo"
+            title={tr('Change ammo')} aria-label={tr('Change ammo')}
             className="absolute -bottom-1 left-3 w-11 h-11 rounded-full border border-slate-700 bg-slate-900/90 text-orange-400 text-[10px] font-bold flex items-center justify-center active:scale-95 hover:border-orange-500"
           >
             <GameIcon name={AMMO_ICON[player?.selectedAmmo || 'STANDARD'] ?? 'ammo_standard'} size={28} />

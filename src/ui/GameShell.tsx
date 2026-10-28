@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { tr } from '../i18n.ts';
 import { Camera } from '../render/camera.ts';
 import { ParticleSystem } from '../render/particles.ts';
 import { WorldRenderer } from '../render/worldRenderer.ts';
@@ -114,11 +115,11 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       refreshParty();
       online.onSocialEvent((kind, d) => {
         if (kind === 'party_update') setPartyNames(d ? d.members.map((m: any) => m.name) : []);
-        const text = kind === 'friend_request' ? `${d.from} sent you a friend request` : kind === 'friend_accepted' ? `${d.from} is now your friend` : kind === 'party_invite' ? `${d.from} invited you to a party` : kind === 'clan_invite' ? `${d.from} invited you to ${d.clan}` : kind === 'announcement' ? `Announcement: ${d.text}` : kind === 'achievement' ? `Achievement unlocked: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `Gate ${d.result}` : kind === 'arena_start' ? 'Arena match starting' : kind === 'arena_round' ? `Round over: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `Arena ${d.won ? 'won' : 'lost'} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
+        const text = kind === 'friend_request' ? tr('{from} sent you a friend request', { from: d.from }) : kind === 'friend_accepted' ? tr('{from} is now your friend', { from: d.from }) : kind === 'party_invite' ? tr('{from} invited you to a party', { from: d.from }) : kind === 'clan_invite' ? tr('{from} invited you to {clan}', { from: d.from, clan: d.clan }) : kind === 'announcement' ? `${tr('Announcement')}: ${d.text}` : kind === 'achievement' ? `${tr('Achievement unlocked')}: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `${tr('Gate')} ${tr(String(d.result))}` : kind === 'arena_start' ? tr('Arena match starting') : kind === 'arena_round' ? `${tr('Round over')}: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `${d.won ? tr('Arena won') : tr('Arena lost')} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
         if (text) setNotices((n) => [...n.slice(-4), text]);
         if (kind === 'arena_phase') { arenaRef.current = { phase: d.phase, round: d.round, wins: d.wins, endsAt: Date.now() + d.secondsLeft * 1000 }; setProgress('arena'); }
-        else if (kind === 'arena_start') setProgress('Arena · Round 1');
-        else if (kind === 'arena_round' && !arenaRef.current) setProgress(`Arena · ${d.wins?.join(' - ')}`);
+        else if (kind === 'arena_start') setProgress(`${tr('Arena')} · ${tr('Round')} 1`);
+        else if (kind === 'arena_round' && !arenaRef.current) setProgress(`${tr('Arena')} · ${d.wins?.join(' - ')}`);
         else if (kind === 'arena_result') { arenaRef.current = null; setProgress(null); }
         if (text && (kind.startsWith('arena') || kind === 'dungeon' || kind === 'achievement' || kind === 'announcement')) showBanner(text);
       });
@@ -194,7 +195,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       const { profile: next, ready } = applyQuestEvent(prev, ev);
       for (const id of ready) {
         const me = clientRef.current?.getPredictedPlayer();
-        if (me) particlesRef.current.emitDamageText({ x: me.pos.x, y: me.pos.y - 50 }, `Quest ready: ${questName(id)}`, '#34d399');
+        if (me) particlesRef.current.emitDamageText({ x: me.pos.x, y: me.pos.y - 50 }, `${tr('Quest ready')}: ${questName(id)}`, '#34d399');
       }
       if (next !== prev) profileStoreRef.current.save(next);
       return next;
@@ -247,11 +248,11 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           break;
         }
 
-        case 'event_started': { showBanner(`Event: ${event.kind.replace(/_/g, ' ')}`); break; }
-        case 'dungeon_wave': { showBanner(`Wave ${event.wave} / ${event.total}`); gateRef.current = { wave: event.wave, total: event.total, endsAt: event.timeLeft != null ? Date.now() + event.timeLeft * 1000 : 0 }; setProgress('gate'); break; }
-        case 'dungeon_cleared': { showBanner('Gate cleared!'); setProgress(null); gateRef.current = null; break; }
-        case 'dungeon_failed': { showBanner(`Gate failed (${event.reason})`); setProgress(null); gateRef.current = null; break; }
-        case 'boss_rewards': { showBanner('Boss defeated'); break; }
+        case 'event_started': { showBanner(`${tr('Event')}: ${tr(event.kind.replace(/_/g, ' '))}`); break; }
+        case 'dungeon_wave': { showBanner(`${tr('Wave')} ${event.wave} / ${event.total}`); gateRef.current = { wave: event.wave, total: event.total, endsAt: event.timeLeft != null ? Date.now() + event.timeLeft * 1000 : 0 }; setProgress('gate'); break; }
+        case 'dungeon_cleared': { showBanner(tr('Gate cleared!')); setProgress(null); gateRef.current = null; break; }
+        case 'dungeon_failed': { showBanner(`${tr('Gate failed')} (${tr(String(event.reason))})`); setProgress(null); gateRef.current = null; break; }
+        case 'boss_rewards': { showBanner(tr('Boss defeated')); break; }
         case 'explosion': {
           particles.emitExplosion(event.pos, true);
           soundEngine.playExplosion(true);
@@ -295,7 +296,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             const { levelsGained } = C.grantXP(ch, xp);
             C.addMasteryXp(ch, ch.activeVehicle, Math.round(xp / 4));
             if (xp > 0) particles.emitDamageText(event.pos, `+${xp} XP`, '#a78bfa');
-            if (levelsGained > 0) particles.emitDamageText(event.pos, `LEVEL UP! [Lv.${ch.level}]`, '#10b981');
+            if (levelsGained > 0) particles.emitDamageText(event.pos, `${tr('LEVEL UP!')} [Lv.${ch.level}]`, '#10b981');
             const loot = rollLoot(rng, victim.level, 1, !!victim.isElite, isBoss, ch.pityCounter);
             ch.pityCounter = loot.newPityCounter;
             if (loot.itemId && loot.rarity) {
@@ -331,9 +332,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           const [kind, sub] = event.crateType.split(':');
           if (kind === 'ore') {
             questEvent({ type: 'collect_ore', ore: sub || 'iron', amount: event.amount });
-            particles.emitDamageText(event.pos, `+${event.amount} ${String(sub || 'ore').toUpperCase()}`, '#38bdf8');
+            particles.emitDamageText(event.pos, `+${event.amount} ${tr(String(sub || 'ore')).toUpperCase()}`, '#38bdf8');
           } else if (kind === 'scrap') {
-            particles.emitDamageText(event.pos, `+${event.amount} Scrap`, '#eab308');
+            particles.emitDamageText(event.pos, `+${event.amount} ${tr('Scrap')}`, '#eab308');
           }
 
           // Tutorial auto-advance: Collected loot!
@@ -894,7 +895,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} character={profile.character} />}
       {online && gameState === 'PLAYING' && <ChatInput client={online} />}
       {gameState === 'PLAYING' && <Banner text={banner} />}
-      {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `Arena · Round ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? 'Break ' : 'Start in '}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `Gate · Wave ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
+      {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `${tr('Arena')} · ${tr('Round')} ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? `${tr('Break')} ` : `${tr('Start in')} `}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `${tr('Gate')} · ${tr('Wave')} ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}
 
       <QuestModal

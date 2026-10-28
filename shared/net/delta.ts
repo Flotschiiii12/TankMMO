@@ -13,7 +13,8 @@ const round1 = (v: number): number => Math.round(v * 10) / 10;
 export function compactEntity(e: SimEntity, coarse = false): SimEntity {
   const r = coarse ? round1 : round;
   const out: any = {};
-  for (const [k, v] of Object.entries(e)) {
+  for (const k in e) { // for-in instead of Object.entries: no temporary [key, value] arrays (this runs for every entity every snapshot)
+    const v = (e as any)[k];
     if (v === undefined) continue;
     if (typeof v === 'number') out[k] = k === 'chassisAngle' || k === 'turretAngle' ? round(v) : r(v);
     else if (v && typeof v === 'object' && 'x' in (v as any) && 'y' in (v as any) && Object.keys(v as object).length === 2) out[k] = { x: r((v as any).x), y: r((v as any).y) };
@@ -36,18 +37,22 @@ function fieldEq(a: unknown, b: unknown): boolean {
   return true;
 }
 
-/** Most clients hold the same previous object for an entity, so the (prev -> cur) diff is computed once and reused. */
-const diffCache = new WeakMap<SimEntity, Map<SimEntity, EntityPatch | null>>();
+/**
+ * Most clients hold the same previous object for an entity, so the (prev -> cur) diff is computed once and reused.
+ * The result is cached on `prev` (symbol key: invisible to Object.keys and JSON), pointing FORWARD to the newer object.
+ * Caching backwards (cur -> prev), as a WeakMap keyed by `cur` did, makes every new state keep all older ones alive: the
+ * heap grew without bound (~0.3 MB per tick with 100 players) and V8's ephemeron handling stalled ticks for seconds.
+ */
+const NEXT = Symbol('next');
+type NextSlot = { cur: SimEntity; patch: EntityPatch | null };
 
 export function diffEntity(prev: SimEntity | undefined, cur: SimEntity): EntityPatch | undefined {
   if (!prev) return { id: cur.id, full: cur };
   if (prev === cur) return undefined;
-  let byPrev = diffCache.get(cur);
-  if (!byPrev) { byPrev = new Map(); diffCache.set(cur, byPrev); }
-  const cached = byPrev.get(prev);
-  if (cached !== undefined) return cached ?? undefined;
+  const slot = (prev as any)[NEXT] as NextSlot | undefined;
+  if (slot && slot.cur === cur) return slot.patch ?? undefined;
   const patch = computeDiff(prev, cur);
-  byPrev.set(prev, patch ?? null);
+  (prev as any)[NEXT] = { cur, patch: patch ?? null } satisfies NextSlot;
   return patch;
 }
 
@@ -109,25 +114,27 @@ export function viewFor(e: SimEntity, self: boolean): SimEntity {
 
 /** Tracks what one client already knows. */
 export class DeltaEncoder {
-  private known = new Map<number, SimEntity>();
+  /** `gen` marks the last encode() that saw the entity, so "removed" needs no per-call Set. */
+  private known = new Map<number, { ent: SimEntity; gen: number }>();
+  private gen = 0;
 
   /** `visible` must already be compacted (see compactEntity); the same compact objects can be shared between clients. */
   encode(visible: SimEntity[]): { patches: EntityPatch[]; removed: number[] } {
     const patches: EntityPatch[] = [];
-    const seen = new Set<number>();
+    const gen = ++this.gen;
     for (const cur of visible) {
-      seen.add(cur.id);
-      const patch = diffEntity(this.known.get(cur.id), cur);
+      const slot = this.known.get(cur.id);
+      const patch = diffEntity(slot?.ent, cur);
       if (patch) patches.push(patch);
-      this.known.set(cur.id, cur);
+      if (slot) { slot.ent = cur; slot.gen = gen; } else this.known.set(cur.id, { ent: cur, gen });
     }
     const removed: number[] = [];
-    for (const id of this.known.keys()) if (!seen.has(id)) { removed.push(id); this.known.delete(id); }
+    for (const [id, slot] of this.known) if (slot.gen !== gen) { removed.push(id); this.known.delete(id); }
     return { patches, removed };
   }
 
   /** What this client currently knows about an entity (used to skip low-priority updates). */
-  peek(id: number): SimEntity | undefined { return this.known.get(id); }
+  peek(id: number): SimEntity | undefined { return this.known.get(id)?.ent; }
 
   /** Forget everything (map change): the next encode sends full entities. */
   reset(): void { this.known.clear(); }

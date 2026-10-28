@@ -50,7 +50,8 @@ export const MAX_COMMANDS_PER_PACKET = 16;
 export const RESPAWN_SECONDS = 5;
 export const AUTOSAVE_SECONDS = 30;
 const AUTOSAVE_PER_TICK = 6;
-const patchJson = new WeakMap<object, string>();
+/** The JSON of a patch is cached on the patch itself (symbol key, ignored by JSON.stringify): no WeakMap, see shared/net/delta.ts. */
+const PATCH_JSON = Symbol('json');
 /** Per-connection inbound message budget: sustained rate and burst. Real clients send ~30 input packets/s plus a few requests. */
 export const MAX_MESSAGES_PER_SECOND = 120;
 export const MAX_MESSAGE_BURST = 240;
@@ -178,6 +179,18 @@ export class GameServer {
   spectatorCap = MAX_SPECTATORS_PER_MATCH;
   inboundLimit = { perSecond: MAX_MESSAGES_PER_SECOND, burst: MAX_MESSAGE_BURST };
   readonly metrics = { ticks: 0, maxTickMs: 0, avgTickMs: 0, bytesOut: 0, msgsIn: 0 };
+  /** Windowed tick statistics for load tests (reset after warm-up); costs one array push per tick. */
+  private tickWindow = { samples: [] as number[], phases: {} as Record<string, number>, bytes0: 0, startedAt: 0, players: 0 };
+  resetTickWindow(): void { this.tickWindow = { samples: [], phases: {}, bytes0: this.metrics.bytesOut, startedAt: performance.now(), players: 0 }; }
+  tickWindowStats() {
+    const w = this.tickWindow; const s = [...w.samples].sort((a, b) => a - b);
+    const pct = (p: number) => (s.length ? s[Math.min(s.length - 1, Math.floor(s.length * p))] : 0);
+    const sum = s.reduce((a, b) => a + b, 0);
+    const seconds = Math.max(0.001, (performance.now() - w.startedAt) / 1000);
+    const phases = Object.fromEntries(Object.entries(w.phases).map(([k, v]) => [k, Math.round((v / Math.max(1, s.length)) * 1000) / 1000]));
+    return { ticks: s.length, seconds: Math.round(seconds * 10) / 10, avgMs: s.length ? sum / s.length : 0, p50Ms: pct(0.5), p95Ms: pct(0.95), p99Ms: pct(0.99), maxMs: s[s.length - 1] ?? 0,
+      busyPercent: Math.round((sum / (seconds * 1000)) * 1000) / 10, kbPerSecOut: Math.round((this.metrics.bytesOut - w.bytes0) / 1024 / seconds * 10) / 10, players: this.sessions.size, avgPhaseMs: phases };
+  }
   private instanceCounter = 0;
   /** allied clan-tag pairs, one Set shared by every world (mutated in place by refreshAlliances) */
   private allianceSet = new Set<string>();
@@ -279,6 +292,10 @@ export class GameServer {
     this.metrics.ticks++;
     this.metrics.maxTickMs = Math.max(this.metrics.maxTickMs, ms);
     this.metrics.avgTickMs += (ms - this.metrics.avgTickMs) / Math.min(this.metrics.ticks, 300);
+    if (this.tickWindow.samples.length < 100_000) {
+      this.tickWindow.samples.push(ms);
+      for (const [k, v] of Object.entries(lap)) this.tickWindow.phases[k] = (this.tickWindow.phases[k] ?? 0) + v;
+    }
   }
 
   // ---------------------------------------------------------------- plausibility (second line of defence)
@@ -1788,8 +1805,8 @@ export class GameServer {
       let body = '';
       for (let i = 0; i < patches.length; i++) {
         const pt = patches[i];
-        let js = patchJson.get(pt);
-        if (js === undefined) { js = JSON.stringify(pt); patchJson.set(pt, js); }
+        let js = (pt as any)[PATCH_JSON] as string | undefined;
+        if (js === undefined) { js = JSON.stringify(pt); (pt as any)[PATCH_JSON] = js; }
         body += i ? ',' + js : js;
       }
       this.sendText(s.ws, `{"type":"s_state","tick":${world.tick},"lastProcessedSeq":${s.lastSeq},"serverTime":${world.time},"patches":[${body}],"removed":${JSON.stringify(removed)},"events":${JSON.stringify(events)}}`);

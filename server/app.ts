@@ -129,6 +129,7 @@ export function createApp(opts: AppOptions = {}) {
   const admin = express.Router();
   admin.use(adminOk);
   admin.get('/stats', (_req, res) => res.json({ accounts: accounts.count(), online: game.playerCount(), instances: game.instanceInfo(), metrics: game.metrics }));
+  admin.get('/tickstats', (req, res) => { const out = game.tickWindowStats(); if (req.query.reset === '1') game.resetTickWindow(); res.json(out); });
   admin.get('/flagged', (_req, res) => res.json(game.antiCheat.flagged(Date.now())));
   admin.get('/online', (_req, res) => res.json(game.onlineNames()));
   admin.get('/players', (req, res) => {

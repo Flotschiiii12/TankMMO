@@ -249,11 +249,14 @@ function stepEvents(world: World): void {
     if (e.kind === 'invasion') world.pve.nextInvasionWave = world.time;
   }
   for (const old of world.pve.activeEvents) {
-    if (!ids.includes(old)) world.events.push({ type: 'event_ended', eventId: old, kind: old.split('@')[0] });
+    if (!ids.includes(old)) {
+      world.events.push({ type: 'event_ended', eventId: old, kind: old.split('@')[0] });
+      if (old.startsWith('invasion')) for (const e of [...world.entities.values()]) if (e.fromInvasion) world.entities.delete(e.id);
+    }
   }
   world.pve.activeEvents = ids;
   if (active.some((e) => e.kind === 'invasion') && world.time >= world.pve.nextInvasionWave) {
-    world.pve.nextInvasionWave = world.time + 60;
+    world.pve.nextInvasionWave = world.time + INVASION_WAVE_SECONDS;
     spawnInvasionWave(world);
   }
 }
@@ -266,14 +269,25 @@ function spawnMeteorNodes(world: World): void {
   }
 }
 
+const INVASION_WAVE_SECONDS = 90;
+const INVASION_MAX_ALIVE = 10;
+const INVASION_WAVE_SIZE = 3;
+
+/** A small raid from the map edges (never more than INVASION_MAX_ALIVE at once), not a swarm around the safe zone. */
 function spawnInvasionWave(world: World): void {
   const zone = world.safeZones[0];
   const cx = zone ? zone.x : world.width / 2;
   const cy = zone ? zone.y : world.height / 2;
-  for (let i = 0; i < 6; i++) {
+  let alive = 0;
+  for (const e of world.entities.values()) if (e.fromInvasion && e.hull > 0) alive++;
+  const n = Math.min(INVASION_WAVE_SIZE, INVASION_MAX_ALIVE - alive);
+  for (let i = 0; i < n; i++) {
     const a = world.rng.next() * Math.PI * 2;
-    const r = (zone?.radius ?? 400) + 500;
-    spawnEnemy(world, i % 3 === 0 ? 'gunner_truck' : 'scout_buggy', world.map ? world.map.levelRange[1] : 5, { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }).temporary = true;
+    const r = (zone?.radius ?? 400) + world.rng.range(900, 1500);
+    const pos = { x: clamp(cx + Math.cos(a) * r, 250, world.width - 250), y: clamp(cy + Math.sin(a) * r, 250, world.height - 250) };
+    const e = spawnEnemy(world, i % 3 === 0 ? 'gunner_truck' : 'scout_buggy', world.map ? world.map.levelRange[1] : 5, pos);
+    e.temporary = true;
+    e.fromInvasion = true;
   }
 }
 
@@ -327,7 +341,7 @@ function updateAI(world: World, dt: number): void {
 
     let target = ent.targetId !== undefined ? world.entities.get(ent.targetId) : undefined;
     const aggro = ent.aggroRange ?? 750;
-    if (target && (target.hull <= 0 || isSmoked(target) || distSq(ent.pos, target.pos) > (aggro * 1.6) ** 2)) {
+    if (target && (target.hull <= 0 || isSmoked(target) || target.isInSafeZone || distSq(ent.pos, target.pos) > (aggro * 1.6) ** 2)) {
       ent.targetId = undefined;
       target = undefined;
     }
@@ -380,6 +394,11 @@ function skirmisherAI(world: World, ent: SimEntity, target: SimEntity | undefine
       ent.targetSpeed = world.rng.chance(0.7) ? ent.maxSpeed * 0.45 : 0;
     }
     ent.desiredDriveAngle = ent.patrolAngle;
+    // wander around the home spot instead of drifting across the whole map
+    if (ent.homePos && dist(ent.pos, ent.homePos) > (ent.leashRange ?? 900) * 0.45) {
+      ent.desiredDriveAngle = Math.atan2(ent.homePos.y - ent.pos.y, ent.homePos.x - ent.pos.x);
+      ent.targetSpeed = ent.maxSpeed * 0.5;
+    }
     const diff = angleDiff(ent.chassisAngle, ent.turretAngle);
     ent.turretAngle += clamp(diff, -ent.turretTurnRate * dt, ent.turretTurnRate * dt);
   }

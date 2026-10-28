@@ -118,12 +118,25 @@ describe('Elites, world boss rewards and events', () => {
     }
     expect(started).toContain('invasion');
     const raiders = [...w.entities.values()].filter((e) => e.temporary);
-    expect(raiders.length).toBeGreaterThanOrEqual(6);
+    expect(raiders.length).toBeGreaterThanOrEqual(3);
     for (const r of raiders) r.hull = 0;
     stepWorld(w, NONE);
     expect(w.pve.respawnQueue).toHaveLength(0);
     w.clockOffset = 16 * 60 - w.time; // jump past the window
     for (let i = 0; i < 31; i++) { stepWorld(w, NONE); for (const e of w.events) if (e.type === 'event_ended') ended.push(e.kind); }
     expect(ended).toContain('invasion');
+  });
+
+  it('an invasion is a small raid: capped at 10 raiders, spawned away from the safe zone, and removed when it ends', () => {
+    const w = createWorld({ map: maps[0], seed: 3, populate: false });
+    for (let i = 0; i < 30 * 600; i++) stepWorld(w, NONE); // 10 minutes into the 15 minute window
+    const raiders = [...w.entities.values()].filter((e) => e.fromInvasion && e.hull > 0);
+    expect(raiders.length).toBeGreaterThan(0);
+    expect(raiders.length).toBeLessThanOrEqual(10);
+    const zone = w.safeZones[0];
+    for (const r of raiders) expect(Math.hypot(r.pos.x - zone.x, r.pos.y - zone.y)).toBeGreaterThan(zone.radius + 400);
+    w.clockOffset = 16 * 60 - w.time; // jump past the window
+    for (let i = 0; i < 31; i++) stepWorld(w, NONE);
+    expect([...w.entities.values()].some((e) => e.fromInvasion)).toBe(false);
   });
 });

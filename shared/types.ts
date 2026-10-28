@@ -242,6 +242,8 @@ export interface SimEntity {
   fromPlayer?: boolean;
   /** Summoned/event spawn: never respawns. */
   temporary?: boolean;
+  /** spawned by the invasion event: removed when the event ends */
+  fromInvasion?: boolean;
   isWorldBoss?: boolean;
   damageBy?: Record<number, number>;
 }

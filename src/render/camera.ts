@@ -48,7 +48,8 @@ export class Camera {
   }
 
   public addShake(amount: number) {
-    this.shakeIntensity = Math.min(26, this.shakeIntensity + amount);
+    // Screen shake is disabled for good (it made the whole view wobble).
+    void amount;
   }
 
   public update(dt: number, mapWidth = 4000, mapHeight = 4000) {

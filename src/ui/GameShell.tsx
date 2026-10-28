@@ -17,6 +17,7 @@ import type { QuestEvent } from '../../shared/rules/quests.ts';
 import { QuestModal } from './QuestModal.tsx';
 import { SocialModal } from './SocialModal.tsx';
 import { ChatInput } from './ChatInput.tsx';
+import { Banner, BossBar } from './Overlays.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts';
 import { HUD } from './HUD.tsx';
@@ -49,6 +50,13 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [questOpen, setQuestOpen] = useState(false);
   const [socialOpen, setSocialOpen] = useState(false);
   const [notices, setNotices] = useState<string[]>([]);
+  const [banner, setBanner] = useState<string | null>(null);
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showBanner = useCallback((text: string) => {
+    setBanner(text);
+    if (bannerTimer.current) clearTimeout(bannerTimer.current);
+    bannerTimer.current = setTimeout(() => setBanner(null), 4000);
+  }, []);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [worldMapOpen, setWorldMapOpen] = useState(false);
@@ -89,8 +97,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       if (online.character) adopt(online.character, online.ammo);
       online.onCharacter(adopt);
       online.onSocialEvent((kind, d) => {
-        const text = kind === 'friend_request' ? `${d.from} sent you a friend request` : kind === 'friend_accepted' ? `${d.from} is now your friend` : kind === 'party_invite' ? `${d.from} invited you to a party` : kind === 'clan_invite' ? `${d.from} invited you to ${d.clan}` : kind === 'announcement' ? `Announcement: ${d.text}` : kind === 'achievement' ? `Achievement unlocked: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `Gate ${d.result}` : kind === 'arena_result' ? `Arena ${d.won ? 'won' : 'lost'} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
+        const text = kind === 'friend_request' ? `${d.from} sent you a friend request` : kind === 'friend_accepted' ? `${d.from} is now your friend` : kind === 'party_invite' ? `${d.from} invited you to a party` : kind === 'clan_invite' ? `${d.from} invited you to ${d.clan}` : kind === 'announcement' ? `Announcement: ${d.text}` : kind === 'achievement' ? `Achievement unlocked: ${String(d.id).replace('ach_', '').replace(/_/g, ' ')}` : kind === 'dungeon' && d.result ? `Gate ${d.result}` : kind === 'arena_start' ? 'Arena match starting' : kind === 'arena_round' ? `Round over: ${d.wins?.join(' - ')}` : kind === 'arena_result' ? `Arena ${d.won ? 'won' : 'lost'} (${d.ratingDelta >= 0 ? '+' : ''}${d.ratingDelta})` : '';
         if (text) setNotices((n) => [...n.slice(-4), text]);
+        if (text && (kind.startsWith('arena') || kind === 'dungeon' || kind === 'achievement' || kind === 'announcement')) showBanner(text);
       });
     }
     rendererRef.current = new WorldRenderer(cameraRef.current, particlesRef.current);
@@ -205,6 +214,11 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           break;
         }
 
+        case 'event_started': { showBanner(`Event: ${event.kind.replace(/_/g, ' ')}`); break; }
+        case 'dungeon_wave': { showBanner(`Wave ${event.wave} / ${event.total}`); break; }
+        case 'dungeon_cleared': { showBanner('Gate cleared!'); break; }
+        case 'dungeon_failed': { showBanner(`Gate failed (${event.reason})`); break; }
+        case 'boss_rewards': { showBanner('Boss defeated'); break; }
         case 'explosion': {
           particles.emitExplosion(event.pos, true);
           soundEngine.playExplosion(true);
@@ -795,6 +809,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
       {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} character={profile.character} />}
       {online && gameState === 'PLAYING' && <ChatInput client={online} />}
+      {gameState === 'PLAYING' && <Banner text={banner} />}
+      {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}
 
       <QuestModal
         profile={profile}

@@ -3,7 +3,7 @@
  * free season pass. Pure rules over CharacterState (see character.ts); no clock access: callers pass server seconds.
  */
 import {
-  ALL_QUESTS, DAILY_POOL, TUTORIAL_QUESTS, DAILY_QUEST_COUNT, QUEST_BY_ID, QuestDef, QuestObjective, QuestReward, WEEKLY_POOL, WEEKLY_QUEST_COUNT,
+  ALL_QUESTS, DAILY_POOL, TUTORIAL_QUESTS, TUTORIAL_STEPS, DAILY_QUEST_COUNT, QUEST_BY_ID, QuestDef, QuestObjective, QuestReward, WEEKLY_POOL, WEEKLY_QUEST_COUNT,
 } from '../data/quests.ts';
 import { SEASON_DAILY_POINT_CAP, SEASON_LENGTH_SECONDS, SEASON_POINTS_PER_TIER, SEASON_REWARDS, SEASON_TIERS } from '../data/season.ts';
 import { SimRNG } from '../prng.ts';
@@ -102,8 +102,31 @@ function makeActive(def: QuestDef, level: number): ActiveQuest {
 export function ensureTutorial(ch: CharacterState): string | undefined {
   const next = TUTORIAL_QUESTS.find((q) => !ch.quests.completed.includes(q.id));
   if (!next) return undefined;
-  if (!ch.quests.active[next.id] && next.prerequisites.every((p) => ch.quests.completed.includes(p))) ch.quests.active[next.id] = makeActive(next, ch.level);
+  if (!ch.quests.active[next.id] && next.prerequisites.every((p) => ch.quests.completed.includes(p))) {
+    const aq = makeActive(next, ch.level);
+    // The step may already have been done earlier (things happened in a different order): it is complete right away, never a dead end.
+    if (next.objectives.every((o) => o.type === 'tutorial' && ch.stats[tutorialFlag(String(o.target))] === 1)) { aq.progress = aq.targets.slice(); aq.ready = true; }
+    ch.quests.active[next.id] = aq;
+  }
   return next.id;
+}
+
+/** Stat flag that remembers a tutorial step was done, whatever order the player did things in. */
+export const tutorialFlag = (step: string): string => `tut_${step}`;
+
+/** Where the player is in the guided start: the active step (if any), done and total counts. */
+export function tutorialStatus(ch: CharacterState): { step?: string; done: number; total: number } {
+  const done = TUTORIAL_QUESTS.filter((q) => ch.quests.completed.includes(q.id)).length;
+  const next = TUTORIAL_QUESTS.find((q) => !ch.quests.completed.includes(q.id));
+  return { step: next ? String(next.objectives[0].target) : undefined, done, total: TUTORIAL_QUESTS.length };
+}
+
+/** Skip button: every tutorial step counts as done, no rewards. */
+export function skipTutorial(ch: CharacterState): void {
+  for (const q of TUTORIAL_QUESTS) {
+    delete ch.quests.active[q.id];
+    if (!ch.quests.completed.includes(q.id)) ch.quests.completed.push(q.id);
+  }
 }
 
 /** Call whenever the server clock may have crossed a day/week boundary (login, tick). Rotates daily and weekly quests. */
@@ -192,6 +215,7 @@ function matches(o: QuestObjective, ev: QuestEvent): number {
 /** Feeds a game event to all active quests. Returns the ids of quests that just became ready to claim. */
 export function onQuestEvent(ch: CharacterState, ev: QuestEvent): string[] {
   const readyNow: string[] = [];
+  if (ev.type === 'tutorial' && (TUTORIAL_STEPS as readonly string[]).includes(ev.step)) ch.stats[tutorialFlag(ev.step)] = 1;
   for (const aq of Object.values(ch.quests.active)) {
     if (aq.ready) continue;
     const def = QUEST_BY_ID.get(aq.id);
@@ -283,4 +307,29 @@ export function claimSeasonTier(ch: CharacterState, tier: number, clockSeconds: 
   if (r.title) ch.season.titles.push(r.title);
   ch.season.claimed.push(tier);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Quest markers (radar rings and world-map pulses for the objectives that are in progress)
+// ---------------------------------------------------------------------------
+
+export interface QuestMarkers { enemyKinds: string[]; mapIds: number[]; ore: boolean }
+
+/** What the player should look for right now, from the active quests that are not ready yet (the first few only, to stay readable). */
+export function questMarkers(ch: CharacterState, maxQuests = 3): QuestMarkers {
+  const out: QuestMarkers = { enemyKinds: [], mapIds: [], ore: false };
+  let n = 0;
+  for (const aq of Object.values(ch.quests.active)) {
+    if (aq.ready) continue;
+    const def = QUEST_BY_ID.get(aq.id);
+    if (!def || def.kind === 'daily' || def.kind === 'weekly' || def.id.startsWith('tut_')) continue; // the tutorial has its own chip
+    if (++n > maxQuests) break;
+    def.objectives.forEach((o, i) => {
+      if (aq.progress[i] >= aq.targets[i]) return;
+      if (o.type === 'kill' && typeof o.target === 'string' && !out.enemyKinds.includes(o.target)) out.enemyKinds.push(o.target);
+      if ((o.type === 'reach_map' || o.type === 'explore') && typeof o.target === 'number' && !out.mapIds.includes(o.target)) out.mapIds.push(o.target);
+      if (o.type === 'collect_ore') out.ore = true;
+    });
+  }
+  return out;
 }

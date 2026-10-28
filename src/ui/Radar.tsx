@@ -8,9 +8,11 @@ interface RadarProps {
   mapHeight: number;
   partyNames?: string[];
   colorBlind?: boolean;
+  /** enemy kinds named by active quests: drawn with a yellow ring */
+  questKinds?: string[];
 }
 
-export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHeight, partyNames, colorBlind }) => {
+export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHeight, partyNames, colorBlind, questKinds }) => {
   const radarRadius = 46;
   const radarRange = 1200 * (player?.radarMult ?? 1); // World units displayed on radar (recon drones widen it)
 
@@ -27,7 +29,7 @@ export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHei
   const { enemyCount, allyCount, dots } = useMemo(() => {
     let enemies = 0;
     let allies = 0;
-    const computedDots: Array<{ x: number; y: number; color: string; size: number }> = [];
+    const computedDots: Array<{ x: number; y: number; color: string; size: number; ring?: boolean }> = [];
 
     for (const ent of entities) {
       if (ent.id === player?.id || ent.kind === 'mine') continue;
@@ -64,12 +66,13 @@ export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHei
           size = partyNames?.includes(ent.name) ? 3.5 : 2.5;
         }
 
-        computedDots.push({ x, y, color, size });
+        const quest = ent.isHostile && !!questKinds?.includes(ent.kind);
+        computedDots.push({ x, y, color, size: quest ? size + 1 : size, ring: quest });
       }
     }
 
     return { enemyCount: enemies, allyCount: allies, dots: computedDots };
-  }, [entities, player?.id, playerPos.x, playerPos.y, partyNames, colorBlind]);
+  }, [entities, player?.id, playerPos.x, playerPos.y, partyNames, colorBlind, questKinds]);
 
   return (
     <div className="relative flex flex-col items-center pointer-events-none select-none">
@@ -100,6 +103,7 @@ export const Radar: React.FC<RadarProps> = ({ player, entities, mapWidth, mapHei
               width: d.size,
               height: d.size,
               backgroundColor: d.color,
+              boxShadow: d.ring ? '0 0 0 1.5px #fde047' : undefined,
             }}
           />
         ))}

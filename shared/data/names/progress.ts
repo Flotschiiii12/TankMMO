@@ -11,7 +11,7 @@ const CHAPTER_DE = ['Kies und Rost', 'Die Überquerung', 'Schluchtenfeuer', 'Gef
 const STAGE_DE = ['Ankunft', 'Erster Kontakt', 'Bergung', 'Erkundung', 'Straße freiräumen', 'Bessere Ausrüstung', 'Elitejagd', 'Tiefer hinein', 'Nachschub', 'Finale'];
 const STAGE_EN = ['Arrival', 'First Contact', 'Salvage', 'Scouting', 'Clear the Road', 'Better Gear', 'Elite Hunt', 'Deeper In', 'Supplies', 'Finale'];
 
-const TUTORIAL_DE: Record<string, string> = { drive: 'Fahren', lock: 'Ziel erfassen', fire: 'Feuern', loot: 'Beute einsammeln', garage: 'Garage', equip: 'Ausrüsten', levelup: 'Stufenaufstieg', portal: 'Portal' };
+const TUTORIAL_DE: Record<string, string> = { drive: 'Fahren', lock: 'Ziel erfassen', fire: 'Feuern', loot: 'Beute einsammeln', garage: 'Garage', equip: 'Ausrüsten', levelup: 'Stufenaufstieg', portal: 'Portal', ammo: 'Munition', ability: 'Fähigkeit', gate: 'Tor' };
 
 const ENEMY_SHORT_DE: Record<string, string> = {
   scout_buggy: 'Aufklärungsbuggy', gunner_truck: 'Kanonentruck', artillery: 'Artillerie', bunker_turret: 'Bunkergeschütz', flak_wagon: 'Flak-Wagen', engineer: 'Kampfpionier',

@@ -31,6 +31,8 @@ interface WorldMapModalProps {
   currentMapId: string | number;
   playerLevel: number;
   onTravelToMap: (mapId: number | string) => void;
+  /** maps named by active quests: pulsing yellow ring on the node */
+  questMapIds?: number[];
 }
 
 // 2D Tactical Layout Coordinates for all 30 nodes on the World Map canvas
@@ -86,6 +88,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
   currentMapId,
   playerLevel,
   onTravelToMap,
+  questMapIds,
 }) => {
   // Resolve current numeric map id
   const currentNumericId = useMemo(() => {
@@ -278,11 +281,14 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
 
                 return (
                   <button
+                    data-quest-marker={questMapIds?.includes(meta.id) ? 'true' : undefined}
                     key={`node_${meta.id}`}
                     onClick={() => setSelectedMapId(meta.id)}
                     style={{ left: `${pos.x - 22}px`, top: `${pos.y - 22}px` }}
                     className={`absolute w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all duration-150 group z-10 ${
-                      isSelected
+                      questMapIds?.includes(meta.id) && !isSelected && !isCurrent
+                        ? 'ring-2 ring-yellow-300 animate-pulse'
+                        : isSelected
                         ? 'ring-4 ring-sky-400 ring-offset-2 ring-offset-slate-950 scale-110 shadow-lg shadow-sky-500/30'
                         : isCurrent
                         ? 'ring-2 ring-emerald-400 scale-105 shadow-md shadow-emerald-500/20'

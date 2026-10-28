@@ -27,6 +27,7 @@ export type ClientAction =
   | { kind: 'claim_season_tier'; tier: number }
   | { kind: 'buy_ammo'; ammo: AmmoType; packs: number }
   | { kind: 'tutorial'; step: string }
+  | { kind: 'skip_tutorial' }
   | { kind: 'set_skin'; skin: string | null }
   | { kind: 'change_faction'; faction: C.PlayerFaction }
   | { kind: 'sell_item'; uid: string };
@@ -89,7 +90,8 @@ export function executeAction(ch: C.CharacterState, a: ClientAction, rng: SimRNG
     }
     case 'change_faction': return C.changeFaction(ch, a.faction, ctx.nowSeconds);
     case 'sell_item': return C.sellItemToNpc(ch, a.uid);
-    case 'tutorial': Q.onQuestEvent(ch, { type: 'tutorial', step: a.step }); return { ok: true };
+    case 'tutorial': Q.onQuestEvent(ch, { type: 'tutorial', step: String(a.step) }); return { ok: true };
+    case 'skip_tutorial': Q.skipTutorial(ch); return { ok: true };
     default: return { ok: false, error: 'unknown_action' };
   }
 }

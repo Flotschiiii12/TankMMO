@@ -10,6 +10,7 @@ interface SettingsModalProps {
   onClose: () => void;
   onUpdateSettings: (newSettings: UserProfile['settings']) => void;
   onResetProgress: () => void;
+  onHowToPlay?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -18,6 +19,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onUpdateSettings,
   onResetProgress,
+  onHowToPlay,
 }) => {
   const [confirmReset, setConfirmReset] = useState(false);
 
@@ -152,6 +154,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div><span className="font-medium text-white">{tr('Reduced effects')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('No particles or tread marks (less motion, better on slow phones)')}</div></div>
             <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, reducedEffects: !profile.settings.reducedEffects }); }} className={`px-3 py-1 rounded text-xs font-semibold ${profile.settings.reducedEffects ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{profile.settings.reducedEffects ? tr('ON') : tr('OFF')}</button>
           </div>
+          {onHowToPlay && (
+            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
+              <span className="font-medium text-white">{tr('How to play')}</span>
+              <button onClick={() => { soundEngine.playUIClick(); onHowToPlay(); }} className="px-3 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-200">{tr('Replay tutorial hints')}</button>
+            </div>
+          )}
           <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
             <span className="font-medium text-white">{tr('UI size')} {Math.round((profile.settings.uiScale || 1) * 100)}%</span>
             <input type="range" min="0.8" max="1.4" step="0.1" value={profile.settings.uiScale || 1} onChange={(e) => onUpdateSettings({ ...profile.settings, uiScale: Number(e.target.value) })} className="w-40" />

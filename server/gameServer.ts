@@ -22,6 +22,7 @@ import { AccountService } from './accounts.ts';
 import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
 import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
 import { MatchRecorder, MAX_SPECTATORS_PER_MATCH, SPECTATE_DELAY_TICKS, SpectateHud, SpectateMatchInfo } from './spectate.ts';
+import { NEWBIE_PROTECTION_LEVEL } from '../shared/rules/hints.ts';
 import { AllianceRepo, ClanStorageRepo, STORAGE_DAILY_WITHDRAW } from './clanStorage.ts';
 import { allianceKey } from '../shared/sim/pvp.ts';
 import { SqliteArenaRepo, SqliteWarRepo } from './db.ts';
@@ -657,15 +658,29 @@ export class GameServer {
       }
       case 'ToggleAutoFire': return { type: 'ToggleAutoFire' };
       case 'FireMain': return { type: 'FireMain' };
-      case 'UseAbility': return typeof c.abilityId === 'string' && allowedAbilities(s.character).has(c.abilityId as AbilityId) ? { type: 'UseAbility', abilityId: c.abilityId } : undefined;
+      case 'UseAbility': {
+        if (typeof c.abilityId !== 'string' || !allowedAbilities(s.character).has(c.abilityId as AbilityId)) return undefined;
+        this.tutorialStep(s, 'ability');
+        return { type: 'UseAbility', abilityId: c.abilityId };
+      }
       case 'SelectAmmo': {
         if (typeof c.ammo !== 'string' || !AMMO_IDS.includes(c.ammo)) return undefined;
         const ent = s.instance.world.entities.get(s.entityId);
         const stock = ent?.ammoInventory[c.ammo];
-        return ent && stock !== undefined && (stock === -1 || stock > 0) ? { type: 'SelectAmmo', ammo: c.ammo } : undefined;
+        if (!(ent && stock !== undefined && (stock === -1 || stock > 0))) return undefined;
+        if (c.ammo !== 'STANDARD') this.tutorialStep(s, 'ammo');
+        return { type: 'SelectAmmo', ammo: c.ammo };
       }
       default: return undefined; // EnterGate/Interact are server-driven
     }
+  }
+
+  /** Guided-start progress that the server can see itself; only talks to the client when a step just became claimable. */
+  private tutorialStep(s: Session, step: string): void {
+    if (s.character.stats[Q.tutorialFlag(step)] === 1) return;
+    const ready = Q.onQuestEvent(s.character, { type: 'tutorial', step });
+    s.dirty = true;
+    if (ready.length) this.sendCharacter(s);
   }
 
   // ---------------------------------------------------------------- chat
@@ -1009,6 +1024,7 @@ export class GameServer {
     });
     this.send(s, { type: 's_action_result', id: p.id, ok: r.ok, error: r.ok ? undefined : (r as any).error });
     if (r.ok) {
+      if (p.action.kind === 'buy_ammo') Q.onQuestEvent(s.character, { type: 'tutorial', step: 'ammo' }); // buying special ammo counts for the ammo lesson too
       const ent = s.instance.world.entities.get(s.entityId);
       if (ent) refreshPlayerStats(ent, s.character);
       s.dirty = true;
@@ -1085,7 +1101,7 @@ export class GameServer {
         case 'dungeon_failed': { this.finishDungeon(inst, false); break; }
         case 'player_died': {
           const s = byEntity.get(ev.entityId);
-          if (s && !inst.arena && !world.dungeon) { s.character.wallet.scrap = Math.floor(s.character.wallet.scrap * 0.9); s.respawnAt = world.time + RESPAWN_SECONDS; s.dirty = true; this.sendCharacter(s); }
+          if (s && !inst.arena && !world.dungeon) { if (s.character.level > NEWBIE_PROTECTION_LEVEL) s.character.wallet.scrap = Math.floor(s.character.wallet.scrap * 0.9); s.respawnAt = world.time + RESPAWN_SECONDS; s.dirty = true; this.sendCharacter(s); }
           break;
         }
         case 'gate_used': {
@@ -1458,6 +1474,7 @@ export class GameServer {
 
   private handleDungeon(s: Session, req: { op: string; dungeonId?: string }): { ok: boolean; error?: string; data?: any } {
     if (req.op === 'dungeon_list') {
+      this.tutorialStep(s, 'gate'); // opening the gate list is the "first gate hint" step
       return { ok: true, data: { freeKeysLeft: Math.max(0, DUNGEON_FREE_KEYS_PER_DAY - this.freeKeysUsedToday(s)), gateKeys: s.character.wallet.gateKeys,
         dungeons: DUNGEONS.map((d) => ({ id: d.id, name: d.name, minLevel: d.minLevel, recommendedLevel: d.recommendedLevel, waves: d.waves.length, cleared: (s.character.stats[`cleared_${d.id}`] ?? 0) > 0 })) } };
     }

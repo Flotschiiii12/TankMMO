@@ -25,6 +25,10 @@ import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts
 import { HUD } from './HUD.tsx';
 import { ControlsOverlay } from './ControlsOverlay.tsx';
 import { SpectateBar } from './SpectateBar.tsx';
+import { HintToast, HowToPlay, TutorialChip } from './Guidance.tsx';
+import { markShown, newHintMemory, nextHint, type HintState } from '../../shared/rules/hints.ts';
+import { tutorialStatus, tutorialFlag, questMarkers } from '../../shared/rules/quests.ts';
+import { TUTORIAL_STEPS } from '../../shared/data/quests.ts';
 import { KillFeed, LowHealthVignette, TargetPanel } from './CombatHud.tsx';
 import { DamageNumberMerger, killFeedEntry, type KillFeedEntry } from './combatLogic.ts';
 import { impactLevel, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../render/combatFx.ts';
@@ -68,6 +72,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [spectating, setSpectating] = useState(false);
   const mergerRef = useRef(new DamageNumberMerger());
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([]);
+  const [howToOpen, setHowToOpen] = useState(false);
+  const [hint, setHint] = useState<{ id: string; text: string } | null>(null);
+  const hintMemRef = useRef(newHintMemory());
+  const lastSpecialAmmo = useRef(0);
   useEffect(() => { if (!online) return; const t = setInterval(() => setSpectating(online.spectating), 400); return () => clearInterval(t); }, [online]);
   const [, forceRender] = useState(0);
   const [partyNames, setPartyNames] = useState<string[]>([]);
@@ -215,6 +223,28 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     const id = setInterval(() => forceRender((n) => (n + 1) % 1e6), 200);
     return () => clearInterval(id);
   }, []);
+
+  // Contextual hints for new players: evaluated twice a second, shown for 8 s, never nagging (see shared/rules/hints.ts)
+  useEffect(() => {
+    if (gameState !== 'PLAYING') return;
+    const id = setInterval(() => {
+      const me = clientRef.current?.getPredictedPlayer();
+      const def = clientRef.current?.['clientWorld']?.mapDef;
+      if (!me || !def) return;
+      const ch = profileRef.current.character;
+      const ammo = profileRef.current.ammoInventory as Record<string, number>;
+      const special = Object.entries(ammo).filter(([k]) => k !== 'STANDARD').reduce((a, [, v]) => a + Math.max(0, v), 0);
+      const s: HintState = {
+        level: ch.level, mapId: Number(clientRef.current?.['mapId'] ?? 1), inSafeZone: isInClientSafeZone(def, me.pos), hullRatio: me.maxHull > 0 ? me.hull / me.maxHull : 1,
+        inventoryFull: ch.inventory.length >= C.inventoryCapacity(ch), specialAmmo: special, specialAmmoJustRanOut: lastSpecialAmmo.current > 0 && special === 0,
+        unspentTalentPoints: C.talentPointsAvailable(ch), tutorialDone: tutorialStatus(ch).step === undefined,
+      };
+      lastSpecialAmmo.current = special;
+      const h = nextHint(s, hintMemRef.current, Date.now() / 1000);
+      if (h) { markShown(hintMemRef.current, h.id, Date.now() / 1000); setHint({ id: h.id, text: h.textKey }); setTimeout(() => setHint((cur) => (cur?.id === h.id ? null : cur)), 8000); }
+    }, 500);
+    return () => clearInterval(id);
+  }, [gameState]);
 
   // Accessibility: reduced effects and UI scale follow the settings
   useEffect(() => {
@@ -883,6 +913,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           />
 
 
+          {(() => { const t = tutorialStatus(profile.character); return t.step ? <TutorialChip step={t.step} done={t.done} total={t.total} onSkip={() => { void performAction({ kind: 'skip_tutorial' }); }} /> : null; })()}
+          <HintToast text={hint?.text ?? null} onClose={() => setHint(null)} />
           <TargetPanel target={playerEntity?.targetId !== undefined ? (clientRef.current?.getEntity(playerEntity.targetId) ?? null) : null} me={playerEntity} ammo={profile.ammoInventory as any} colorBlind={profile.settings.colorBlind} />
           <LowHealthVignette me={playerEntity} />
           <KillFeed entries={killFeed.filter((e) => e.until > performance.now())} />
@@ -941,7 +973,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         onAction={performAction}
       />
 
+      <WorldMapModal isOpen={worldMapOpen} onClose={() => setWorldMapOpen(false)} currentMapId={online ? online.mapId : profile.currentMapId} playerLevel={profile.character.level} onTravelToMap={(id) => { setWorldMapOpen(false); handleTravelToMap(id); }} questMapIds={questMarkers(profile.character).mapIds} />
+      <HowToPlay open={howToOpen} onClose={() => setHowToOpen(false)} done={TUTORIAL_STEPS.filter((s) => profile.character.stats[tutorialFlag(s)] === 1)} />
       <SettingsModal
+        onHowToPlay={() => { setSettingsOpen(false); setHowToOpen(true); }}
         profile={profile}
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}

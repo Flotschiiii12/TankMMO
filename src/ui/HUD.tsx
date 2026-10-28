@@ -2,6 +2,7 @@ import React from 'react';
 import { tr, nm } from '../i18n.ts';
 import { ChatMessage, SimEntity } from '../sim/types.ts';
 import { QUEST_BY_ID } from '../../shared/data/quests.ts';
+import { questMarkers } from '../../shared/rules/quests.ts';
 import { UserProfile } from '../save/profile.ts';
 import { Radar } from './Radar.tsx';
 import { ChatLog } from './ChatLog.tsx';
@@ -113,6 +114,7 @@ export const HUD: React.FC<HUDProps> = ({
             mapHeight={mapHeight}
             partyNames={partyNames}
             colorBlind={profile.settings.colorBlind}
+            questKinds={questMarkers(profile.character).enemyKinds}
           />
 
           {/* Icon Button Column Below Radar: All buttons >= 44x44px */}

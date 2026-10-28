@@ -61,7 +61,7 @@ const rewardFor = (level: number, mult = 1): QuestReward => ({
 // ---------------------------------------------------------------------------
 
 /** Guided first 15 minutes, driven by the quest framework. Steps are reported by the client via 'tutorial' events. */
-export const TUTORIAL_STEPS = ['drive', 'lock', 'fire', 'loot', 'garage', 'equip', 'levelup', 'portal'] as const;
+export const TUTORIAL_STEPS = ['drive', 'lock', 'fire', 'loot', 'garage', 'equip', 'levelup', 'portal', 'ammo', 'ability', 'gate'] as const;
 
 export const CHAPTERS: Array<{ chapter: number; name: string; minLevel: number; maps: number[]; enemy: string; finale: { type: 'defeat_boss' | 'clear_gate'; target: string | number } }> = [
   { chapter: 1, name: 'Gravel and Rust', minLevel: 1, maps: [1, 2, 3, 4], enemy: 'scout_buggy', finale: { type: 'defeat_boss', target: 'boss_cape_warden' } },
@@ -206,7 +206,7 @@ function buildTutorial(): QuestDef[] {
     id: `tut_${i + 1}_${step}`, kind: 'story' as const, nameKey: `quest.tutorial.${step}`, name: `Tutorial: ${step}`, chapter: 0, minLevel: 1,
     prerequisites: i === 0 ? [] : [`tut_${i}_${TUTORIAL_STEPS[i - 1]}`],
     objectives: [{ type: 'tutorial' as const, count: 1, target: step }],
-    reward: { xp: i === TUTORIAL_STEPS.length - 1 ? 400 : 60, scrap: 100 },
+    reward: { xp: i === 7 ? 120 : 30, scrap: 100 }, // ~420 XP in total = level 4 at the end of the guided start (the bot run showed the old 940 XP skipped straight to level 5-6)
   }));
 }
 

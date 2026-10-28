@@ -434,7 +434,7 @@ export const FUSION_UPGRADE_CHANCE: Record<ItemRarity, number> = { Common: 0.30,
 
 /** 3 identical items (same definition and rarity) -> 1 item with a chance of the next rarity up. */
 export function fuseItems(ch: CharacterState, uids: string[], rng: SimRNG): Result<{ item: ItemInstance; upgraded: boolean }> {
-  if (uids.length !== FUSION_INPUT_COUNT || new Set(uids).size !== FUSION_INPUT_COUNT) return fail('need_three_distinct');
+  if (!Array.isArray(uids) || uids.length !== FUSION_INPUT_COUNT || new Set(uids).size !== FUSION_INPUT_COUNT) return fail('need_three_distinct');
   const items = uids.map((u) => findItem(ch, u));
   if (items.some((i) => !i)) return fail('item_not_found');
   const [a, b, c] = items as ItemInstance[];

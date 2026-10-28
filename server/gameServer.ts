@@ -54,6 +54,27 @@ export const CHAT_MIN_INTERVAL_MS = 1000;
 export const CHAT_BURST = { count: 5, windowMs: 10_000 };
 
 export interface Clock { nowMs(): number }
+const AMMO_IDS: string[] = ['STANDARD', 'REINFORCED', 'ARMOR_PIERCING', 'SHAPED_CHARGE', 'EXPLOSIVE'];
+
+/** Social ops that act on another player and therefore need a `name`. */
+const NAME_OPS = new Set(['friend_request', 'friend_accept', 'friend_remove', 'block', 'unblock', 'report', 'party_invite', 'party_accept', 'party_kick', 'clan_invite', 'clan_kick', 'clan_role', 'profile', 'trade_open']);
+
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+/**
+ * Requests and actions are flat records of strings, finite numbers, booleans, null and short arrays of those.
+ * Anything else (nested objects, NaN/Infinity from `1e999`, prototype keys, huge strings) is rejected before it can reach
+ * the rules, SQL parameters or `String()` conversions.
+ */
+export function isFlatPayload(o: unknown, maxArray = 50, maxString = 2000): boolean {
+  if (typeof o !== 'object' || o === null || Array.isArray(o)) return false;
+  const okScalar = (v: unknown): boolean => (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'string' ? v.length <= maxString : typeof v === 'boolean' || v === null);
+  for (const [k, v] of Object.entries(o)) {
+    if (FORBIDDEN_KEYS.has(k)) return false;
+    if (Array.isArray(v)) { if (v.length > maxArray || !v.every(okScalar)) return false; }
+    else if (!okScalar(v)) return false;
+  }
+  return true;
+}
 
 /** Structured JSON log line (one object per line) for log shippers. */
 export function log(level: 'info' | 'warn' | 'error', event: string, data: Record<string, unknown> = {}): void {
@@ -137,6 +158,8 @@ export class GameServer {
   private lastStep = 0;
   private acc = 0;
   private clock: Clock;
+  /** Inbound message budget per connection; tests and fuzzers may raise it. */
+  inboundLimit = { perSecond: MAX_MESSAGES_PER_SECOND, burst: MAX_MESSAGE_BURST };
   readonly metrics = { ticks: 0, maxTickMs: 0, avgTickMs: 0, bytesOut: 0, msgsIn: 0 };
   private instanceCounter = 0;
   private arenaInstances = new Set<Instance>();
@@ -330,7 +353,7 @@ export class GameServer {
   private onConnection(ws: WebSocket): void {
     let session: Session | undefined;
     const joinTimeout = setTimeout(() => { if (!session) ws.close(4408, 'join_timeout'); }, 10_000);
-    let tokens = MAX_MESSAGE_BURST; let lastRefill = this.clock.nowMs(); let bad = 0;
+    let tokens = this.inboundLimit.burst; let lastRefill = this.clock.nowMs(); let bad = 0;
     const reject = (code: string, message: string) => {
       this.sendRaw(ws, { type: 's_error', code, message });
       if (++bad >= MAX_BAD_MESSAGES) ws.close(4400, 'too_many_bad_messages');
@@ -338,7 +361,7 @@ export class GameServer {
     ws.on('message', (data) => {
       this.metrics.msgsIn++;
       const now = this.clock.nowMs();
-      tokens = Math.min(MAX_MESSAGE_BURST, tokens + ((now - lastRefill) / 1000) * MAX_MESSAGES_PER_SECOND);
+      tokens = Math.min(this.inboundLimit.burst, tokens + ((now - lastRefill) / 1000) * this.inboundLimit.perSecond);
       lastRefill = now;
       if (tokens < 1) { if (session) this.antiCheat.rejected(session.accountId, 'flood'); return; } // over budget: drop silently
       tokens--;
@@ -355,7 +378,7 @@ export class GameServer {
         this.handleMessage(session, msg);
       } catch (err) {
         // A malformed packet must never take the whole server down.
-        log('warn', 'message_error', { account: session?.accountId, error: String((err as Error)?.message ?? err) });
+        log('warn', 'message_error', { account: session?.accountId, error: String((err as Error)?.message ?? err), at: String((err as Error)?.stack ?? '').split('\n')[1]?.trim() });
         reject('bad_message', 'Invalid message');
       }
     });
@@ -434,9 +457,17 @@ export class GameServer {
     switch (msg.type) {
       case 'c_input': return this.handleInput(s, msg);
       case 'c_chat': return this.handleChat(s, msg);
-      case 'c_action': return this.handleAction(s, msg);
-      case 'c_social': return this.handleSocial(s, msg);
-      case 'c_ping': return this.send(s, { type: 's_pong', originalTimestamp: msg.timestamp, serverTimestamp: this.clock.nowMs() });
+      case 'c_action': {
+        const id = Number.isFinite((msg as any).id) ? (msg as any).id : 0;
+        if (!isFlatPayload(msg.action) || typeof (msg.action as any).kind !== 'string') return this.send(s, { type: 's_action_result', id, ok: false, error: 'bad_request' });
+        return this.handleAction(s, { ...msg, id });
+      }
+      case 'c_social': {
+        const id = Number.isFinite((msg as any).id) ? (msg as any).id : 0;
+        if (!isFlatPayload(msg.req) || typeof (msg.req as any).op !== 'string') return this.send(s, { type: 's_social_result', id, ok: false, error: 'bad_request' });
+        return this.handleSocial(s, { ...msg, id });
+      }
+      case 'c_ping': return this.send(s, { type: 's_pong', originalTimestamp: Number.isFinite(msg.timestamp) ? msg.timestamp : 0, serverTimestamp: this.clock.nowMs() });
       default: return;
     }
   }
@@ -478,6 +509,7 @@ export class GameServer {
       case 'FireMain': return { type: 'FireMain' };
       case 'UseAbility': return typeof c.abilityId === 'string' ? { type: 'UseAbility', abilityId: c.abilityId } : undefined;
       case 'SelectAmmo': {
+        if (typeof c.ammo !== 'string' || !AMMO_IDS.includes(c.ammo)) return undefined;
         const ent = s.instance.world.entities.get(s.entityId);
         const stock = ent?.ammoInventory[c.ammo];
         return ent && stock !== undefined && (stock === -1 || stock > 0) ? { type: 'SelectAmmo', ammo: c.ammo } : undefined;
@@ -489,7 +521,8 @@ export class GameServer {
   // ---------------------------------------------------------------- chat
 
   private handleChat(s: Session, msg: Extract<ClientMessage, { type: 'c_chat' }>): void {
-    const text = String(msg.text ?? '').trim().slice(0, 200);
+    if (typeof msg.text !== 'string' || (msg.targetRecipient !== undefined && typeof msg.targetRecipient !== 'string')) return;
+    const text = msg.text.trim().slice(0, 200);
     if (!text) return;
     const acct = this.deps.accounts.get(s.accountId);
     if (acct && acct.mutedUntil > this.clock.nowMs()) return this.send(s, { type: 's_error', code: 'muted', message: 'You are muted' });
@@ -583,6 +616,8 @@ export class GameServer {
     const social = this.deps.social;
     const req = p.req;
     const byName = (name: string) => this.deps.accounts.getByName(String(name ?? ''));
+    if (NAME_OPS.has(req.op) && (typeof (req as any).name !== 'string' || !(req as any).name)) return reply({ ok: false, error: 'unknown_player' });
+    if (req.op === 'ranking' && typeof req.kind !== 'string') return reply({ ok: false, error: 'bad_request' });
     const needsPlayer = !['clan_create'].includes(req.op) && 'name' in req;
     const target = needsPlayer ? byName((req as any).name) : undefined;
     if (needsPlayer && !target) return reply({ ok: false, error: 'unknown_player' });
@@ -969,7 +1004,7 @@ export class GameServer {
     if (req.op.startsWith('ah_') && !FLAGS.auctionEnabled) return reply({ ok: false, error: 'disabled' });
 
     switch (req.op) {
-      case 'ah_search': return reply({ ok: true, data: market.search({ defId: req.defId, slot: req.slot, maxPrice: req.maxPrice }) });
+      case 'ah_search': return reply({ ok: true, data: market.search({ defId: typeof req.defId === 'string' ? req.defId : undefined, slot: typeof req.slot === 'string' ? req.slot : undefined, maxPrice: typeof req.maxPrice === 'number' ? req.maxPrice : undefined }) });
       case 'ah_mine': return reply({ ok: true, data: market.mine(s.accountId) });
       case 'ah_sell': {
         if (!this.inHub(s)) return reply({ ok: false, error: 'hub_only' });

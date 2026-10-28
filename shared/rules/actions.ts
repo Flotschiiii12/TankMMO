@@ -54,7 +54,15 @@ export function ammoCost(ch: C.CharacterState, ammo: string, packs: number): num
 export function executeAction(ch: C.CharacterState, a: ClientAction, rng: SimRNG, ctx: ActionContext): C.Result<any> {
   if (SAFE_ONLY.has(a.kind) && !ctx.inSafeZone) return { ok: false, error: 'safe_zone_only' };
   switch (a.kind) {
-    case 'equip': { C.unequipItem(ch, a.vehicleId, a.slot); return C.equipItem(ch, a.vehicleId, a.slot, a.uid); }
+    case 'equip': {
+      // Replace what is in the slot, but a failed equip must leave the old item where it was.
+      const g = ch.garage.find((x) => x.vehicleId === a.vehicleId);
+      const prev = g && Object.prototype.hasOwnProperty.call(g.loadout, a.slot) ? g.loadout[a.slot] : undefined;
+      C.unequipItem(ch, a.vehicleId, a.slot);
+      const r = C.equipItem(ch, a.vehicleId, a.slot, a.uid);
+      if (!r.ok && g && prev !== undefined) g.loadout[a.slot] = prev;
+      return r;
+    }
     case 'unequip': return C.unequipItem(ch, a.vehicleId, a.slot);
     case 'upgrade': { const r = C.upgradeItem(ch, a.uid, rng, !!a.safe); if (r.ok) { Q.onQuestEvent(ch, { type: 'upgrade' }); bump(ch, 'upgrades'); } return r; }
     case 'dismantle': { const r = C.dismantleItem(ch, a.uid); if (r.ok) bump(ch, 'dismantled'); return r; }

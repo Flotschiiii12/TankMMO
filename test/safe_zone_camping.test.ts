@@ -10,7 +10,7 @@ describe('enemies do not camp a player who stands in a safe zone', () => {
   it('an enemy in aggro range ignores a player inside the zone and drops a target that retreats into it', () => {
     const w: any = createWorld({ map: maps[0], seed: 2, populate: false });
     const z = w.safeZones[0];
-    const e = spawnVehicle(w, 'scout_buggy', 'E', 5, { x: z.x + z.radius + 250, y: z.y }, { maxHull: 5000, isHostile: true });
+    const e = spawnVehicle(w, 'gunner_truck', 'E', 5, { x: z.x + z.radius + 250, y: z.y }, { maxHull: 5000, isHostile: true });
     e.aiState = 'patrol'; e.aggroRange = 900; e.homePos = { ...e.pos }; e.leashRange = 2000;
     const p = spawnVehicle(w, 'player', 'P', 3, { x: z.x + z.radius - 30, y: z.y }, { maxHull: 1e9, maxArmor: 1e9 }); // inside, 280 units from the enemy
     for (let i = 0; i < 90; i++) stepWorld(w, NONE);

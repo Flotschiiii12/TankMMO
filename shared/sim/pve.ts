@@ -333,6 +333,21 @@ function aimTurret(ent: SimEntity, target: SimEntity, dt: number): number {
   return diff;
 }
 
+/**
+ * How close a player must come before this enemy starts hunting on its own. Starter maps (level cap 5) are peaceful:
+ * scouts only fight back when hurt, trucks only react at close range. Mid maps are in between; everything else
+ * (elites, invasion raiders, turrets, bosses, dungeons) keeps its full aggro range.
+ */
+function acquireRange(world: World, ent: SimEntity): number {
+  const full = ent.aggroRange ?? 750;
+  if (world.dungeon || ent.fromInvasion || ent.isElite || (ent.kind !== 'scout_buggy' && ent.kind !== 'gunner_truck')) return full;
+  const cap = world.map?.levelRange?.[1] ?? 99;
+  const scout = ent.kind === 'scout_buggy';
+  if (cap <= 5) return scout ? 0 : Math.min(full, 320);
+  if (cap <= 12) return Math.min(full, scout ? 420 : 480);
+  return full;
+}
+
 function updateAI(world: World, dt: number): void {
   for (const ent of world.entities.values()) {
     if (ent.kind === 'player' || ent.hull <= 0 || isInertKind(ent.kind)) continue;
@@ -342,11 +357,17 @@ function updateAI(world: World, dt: number): void {
     let target = ent.targetId !== undefined ? world.entities.get(ent.targetId) : undefined;
     const aggro = ent.aggroRange ?? 750;
     if (target && (target.hull <= 0 || isSmoked(target) || isPosInSafeZone(world, target.pos) || distSq(ent.pos, target.pos) > (aggro * 1.6) ** 2)) {
+      if (target.id === ent.provokedBy) ent.provokedBy = undefined; // gave up the chase
       ent.targetId = undefined;
       target = undefined;
     }
+    if (!target && ent.provokedBy !== undefined) {
+      const prov = world.entities.get(ent.provokedBy);
+      if (prov && prov.hull > 0 && !isSmoked(prov) && !isPosInSafeZone(world, prov.pos) && distSq(ent.pos, prov.pos) <= (aggro * 1.6) ** 2) { target = prov; ent.targetId = prov.id; }
+      else ent.provokedBy = undefined;
+    }
     if (!target) {
-      let best = aggro;
+      let best = acquireRange(world, ent);
       for (const o of world.entities.values()) {
         if (o.id === ent.id || o.hull <= 0 || o.isHostile === ent.isHostile || isInertKind(o.kind) || isSmoked(o)) continue;
         if (isPosInSafeZone(world, o.pos)) continue; // nobody is hunted inside a safe zone

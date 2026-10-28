@@ -670,6 +670,7 @@ function updateSecondaryWeapons(world: World): void {
     target.armor = res.newArmor;
     target.hull = Math.max(0, target.hull - res.hullDamage);
     recordBossDamage(target, ent.id, res.totalDamageDealt);
+    provokeEnemy(world, target, ent.id);
     target.armorRegenTimer = 0;
     target.lastDamagedTick = world.tick;
     target.hitFlashTimer = 0.12;
@@ -685,6 +686,17 @@ function updateSecondaryWeapons(world: World): void {
     if (target.hull <= 0) {
       world.events.push({ type: 'entity_killed', victimId: target.id, killerId: ent.id, pos: { ...target.pos }, level: target.level, scrapReward: 25 * target.level, xpReward: 80 * target.level });
     }
+  }
+}
+
+/** A hostile vehicle that was hurt fights back, and nearby ones of the same kind join in. */
+export function provokeEnemy(world: World, victim: SimEntity, attackerId: number | undefined): void {
+  if (!victim.isHostile || attackerId === undefined || attackerId === victim.id) return;
+  const attacker = world.entities.get(attackerId);
+  if (!attacker || attacker.isHostile) return;
+  victim.provokedBy = attackerId;
+  for (const o of world.entities.values()) {
+    if (o.id !== victim.id && o.isHostile && o.hull > 0 && o.kind === victim.kind && dist(o.pos, victim.pos) <= 350) o.provokedBy = attackerId;
   }
 }
 
@@ -738,6 +750,7 @@ function applyHit(world: World, proj: SimEntity, primaryTarget: SimEntity, splas
     victim.armor = result.newArmor;
     victim.hull = Math.max(0, victim.hull - result.hullDamage);
     recordBossDamage(victim, sourceId, result.totalDamageDealt);
+    provokeEnemy(world, victim, sourceId);
     victim.armorRegenTimer = 0; // Reset out of combat regen timer
     victim.lastDamagedTick = world.tick;
     victim.hitFlashTimer = 0.12;

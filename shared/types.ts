@@ -242,6 +242,8 @@ export interface SimEntity {
   fromPlayer?: boolean;
   /** Summoned/event spawn: never respawns. */
   temporary?: boolean;
+  /** the entity that last hurt this (hostile) vehicle: peaceful enemies only fight back against it */
+  provokedBy?: number;
   /** spawned by the invasion event: removed when the event ends */
   fromInvasion?: boolean;
   isWorldBoss?: boolean;

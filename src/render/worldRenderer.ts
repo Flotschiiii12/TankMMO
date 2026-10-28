@@ -432,7 +432,7 @@ export class WorldRenderer {
     }
 
     // 17. Drifting Clouds / Light Weather & Vignette
-    this.renderAtmosphere(ctx, time, mapDef.biome);
+    this.renderAtmosphere(ctx);
   }
 
   private renderTerrain(ctx: CanvasRenderingContext2D, mapDef: MapDef) {
@@ -1073,26 +1073,9 @@ export class WorldRenderer {
     ctx.restore();
   }
 
-  private renderAtmosphere(ctx: CanvasRenderingContext2D, time: number, biome: string) {
+  private renderAtmosphere(ctx: CanvasRenderingContext2D) {
     const w = this.camera.viewportWidth;
     const h = this.camera.viewportHeight;
-
-    // Gentle Drifting Weather Layer (clouds/dust motes)
-    ctx.save();
-    const cloudColor = biome === 'canyon_flats' ? 'rgba(251, 146, 60, 0.04)' : 'rgba(255, 255, 255, 0.04)';
-    ctx.fillStyle = cloudColor;
-
-    for (let i = 0; i < 6; i++) {
-      const speed = 20 + i * 8;
-      const x = ((time * speed + i * 280) % (w + 400)) - 200;
-      const y = (i * 130 + Math.sin(time * 0.2 + i) * 30) % h;
-      const radius = 90 + (i % 3) * 45;
-
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
 
     // Subtle Vignette at Screen Edges
     ctx.save();

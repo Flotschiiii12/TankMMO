@@ -1,6 +1,7 @@
 const CRED_KEY = 'treadfront_credential';
 
-export const serverBase = (): string => (typeof window !== 'undefined' ? window.location.origin : '');
+/** Native apps (Capacitor) load the page from capacitor://localhost, so they need VITE_SERVER_URL at build time. */
+export const serverBase = (): string => (import.meta.env?.VITE_SERVER_URL as string | undefined) || (typeof window !== 'undefined' ? window.location.origin : '');
 
 /** The game is online-only when a server answers; without one (local dev, previews) it falls back to the offline sandbox. */
 export async function detectServer(): Promise<boolean> {

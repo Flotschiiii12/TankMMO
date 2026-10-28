@@ -129,7 +129,7 @@ npm run build
 6. **Not implemented:** clan wars over bases and alliances; clan storage of items (scrap only); spectator mode; map-specific ground/weather rendering beyond the existing basics; reputation levels/vendor discounts (counter exists, no vendor effects); cosmetic skin application; party markers use the radar only (not name plates).
 7. **Anti-cheat:** server authority + heuristics only; no server-side line-of-fire/range validation beyond the sim itself, no IP/device reputation, bans are account-based.
 8. **Ops:** SQLite single file (backup via file copy / `VACUUM INTO`), no automatic backups yet, no TLS/domain setup (use a reverse proxy), no CI.
-9. **Mobile builds:** Capacitor/iOS/Android wrappers are not set up for this project yet (the web build works on mobile browsers).
+9. **Mobile builds:** Capacitor wrappers are not set up yet; see docs/DEPLOY.md (VITE_SERVER_URL is supported).
 
 - Update 2026-10-28: modules and drones now affect stats; live at https://treadfront.213-199-44-82.sslip.io; screen shake removed; boss bar + banners; DE/EN UI; kill XP x0.2.
 - Update 2026-10-28 (2): faction chat (F), party markers on the radar, accessibility (colour-blind radar, reduced effects, UI size), automatic daily DB backup (BACKUP_DIR, newest 14) - no cron needed.

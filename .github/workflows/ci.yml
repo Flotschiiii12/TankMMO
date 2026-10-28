@@ -1,0 +1,40 @@
+name: CI
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      e2e:
+        description: 'Also run the Playwright smoke test'
+        type: boolean
+        default: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    # Opt-in: manual run with the "e2e" box ticked, or a PR labelled "e2e".
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.e2e) || contains(github.event.pull_request.labels.*.name, 'e2e') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e

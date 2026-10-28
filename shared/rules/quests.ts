@@ -270,7 +270,7 @@ export function seasonTier(ch: CharacterState): number {
 
 export function claimSeasonTier(ch: CharacterState, tier: number, clockSeconds: number): Result {
   rolloverSeason(ch, clockSeconds);
-  if (tier < 1 || tier > SEASON_TIERS) return { ok: false, error: 'bad_tier' };
+  if (!Number.isInteger(tier) || tier < 1 || tier > SEASON_TIERS) return { ok: false, error: 'bad_tier' };
   if (tier > seasonTier(ch)) return { ok: false, error: 'tier_not_reached' };
   if (ch.season.claimed.includes(tier)) return { ok: false, error: 'already_claimed' };
   const r = SEASON_REWARDS[tier - 1];

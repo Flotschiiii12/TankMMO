@@ -45,6 +45,11 @@ export const RESPAWN_SECONDS = 5;
 export const AUTOSAVE_SECONDS = 30;
 const AUTOSAVE_PER_TICK = 6;
 const patchJson = new WeakMap<object, string>();
+/** Per-connection inbound message budget: sustained rate and burst. Real clients send ~30 input packets/s plus a few requests. */
+export const MAX_MESSAGES_PER_SECOND = 120;
+export const MAX_MESSAGE_BURST = 240;
+/** Connections that never authenticate are dropped after this many bad messages / failed joins. */
+export const MAX_BAD_MESSAGES = 10;
 export const CHAT_MIN_INTERVAL_MS = 1000;
 export const CHAT_BURST = { count: 5, windowMs: 10_000 };
 
@@ -325,16 +330,34 @@ export class GameServer {
   private onConnection(ws: WebSocket): void {
     let session: Session | undefined;
     const joinTimeout = setTimeout(() => { if (!session) ws.close(4408, 'join_timeout'); }, 10_000);
+    let tokens = MAX_MESSAGE_BURST; let lastRefill = this.clock.nowMs(); let bad = 0;
+    const reject = (code: string, message: string) => {
+      this.sendRaw(ws, { type: 's_error', code, message });
+      if (++bad >= MAX_BAD_MESSAGES) ws.close(4400, 'too_many_bad_messages');
+    };
     ws.on('message', (data) => {
       this.metrics.msgsIn++;
-      let msg: ClientMessage;
-      try { msg = JSON.parse(data.toString()); } catch { return this.sendRaw(ws, { type: 's_error', code: 'bad_json', message: 'Invalid message' }); }
-      if (!session) {
-        if (msg.type !== 'c_join') return this.sendRaw(ws, { type: 's_error', code: 'join_first', message: 'Send c_join first' });
-        session = this.handleJoin(ws, msg) ?? undefined;
-        return;
+      const now = this.clock.nowMs();
+      tokens = Math.min(MAX_MESSAGE_BURST, tokens + ((now - lastRefill) / 1000) * MAX_MESSAGES_PER_SECOND);
+      lastRefill = now;
+      if (tokens < 1) { if (session) this.antiCheat.rejected(session.accountId, 'flood'); return; } // over budget: drop silently
+      tokens--;
+      try {
+        let msg: ClientMessage;
+        try { msg = JSON.parse(data.toString()); } catch { return reject('bad_json', 'Invalid message'); }
+        // JSON.parse also yields null, numbers, arrays...: only objects with a string type are messages.
+        if (typeof msg !== 'object' || msg === null || Array.isArray(msg) || typeof (msg as any).type !== 'string') return reject('bad_message', 'Invalid message');
+        if (!session) {
+          if (msg.type !== 'c_join') return reject('join_first', 'Send c_join first');
+          session = this.handleJoin(ws, msg) ?? undefined;
+          return;
+        }
+        this.handleMessage(session, msg);
+      } catch (err) {
+        // A malformed packet must never take the whole server down.
+        log('warn', 'message_error', { account: session?.accountId, error: String((err as Error)?.message ?? err) });
+        reject('bad_message', 'Invalid message');
       }
-      this.handleMessage(session, msg);
     });
     ws.on('close', () => {
       clearTimeout(joinTimeout);
@@ -358,9 +381,14 @@ export class GameServer {
   }
 
   private handleJoin(ws: WebSocket, msg: Extract<ClientMessage, { type: 'c_join' }>): Session | null {
-    if (!this.versionOk(msg.protocolVersion || '0.0.0')) {
+    if (!this.versionOk(typeof msg.protocolVersion === 'string' ? msg.protocolVersion : '0.0.0')) {
       this.sendRaw(ws, { type: 's_error', code: 'update_required', message: `Please update the game (need protocol ${MIN_PROTOCOL_VERSION})`, critical: true });
       ws.close(4426, 'update_required');
+      return null;
+    }
+    if (typeof msg.accountId !== 'string' || typeof msg.secret !== 'string' || msg.accountId.length > 64 || msg.secret.length > 128) {
+      this.sendRaw(ws, { type: 's_error', code: 'bad_credentials', message: 'Unknown account', critical: true });
+      ws.close(4404, 'bad_credentials');
       return null;
     }
     const auth = this.deps.service.verify(msg.accountId, msg.secret);
@@ -416,7 +444,7 @@ export class GameServer {
   // ---------------------------------------------------------------- input validation
 
   private handleInput(s: Session, msg: Extract<ClientMessage, { type: 'c_input' }>): void {
-    if (!Array.isArray(msg.commands) || typeof msg.seq !== 'number') return;
+    if (!Array.isArray(msg.commands) || typeof msg.seq !== 'number' || !Number.isFinite(msg.seq)) return;
     if (msg.seq <= s.lastSeq) { s.suspicious++; this.antiCheat.rejected(s.accountId, 'replay'); return; } // replayed or out-of-order
     this.antiCheat.input(s.accountId, this.clock.nowMs());
     s.lastSeq = msg.seq;
@@ -432,6 +460,7 @@ export class GameServer {
   }
 
   private sanitize(s: Session, c: SimCommand): SimCommand | undefined {
+    if (typeof c !== 'object' || c === null) return undefined;
     switch (c.type) {
       case 'Drive': {
         if (!Number.isFinite(c.x) || !Number.isFinite(c.y)) return undefined;
@@ -440,6 +469,7 @@ export class GameServer {
       }
       case 'SetTarget': {
         if (c.targetId === null || c.targetId === undefined) return { type: 'SetTarget', targetId: null };
+        if (typeof c.targetId !== 'number') return undefined;
         const t = s.instance.world.entities.get(c.targetId);
         const me = s.instance.world.entities.get(s.entityId);
         return t && me && t.hull > 0 && canEngage(s.instance.world, me, t) ? { type: 'SetTarget', targetId: c.targetId } : undefined;
@@ -714,8 +744,8 @@ export class GameServer {
 
   private buyAmmo(s: Session, ammo: AmmoType, packs: number): C.Result {
     const price = AMMO_PRICES[ammo];
-    const n = Math.floor(packs);
-    if (!price || n < 1 || n > 50) return { ok: false, error: 'bad_request' };
+    const n = Math.floor(Number(packs));
+    if (!price || !Number.isInteger(n) || n < 1 || n > 50) return { ok: false, error: 'bad_request' };
     const cost = ammoCost(s.character, ammo, n)!;
     if (s.character.wallet.scrap < cost) return { ok: false, error: 'not_enough_scrap' };
     s.character.wallet.scrap -= cost;

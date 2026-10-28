@@ -10,12 +10,17 @@ import { GameServer, log } from './gameServer.ts';
 export interface AppOptions { backupDir?: string; dbPath?: string; staticDir?: string; adminToken?: string; clock?: { nowMs(): number } }
 
 const hits = new Map<string, number[]>();
+let lastPrune = 0;
 /** Tiny per-IP rate limiter for the REST endpoints. */
 function rateLimit(max: number, windowMs: number): express.RequestHandler {
   return (req, res, next) => {
     if (process.env.LOAD_TEST === '1') return next();
     const key = `${req.ip}:${req.path}`;
     const now = Date.now();
+    if (now - lastPrune > 60_000) { // keep the map from growing with every IP ever seen
+      lastPrune = now;
+      for (const [k, v] of hits) if (v.length === 0 || now - v[v.length - 1] > 3600_000) hits.delete(k);
+    }
     const list = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
     if (list.length >= max) return void res.status(429).json({ error: 'rate_limited' });
     list.push(now);
@@ -36,7 +41,14 @@ export function createApp(opts: AppOptions = {}) {
   const market = new MarketRepo(db);
   const premium = new PremiumWallet(db);
   const app = express();
+  // Behind Caddy/nginx every request comes from the proxy's address, so the per-IP REST limits would be shared by all players.
+  // Opt in with TRUST_PROXY=1 (number of proxy hops) so X-Forwarded-For is used.
+  if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
   app.use(express.json({ limit: '8kb' }));
+  app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => { // malformed / oversized JSON bodies
+    if (err?.status && err.status < 500) return void res.status(err.status).json({ error: 'bad_request' });
+    next(err);
+  });
   const server = http.createServer(app);
   const game = new GameServer({ accounts, profiles, chat, service, social, arena, war, market, premium, adminToken: opts.adminToken, clock: opts.clock, onDaily: opts.backupDir ? () => { const f = backupDatabase(db, opts.backupDir!); log('info', 'backup', { file: f }); } : undefined }, server);
 
@@ -116,6 +128,7 @@ export function createApp(opts: AppOptions = {}) {
   admin.post('/ban', (req, res) => {
     const a = findByName(req.body?.name); if (!a) return void res.status(404).json({ error: 'unknown_player' });
     const hours = Number(req.body?.hours ?? 24);
+    if (!Number.isFinite(hours)) return void res.status(400).json({ error: 'bad_hours' });
     accounts.setBan(a.id, hours <= 0 ? 0 : Date.now() + hours * 3600_000);
     game.kick(a.id, 'banned'); social.audit('admin', 'ban', `${a.name} ${hours}h`);
     res.json({ ok: true });
@@ -123,6 +136,7 @@ export function createApp(opts: AppOptions = {}) {
   admin.post('/mute', (req, res) => {
     const a = findByName(req.body?.name); if (!a) return void res.status(404).json({ error: 'unknown_player' });
     const hours = Number(req.body?.hours ?? 1);
+    if (!Number.isFinite(hours)) return void res.status(400).json({ error: 'bad_hours' });
     accounts.setMute(a.id, hours <= 0 ? 0 : Date.now() + hours * 3600_000); social.audit('admin', 'mute', `${a.name} ${hours}h`);
     res.json({ ok: true });
   });
@@ -169,7 +183,8 @@ table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border-bottom:1px s
 <script>
 const $=id=>document.getElementById(id);
 const call=async(p,body)=>{const r=await fetch('/admin/api/'+p,{method:body?'POST':'GET',headers:{'x-admin-token':$('tok').value,'content-type':'application/json'},body:body?JSON.stringify(body):undefined});if(!r.ok){$('err').textContent=r.status;throw 0}$('err').textContent='';return r.json()};
-const tbl=(rows)=>'<table><tr>'+Object.keys(rows[0]||{}).map(k=>'<th>'+k+'</th>').join('')+'</tr>'+rows.map(r=>'<tr>'+Object.values(r).map(v=>'<td>'+(typeof v==='object'?JSON.stringify(v):v)+'</td>').join('')+'</tr>').join('')+'</table>';
+const esc=v=>String(v).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const tbl=(rows)=>'<table><tr>'+Object.keys(rows[0]||{}).map(k=>'<th>'+esc(k)+'</th>').join('')+'</tr>'+rows.map(r=>'<tr>'+Object.values(r).map(v=>'<td>'+esc(v!==null&&typeof v==='object'?JSON.stringify(v):v)+'</td>').join('')+'</tr>').join('')+'</table>';
 async function load(){const s=await call('stats');$('stats').textContent=JSON.stringify({accounts:s.accounts,online:s.online,instances:s.instances,tickAvgMs:s.metrics.avgTickMs.toFixed(2)},null,1);
 $('online').innerHTML=tbl(await call('online'));const rp=await call('reports');$('reports').innerHTML=tbl(rp)+rp.map(r=>'<button onclick="closeR('+r.id+')">close #'+r.id+'</button>').join('');$('audit').innerHTML=tbl(await call('audit'))}
 async function act(a){await call(a,{name:$('pn').value,hours:+$('ph').value,newName:$('nn').value});load()}

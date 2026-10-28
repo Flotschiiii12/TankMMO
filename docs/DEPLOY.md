@@ -12,3 +12,6 @@ Resources: one Node process (about 1 core at ~150-200 clustered players). The VP
 ## Mobile apps (Capacitor), when you want them
 The web build already works in a phone browser. For store apps: `npm i @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android`, `npx cap init`, then build with the server address baked in:
 `VITE_SERVER_URL=https://treadfront.213-199-44-82.sslip.io npm run build && npx cap sync`. (The game is online-only; the offline sandbox only starts when no server answers.) Reuse the signing/release scripts from the Aether Strike project.
+
+## Reverse proxy and rate limits
+The REST rate limits (guest creation, recovery, rename, ...) are per client IP. Behind Caddy/nginx set `TRUST_PROXY=1` (hops) in the container environment, otherwise all players share the proxy's address and therefore one limit.

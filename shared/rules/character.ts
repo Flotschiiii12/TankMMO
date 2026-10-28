@@ -417,7 +417,7 @@ export function rerollAffix(ch: CharacterState, uid: string, affixIndex: number,
   const item = findItem(ch, uid);
   if (!item) return fail('item_not_found');
   if (item.affixes.length === 0) return fail('no_affixes');
-  if (affixIndex < 0 || affixIndex >= item.affixes.length) return fail('bad_affix_index');
+  if (!Number.isInteger(affixIndex) || affixIndex < 0 || affixIndex >= item.affixes.length) return fail('bad_affix_index');
   if (item.rerolls >= MAX_REROLLS) return fail('max_rerolls');
   const cost = rerollCost(item);
   if (ch.wallet.scrap < cost.scrap || ch.wallet.fragments < cost.fragments) return fail('not_enough_materials');

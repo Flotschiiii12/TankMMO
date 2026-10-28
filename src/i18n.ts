@@ -47,6 +47,7 @@ const DE: Record<string, string> = {
   'Your clan already has 2 alliances': 'Dein Clan hat schon 2 Bündnisse', 'That clan already has 2 alliances': 'Dieser Clan hat schon 2 Bündnisse', 'These clans broke up recently (7 day cooldown)': 'Diese Clans haben sich kürzlich getrennt (7 Tage Sperre)', 'No such proposal': 'Kein solcher Vorschlag', 'Not allied': 'Nicht verbündet',
   'Spectating (stream is delayed)': 'Zuschauen (Übertragung verzögert)', 'Previous': 'Zurück', 'Next': 'Weiter', 'Free camera': 'Freie Kamera', 'Running matches': 'Laufende Matches', 'No match is running right now.': 'Gerade läuft kein Match.', 'watching': 'Zuschauer', 'Watch': 'Zuschauen',
   'That match is not running (any more)': 'Dieses Match läuft nicht (mehr)', 'This match has no free spectator slots': 'Dieses Match hat keine freien Zuschauerplätze', 'You are already watching a match': 'Du schaust schon ein Match', 'You are not watching a match': 'Du schaust kein Match',
+  'Leave': 'Verlassen',
   'Donate 1,000': '1.000 spenden', 'Collect mail': 'Post abholen', 'My listings': 'Meine Angebote', 'List 24h': '24 h anbieten', 'No friends yet.': 'Noch keine Freunde.', 'No listings.': 'Keine Angebote.',
   'Faction war scores': 'Fraktionskrieg-Stand', 'Leave current gate': 'Aktuelles Tor verlassen', 'Create a clan (10,000 scrap) or accept an invite.': 'Gründe einen Clan (10.000 Schrott) oder nimm eine Einladung an.',
   // garage

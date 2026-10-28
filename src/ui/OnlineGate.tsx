@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { tr, currentLang, setLang } from '../i18n.ts';
 import { createGuest, clearCredential, detectServer, getCredential, recoverAccount, serverBase, setCredential } from '../net/connect.ts';
 import { OnlineGameClient } from '../net/onlineClient.ts';
 import { createDefaultProfile } from '../save/profile.ts';
@@ -60,9 +61,9 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
   if (lost) {
     return (
       <div className={box}><div className={card}>
-        <h2 className="text-lg font-bold text-white">Disconnected</h2>
+        <h2 className="text-lg font-bold text-white">{tr('Disconnected')}</h2>
         <p className="text-sm text-slate-400">{lost}</p>
-        <button className={btn} onClick={() => window.location.reload()}>Reconnect</button>
+        <button className={btn} onClick={() => window.location.reload()}>{tr('Reconnect')}</button>
       </div></div>
     );
   }
@@ -70,31 +71,31 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
   if (phase === 'error') {
     return (
       <div className={box}><div className={card}>
-        <h2 className="text-lg font-bold text-white">No connection</h2>
+        <h2 className="text-lg font-bold text-white">{tr('No connection')}</h2>
         <p className="text-sm text-slate-400">{msg}</p>
-        <button className={btn} onClick={() => { const c = getCredential(); if (c) void connect(c); else setPhase('welcome'); }}>Try again</button>
+        <button className={btn} onClick={() => { const c = getCredential(); if (c) void connect(c); else setPhase('welcome'); }}>{tr('Try again')}</button>
       </div></div>
     );
   }
   if (phase === 'recover') {
     return (
       <div className={box}><div className={card}>
-        <h2 className="text-lg font-bold text-white">I already have an account</h2>
+        <h2 className="text-lg font-bold text-white">{tr('I already have an account')}</h2>
         <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" className="w-full h-11 px-3 rounded-lg bg-slate-950 border border-slate-800 font-mono text-sm outline-none focus:border-orange-500" />
         {msg && <p className="text-xs text-rose-400">{msg}</p>}
         <button className={btn} disabled={code.trim().length < 20} onClick={async () => {
           const r = await recoverAccount(code);
           if (r.ok) { setCredential(r.credential); void connect(r.credential); } else setMsg('That code is not valid.');
-        }}>Sign in</button>
-        <button className="w-full text-xs text-slate-500" onClick={() => { setMsg(''); setPhase('welcome'); }}>Back</button>
+        }}>{tr('Sign in')}</button>
+        <button className="w-full text-xs text-slate-500" onClick={() => { setMsg(''); setPhase('welcome'); }}>{tr('Back')}</button>
       </div></div>
     );
   }
   return (
     <div className={box}><div className={card}>
       <h1 className="text-xl font-bold text-white tracking-tight">Treadfront</h1>
-      <p className="text-sm text-slate-400">An online tank MMO. Your progress lives on the server.</p>
-      <div className="text-xs text-slate-400">Choose your faction (your start region):</div>
+      <p className="text-sm text-slate-400">{tr('An online tank MMO. Your progress lives on the server.')}</p>
+      <div className="text-xs text-slate-400">{tr('Choose your faction (your start region):')}</div>
       <div className="grid grid-cols-3 gap-1.5">
         {[['coastal', 'Coastal Union'], ['highland', 'Highland Union'], ['steppe', 'Steppe Caravan']].map(([k, n]) => (
           <button key={k} onClick={() => setFaction(k)} className={`py-2 rounded-lg text-[11px] border ${faction === k ? 'border-orange-500 text-orange-300' : 'border-slate-800 text-slate-400'}`}>{n}</button>
@@ -102,14 +103,15 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
       </div>
       <label className="flex items-start gap-2 text-xs text-slate-300">
         <input type="checkbox" checked={age} onChange={(e) => setAge(e.target.checked)} className="mt-0.5" />
-        I am at least 13 years old.
+        {tr('I am at least 13 years old.')}
       </label>
       {msg && <p className="text-xs text-orange-300">{msg}</p>}
       <button className={btn} disabled={!age} onClick={async () => {
         const r = await createGuest(faction);
         if (r.ok) { setCredential(r.credential); void connect(r.credential); } else setMsg(r.error === 'network' ? 'Could not reach the server.' : 'Could not create the account.');
-      }}>Play</button>
-      <button className="w-full text-xs text-slate-500 underline" onClick={() => { setMsg(''); setPhase('recover'); }}>I already have an account</button>
+      }}>{tr('Play')}</button>
+      <button className="w-full text-xs text-slate-500" onClick={() => setLang(currentLang === 'de' ? 'en' : 'de')}>{currentLang === 'de' ? 'English' : 'Deutsch'}</button>
+      <button className="w-full text-xs text-slate-500 underline" onClick={() => { setMsg(''); setPhase('recover'); }}>{tr('I already have an account')}</button>
     </div></div>
   );
 };

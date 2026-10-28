@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { tr } from '../i18n.ts';
 import { X, ScrollText } from 'lucide-react';
 import { UserProfile } from '../save/profile.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
@@ -55,7 +56,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
     <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 select-none">
       <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-3xl max-h-[94vh] flex flex-col p-4 text-slate-200 shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-          <div className="flex items-center gap-2"><ScrollText className="text-orange-500" size={18} /><h3 className="font-semibold text-white text-sm">Quests</h3></div>
+          <div className="flex items-center gap-2"><ScrollText className="text-orange-500" size={18} /><h3 className="font-semibold text-white text-sm">{tr('Quests')}</h3></div>
           <button onClick={() => { soundEngine.playUIClick(); onClose(); }} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
         <div className="flex gap-2 mt-2 text-xs">
@@ -68,7 +69,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
         </div>
 
         <div className="mt-2 overflow-y-auto space-y-1.5 pr-1">
-          {tab === 'active' && active.length === 0 && <div className="text-xs text-slate-500 p-3">No active quests. Check the Available tab.</div>}
+          {tab === 'active' && active.length === 0 && <div className="text-xs text-slate-500 p-3">{tr('No active quests. Check the Available tab.')}</div>}
           {tab === 'active' && active.map((aq) => {
             const def = QUEST_BY_ID.get(aq.id)!;
             const rw = Q.scaledReward(def, aq.levelAtAccept);
@@ -77,7 +78,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
                 <div className="flex items-center justify-between">
                   <div><span className="text-white font-medium">{def.name}</span> <span className="text-[10px] uppercase text-slate-500">{def.kind}</span></div>
                   <div className="flex gap-2">
-                    {aq.ready && <button onClick={() => run({ kind: 'claim_quest', questId: aq.id })} className="px-2 py-1 rounded bg-emerald-600/80 text-white">Claim</button>}
+                    {aq.ready && <button onClick={() => run({ kind: 'claim_quest', questId: aq.id })} className="px-2 py-1 rounded bg-emerald-600/80 text-white">{tr('Claim')}</button>}
                     {def.kind !== 'daily' && def.kind !== 'weekly' && <button onClick={() => run({ kind: 'abandon_quest', questId: aq.id })} className="text-[10px] text-slate-500 hover:text-slate-300">abandon</button>}
                   </div>
                 </div>
@@ -92,20 +93,20 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
             );
           })}
 
-          {tab === 'available' && available.length === 0 && <div className="text-xs text-slate-500 p-3">Nothing available right now. Level up or finish your current quests.</div>}
+          {tab === 'available' && available.length === 0 && <div className="text-xs text-slate-500 p-3">{tr('Nothing available right now. Level up or finish your current quests.')}</div>}
           {tab === 'available' && available.map((def) => (
             <div key={def.id} className="flex items-center justify-between p-2.5 rounded border border-slate-800 bg-slate-950/40 text-xs">
               <div>
                 <div className="text-white">{def.name} <span className="text-[10px] uppercase text-slate-500">{def.kind}{def.chapter ? ` · ch.${def.chapter}` : ''}</span></div>
                 <div className="text-[11px] text-slate-400">{def.objectives.map((o) => objectiveText(o, o.count)).join(' · ')}</div>
               </div>
-              <button onClick={() => run({ kind: 'accept_quest', questId: def.id })} className="px-2 py-1 rounded bg-orange-600/80 text-white shrink-0 ml-2">Accept</button>
+              <button onClick={() => run({ kind: 'accept_quest', questId: def.id })} className="px-2 py-1 rounded bg-orange-600/80 text-white shrink-0 ml-2">{tr('Accept')}</button>
             </div>
           ))}
 
           {tab === 'season' && (
             <>
-              <div className="text-xs text-slate-300 p-2">Tier <b className="text-orange-400">{tier}</b> / 50 · {ch.season.points % SEASON_POINTS_PER_TIER} / {SEASON_POINTS_PER_TIER} points · today {ch.season.pointsToday} / 150 (daily cap). Points come from daily and weekly quests.</div>
+              <div className="text-xs text-slate-300 p-2">{tr('Tier ')}<b className="text-orange-400">{tier}</b> / 50 · {ch.season.points % SEASON_POINTS_PER_TIER} / {SEASON_POINTS_PER_TIER} points · today {ch.season.pointsToday} / 150 (daily cap). Points come from daily and weekly quests.</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 {SEASON_REWARDS.map((r) => {
                   const claimed = ch.season.claimed.includes(r.tier);

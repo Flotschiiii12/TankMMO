@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { tr } from '../i18n.ts';
 import { VEHICLE_TIERS } from '../data/vehicles.ts';
 import { createWorld as createSharedWorld, spawnVehicle } from '../../shared/sim/world.ts';
 import { AMMO_TYPES, AMMO_SIM_ID } from '../data/parts.ts';
@@ -126,9 +127,9 @@ export const GarageModal: React.FC<GarageModalProps> = ({
       <div className="flex items-center justify-between border-b border-slate-800 pb-3">
         <div className="flex items-center gap-3">
           <Wrench className="text-orange-500" size={22} />
-          <h2 className="text-lg font-semibold tracking-tight text-white">Base Outpost Hangar</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-white">{tr('Base Outpost Hangar')}</h2>
           <span className="text-xs text-slate-500">·</span>
-          <span className="text-xs text-slate-400">Safe Zone Depot</span>
+          <span className="text-xs text-slate-400">{tr('Safe Zone Depot')}</span>
         </div>
 
         {/* Currency Strip */}
@@ -167,7 +168,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Vehicles
+          {tr('Vehicles')}
         </button>
         <button
           onClick={() => {
@@ -180,7 +181,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Talents
+          {tr('Talents')}
         </button>
         <button
           onClick={() => {
@@ -193,7 +194,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Ammunition Depot
+          {tr('Ammunition Depot')}
         </button>
       </div>
 
@@ -255,7 +256,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
 
                     <div className="text-right">
                       {unlocked ? (
-                        <span className="text-[11px] text-slate-300">Owned</span>
+                        <span className="text-[11px] text-slate-300">{tr('Owned')}</span>
                       ) : (
                         <span className="text-[11px] text-slate-400 tabular-nums">
                           {v.costScrap} Scrap
@@ -283,7 +284,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
 
                   {isEquipped ? (
                     <span className="px-3 py-1 rounded bg-emerald-500/20 text-emerald-300 text-xs font-semibold">
-                      Deployed
+                      {tr('Deployed')}
                     </span>
                   ) : isUnlocked ? (
                     <button
@@ -293,7 +294,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                       }}
                       className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium transition-colors"
                     >
-                      Deploy Vehicle
+                      {tr('Deploy Vehicle')}
                     </button>
                   ) : (
                     <button
@@ -333,7 +334,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                 <div className="p-2.5 rounded-lg bg-slate-950/50 border border-slate-800">
                   <div className="text-slate-400 flex items-center gap-1.5">
                     <Shield size={14} className="text-emerald-400" />
-                    <span>Hull HP</span>
+                    <span>{tr('Hull HP')}</span>
                   </div>
                   <div className="text-sm font-semibold text-white mt-1 tabular-nums">
                     {selectedVehicle.baseHull.toLocaleString()}
@@ -343,7 +344,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                 <div className="p-2.5 rounded-lg bg-slate-950/50 border border-slate-800">
                   <div className="text-slate-400 flex items-center gap-1.5">
                     <Shield size={14} className="text-blue-400" />
-                    <span>Armor HP</span>
+                    <span>{tr('Armor HP')}</span>
                   </div>
                   <div className="text-sm font-semibold text-white mt-1 tabular-nums">
                     {selectedVehicle.baseArmor.toLocaleString()}
@@ -353,7 +354,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                 <div className="p-2.5 rounded-lg bg-slate-950/50 border border-slate-800">
                   <div className="text-slate-400 flex items-center gap-1.5">
                     <Gauge size={14} className="text-orange-400" />
-                    <span>Top Speed</span>
+                    <span>{tr('Top Speed')}</span>
                   </div>
                   <div className="text-sm font-semibold text-white mt-1 tabular-nums">
                     {selectedVehicle.maxSpeed} u/s
@@ -363,7 +364,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                 <div className="p-2.5 rounded-lg bg-slate-950/50 border border-slate-800">
                   <div className="text-slate-400 flex items-center gap-1.5">
                     <Crosshair size={14} className="text-amber-400" />
-                    <span>Reload</span>
+                    <span>{tr('Reload')}</span>
                   </div>
                   <div className="text-sm font-semibold text-white mt-1 tabular-nums">
                     {selectedVehicle.reloadTime}s

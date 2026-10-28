@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { tr } from '../i18n.ts';
 import { X, Package } from 'lucide-react';
 import { UserProfile } from '../save/profile.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
@@ -58,22 +59,22 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
         <div className="flex items-center justify-between border-b border-slate-800 pb-2">
           <div className="flex items-center gap-2">
             <Package className="text-orange-500" size={18} />
-            <h3 className="font-semibold text-white text-sm">Loadout & Workshop</h3>
+            <h3 className="font-semibold text-white text-sm">{tr('Loadout & Workshop')}</h3>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-slate-400 tabular-nums">
-            <span>Scrap <b className="text-white">{ch.wallet.scrap.toLocaleString()}</b></span>
-            <span>Iron <b className="text-white">{ch.wallet.ore.iron}</b></span>
-            <span>Copper <b className="text-white">{ch.wallet.ore.copper}</b></span>
-            <span>Titanium <b className="text-white">{ch.wallet.ore.titanium}</b></span>
-            <span>Crystal <b className="text-white">{ch.wallet.ore.crystal}</b></span>
-            <span>Fragments <b className="text-white">{ch.wallet.fragments}</b></span>
+            <span>{tr('Scrap')} <b className="text-white">{ch.wallet.scrap.toLocaleString()}</b></span>
+            <span>{tr('Iron')} <b className="text-white">{ch.wallet.ore.iron}</b></span>
+            <span>{tr('Copper')} <b className="text-white">{ch.wallet.ore.copper}</b></span>
+            <span>{tr('Titanium')} <b className="text-white">{ch.wallet.ore.titanium}</b></span>
+            <span>{tr('Crystal')} <b className="text-white">{ch.wallet.ore.crystal}</b></span>
+            <span>{tr('Fragments')} <b className="text-white">{ch.wallet.fragments}</b></span>
             <button onClick={() => { soundEngine.playUIClick(); onClose(); }} className="text-slate-400 hover:text-white"><X size={18} /></button>
           </div>
         </div>
 
         <div className="flex gap-2 mt-2 text-xs">
           {(['gear', 'craft'] as const).map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{t === 'gear' ? 'Gear' : 'Craft'}</button>
+            <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{t === 'gear' ? tr('Gear') : tr('Craft')}</button>
           ))}
           {msg && <span className="ml-auto text-[11px] text-orange-300 self-center">{msg}</span>}
         </div>
@@ -84,14 +85,14 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
             <div className="col-span-4 overflow-y-auto space-y-1.5 pr-1">
               {stats && (
                 <div className="text-[11px] grid grid-cols-2 gap-x-3 gap-y-0.5 p-2 rounded bg-slate-950/50 border border-slate-800 tabular-nums">
-                  <span>Hull <b className="text-white">{stats.maxHull.toLocaleString()}</b></span>
-                  <span>Armor <b className="text-white">{stats.maxArmor.toLocaleString()}</b></span>
-                  <span>Damage <b className="text-white">{stats.mainDamage}</b></span>
-                  <span>Reload <b className="text-white">{stats.mainReloadTime}s</b></span>
-                  <span>Range <b className="text-white">{stats.mainRange}</b></span>
-                  <span>Speed <b className="text-white">{stats.maxSpeed}</b></span>
-                  <span>Crit <b className="text-white">{Math.round(stats.critChance * 100)}%</b></span>
-                  <span>Reduction <b className="text-white">{stats.flatReduction}</b></span>
+                  <span>{tr('Hull')} <b className="text-white">{stats.maxHull.toLocaleString()}</b></span>
+                  <span>{tr('Armor')} <b className="text-white">{stats.maxArmor.toLocaleString()}</b></span>
+                  <span>{tr('Damage')} <b className="text-white">{stats.mainDamage}</b></span>
+                  <span>{tr('Reload')} <b className="text-white">{stats.mainReloadTime}s</b></span>
+                  <span>{tr('Range')} <b className="text-white">{stats.mainRange}</b></span>
+                  <span>{tr('Speed')} <b className="text-white">{stats.maxSpeed}</b></span>
+                  <span>{tr('Crit')} <b className="text-white">{Math.round(stats.critChance * 100)}%</b></span>
+                  <span>{tr('Reduction')} <b className="text-white">{stats.flatReduction}</b></span>
                 </div>
               )}
               {slots.map((s) => {
@@ -102,9 +103,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                   <div key={s.key} className="flex items-center justify-between p-2 rounded bg-slate-950/40 border border-slate-800/80 text-xs">
                     <div className="min-w-0">
                       <div className="text-[10px] uppercase text-slate-500">{s.key}</div>
-                      <button disabled={!it} onClick={() => it && setSelected(it.uid)} className="truncate text-left" style={{ color: info?.color || '#64748b' }}>{info ? info.name : 'empty'}</button>
+                      <button disabled={!it} onClick={() => it && setSelected(it.uid)} className="truncate text-left" style={{ color: info?.color || '#64748b' }}>{info ? info.name : tr('empty')}</button>
                     </div>
-                    {it && <button onClick={() => run({ kind: 'unequip', vehicleId, slot: s.key })} className="text-[10px] text-slate-400 hover:text-white">Unequip</button>}
+                    {it && <button onClick={() => run({ kind: 'unequip', vehicleId, slot: s.key })} className="text-[10px] text-slate-400 hover:text-white">{tr('Unequip')}</button>}
                   </div>
                 );
               })}
@@ -121,14 +122,14 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                 <button onClick={() => run({ kind: 'expand_inventory' }, 'Inventory expanded')} className="ml-2 text-orange-400 hover:text-orange-300">Expand (+10) {C.expansionCost(ch).toLocaleString()} scrap</button>
               </div>
               <div className="overflow-y-auto space-y-1 pr-1">
-                {items.length === 0 && <div className="text-xs text-slate-500 p-3">Nothing here yet. Enemies drop gear.</div>}
+                {items.length === 0 && <div className="text-xs text-slate-500 p-3">{tr('Nothing here yet. Enemies drop gear.')}</div>}
                 {items.map((it) => {
                   const info = describeItem(it);
                   const eq = C.isEquipped(ch, it.uid);
                   return (
                     <button key={it.uid} onClick={() => setSelected(it.uid)} className={`w-full flex items-center justify-between p-2 rounded border text-left text-xs ${selected === it.uid ? 'border-orange-500/70 bg-orange-500/10' : 'border-slate-800 bg-slate-900/40'}`}>
                       <span className="truncate" style={{ color: info.color }}>{info.name}</span>
-                      <span className="text-[10px] text-slate-500 shrink-0 ml-2">{eq ? 'equipped · ' : ''}{it.rarity}</span>
+                      <span className="text-[10px] text-slate-500 shrink-0 ml-2">{eq ? tr('equipped') + ' · ' : ''}{it.rarity}</span>
                     </button>
                   );
                 })}
@@ -138,7 +139,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
             {/* Selected item */}
             <div className="col-span-4 overflow-y-auto p-2 rounded bg-slate-950/40 border border-slate-800 text-xs">
               {!sel || !selInfo ? (
-                <div className="text-slate-500">Select an item.</div>
+                <div className="text-slate-500">{tr('Select an item.')}</div>
               ) : (
                 <div className="space-y-2">
                   <div>
@@ -160,20 +161,20 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                     <div className="text-[10px] text-slate-500">Rerolls used {sel.rerolls}/{C.MAX_REROLLS}</div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {!equippedSlot && <button onClick={equipSel} className="px-2 py-1 rounded bg-emerald-600/80 text-white">Equip</button>}
+                    {!equippedSlot && <button onClick={equipSel} className="px-2 py-1 rounded bg-emerald-600/80 text-white">{tr('Equip')}</button>}
                     {sel.upgrade < C.MAX_UPGRADE && (() => {
                       const c1 = C.upgradeCost(sel.upgrade, false);
                       const chance = Math.round(UPGRADE_LEVEL_STATS[sel.upgrade + 1].successChance * 100);
                       return (
                         <>
                           <button onClick={() => run({ kind: 'upgrade', uid: sel.uid }, 'Upgrade attempted')} className="px-2 py-1 rounded bg-orange-600/80 text-white">Upgrade +{sel.upgrade + 1} ({chance}%)</button>
-                          {sel.upgrade >= 9 && <button onClick={() => run({ kind: 'upgrade', uid: sel.uid, safe: true }, 'Safe upgrade attempted')} className="px-2 py-1 rounded bg-sky-700/80 text-white">Safe mode</button>}
+                          {sel.upgrade >= 9 && <button onClick={() => run({ kind: 'upgrade', uid: sel.uid, safe: true }, 'Safe upgrade attempted')} className="px-2 py-1 rounded bg-sky-700/80 text-white">{tr('Safe mode')}</button>}
                           <span className="w-full text-[10px] text-slate-500">Cost {c1.scrap.toLocaleString()} scrap, {c1.ore} ore, {c1.fragments} fragments</span>
                         </>
                       );
                     })()}
                     {!C.isEquipped(ch, sel.uid) && <button onClick={() => { void run({ kind: 'sell_item', uid: sel.uid }, 'Sold to vendor'); setSelected(null); }} className="px-2 py-1 rounded bg-slate-700 text-white">Sell ({C.npcSellValue(sel)})</button>}
-                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { run({ kind: 'dismantle', uid: sel.uid }, 'Dismantled'); setSelected(null); }} className="px-2 py-1 rounded bg-rose-700/70 text-white">Dismantle</button>}
+                    {!C.isEquipped(ch, sel.uid) && <button onClick={() => { run({ kind: 'dismantle', uid: sel.uid }, 'Dismantled'); setSelected(null); }} className="px-2 py-1 rounded bg-rose-700/70 text-white">{tr('Dismantle')}</button>}
                   </div>
                   {fusionCandidates.length >= 3 && (
                     <button onClick={() => { const uids = fusionCandidates.slice(0, 3).map((i) => i.uid); run({ kind: 'fuse', uids }, 'Fusion done'); setSelected(null); }} className="px-2 py-1 rounded bg-violet-700/80 text-white">Fuse 3 identical ({fusionCandidates.length} available)</button>
@@ -195,7 +196,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                     <div className="text-white">{itemName(def)}</div>
                     <div className="text-[10px] text-slate-500">Lv {r.minLevel} · {r.costScrap} scrap · {Object.entries(r.costOre).map(([k, v]) => `${v} ${k}`).join(', ')} · {r.costFragments} frag</div>
                   </div>
-                  <button disabled={locked} onClick={() => run({ kind: 'craft', recipeId: r.id }, 'Crafted')} className={`px-2 py-1 rounded ${locked ? 'bg-slate-800 text-slate-600' : 'bg-orange-600/80 text-white'}`}>Craft</button>
+                  <button disabled={locked} onClick={() => run({ kind: 'craft', recipeId: r.id }, 'Crafted')} className={`px-2 py-1 rounded ${locked ? 'bg-slate-800 text-slate-600' : 'bg-orange-600/80 text-white'}`}>{tr('Craft')}</button>
                 </div>
               );
             })}

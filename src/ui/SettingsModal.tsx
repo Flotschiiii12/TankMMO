@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { tr, currentLang, setLang } from '../i18n.ts';
 import { UserProfile } from '../save/profile.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { Settings as SettingsIcon, Volume2, VolumeX, RefreshCcw, X } from 'lucide-react';
@@ -28,7 +29,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <SettingsIcon className="text-orange-500" size={20} />
-            <h3 className="font-semibold text-white text-base">Game Settings</h3>
+            <h3 className="font-semibold text-white text-base">{tr('Game Settings')}</h3>
           </div>
           <button
             onClick={() => {
@@ -50,7 +51,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               ) : (
                 <VolumeX size={16} className="text-slate-500" />
               )}
-              <span className="font-medium text-white">Audio Effects & Engine Hum</span>
+              <span className="font-medium text-white">{tr('Audio Effects & Engine Hum')}</span>
             </div>
             <button
               onClick={() => {
@@ -71,7 +72,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Volume Slider */}
           <div className="p-3 rounded-lg bg-slate-950/50 border border-slate-800 space-y-2">
             <div className="flex justify-between text-slate-400">
-              <span>Master Volume</span>
+              <span>{tr('Master Volume')}</span>
               <span className="tabular-nums text-white">
                 {Math.round(profile.settings.masterVolume * 100)}%
               </span>
@@ -94,7 +95,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Camera Viewport Zoom Slider */}
           <div className="p-3 rounded-lg bg-slate-950/50 border border-slate-800 space-y-2">
             <div className="flex justify-between text-slate-400">
-              <span>Battlefield Camera Zoom</span>
+              <span>{tr('Battlefield Camera Zoom')}</span>
               <span className="tabular-nums text-white">
                 {Math.round((profile.settings.zoom || 0.85) * 100)}%
               </span>
@@ -121,11 +122,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Debug Overlay Toggle */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
             <div>
-              <span className="font-medium text-white">Developer Diagnostics Overlay (F3)</span>
+              <span className="font-medium text-white">{tr('Developer Diagnostics Overlay (F3)')}</span>
               <div className="text-[11px] text-slate-400 mt-0.5">
                 Displays real-time FPS, tick time, and entity counts
               </div>
             </div>
+            <div className="flex items-center justify-between text-xs text-slate-300 py-2"><span>{tr('Language')}</span><select value={currentLang} onChange={(e) => setLang(e.target.value as any)} className="bg-slate-950 border border-slate-700 rounded px-2 py-1"><option value="en">English</option><option value="de">Deutsch</option></select></div>
             <button
               onClick={() => {
                 soundEngine.playUIClick();
@@ -145,7 +147,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="p-3 rounded-lg bg-red-950/20 border border-red-900/40">
             <div className="text-red-300 font-medium flex items-center gap-1.5">
               <RefreshCcw size={14} />
-              <span>Reset Game Progress</span>
+              <span>{tr('Reset Game Progress')}</span>
             </div>
             <div className="text-[11px] text-slate-400 mt-1">
               Clears saved vehicles, scrap, and returns profile to starter Patchwork Scout.
@@ -190,7 +192,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }}
             className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium transition-colors"
           >
-            Close
+            {tr('Close')}
           </button>
         </div>
       </div>

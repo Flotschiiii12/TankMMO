@@ -1,4 +1,5 @@
 import React from 'react';
+import { tr } from '../i18n.ts';
 import { ChatMessage, SimEntity } from '../sim/types.ts';
 import { QUEST_BY_ID } from '../../shared/data/quests.ts';
 import { UserProfile } from '../save/profile.ts';
@@ -62,7 +63,7 @@ export const HUD: React.FC<HUDProps> = ({
             {isSafeZone && (
               <>
                 <span>·</span>
-                <span className="text-emerald-400 font-medium">Safe Zone</span>
+                <span className="text-emerald-400 font-medium">{tr('Safe Zone')}</span>
               </>
             )}
           </div>
@@ -130,7 +131,7 @@ export const HUD: React.FC<HUDProps> = ({
             {onOpenSocial && (
               <button
                 onClick={() => { soundEngine.playUIClick(); onOpenSocial(); }}
-                title="Social (friends, party, clan)"
+                title={tr('Social (friends, party, clan)')}
                 className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-violet-400 flex items-center justify-center hover:text-white active:scale-95"
               >
                 <Users size={18} />
@@ -143,7 +144,7 @@ export const HUD: React.FC<HUDProps> = ({
                 soundEngine.playUIClick();
                 onOpenQuests();
               }}
-              title="Quests (J)"
+              title={tr('Quests (J)')}
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-emerald-400 flex items-center justify-center hover:text-white active:scale-95"
             >
               <ScrollText size={18} />
@@ -155,7 +156,7 @@ export const HUD: React.FC<HUDProps> = ({
                 soundEngine.playUIClick();
                 onOpenInventory();
               }}
-              title="Inventory & Loadout (I)"
+              title={tr('Inventory & Loadout (I)')}
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
               <Package size={18} />
@@ -167,7 +168,7 @@ export const HUD: React.FC<HUDProps> = ({
                 soundEngine.playUIClick();
                 onOpenWorldMap();
               }}
-              title="World Map & Fast Travel (M)"
+              title={tr('World Map & Fast Travel (M)')}
               className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-sky-400 flex items-center justify-center hover:text-white hover:border-sky-500 active:scale-95 shadow-sm"
             >
               <MapIcon size={18} />

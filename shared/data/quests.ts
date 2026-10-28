@@ -52,7 +52,7 @@ export interface QuestDef {
 }
 
 const rewardFor = (level: number, mult = 1): QuestReward => ({
-  xp: Math.round((120 + level * 60) * mult),
+  xp: Math.round((120 + level * 60) * mult * 0.5),
   scrap: Math.round((80 + level * 40) * mult),
 });
 

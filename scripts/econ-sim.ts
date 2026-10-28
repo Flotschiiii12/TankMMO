@@ -39,7 +39,7 @@ for (let p = 0; p < PLAYERS; p++) {
     }
     // quest income per hour (dailies roughly 5 x level-scaled reward over ~1.5 h)
     const quest = Math.round((5 * (80 + level * 40)) / 1.5); scrap += quest; b.faucetScrap += quest;
-    xp += Math.round((5 * (120 + level * 60)) / 1.5);
+    xp += Math.round((5 * (120 + level * 60) * 0.5) / 1.5);
     while (xp >= getXPForLevel(level + 1) && level < MAX_LEVEL) { xp -= getXPForLevel(level + 1); level++; }
     // sinks: repair after deaths (none < level 10), ammo, then upgrades
     const repair = level < 10 ? 0 : Math.round(level * 12 * 2); scrap -= repair; b.sinkScrap += repair;

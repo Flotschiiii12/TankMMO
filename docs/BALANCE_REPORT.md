@@ -8,51 +8,51 @@ Mean over 9 archetypes (scout_buggy, gunner_truck, artillery, flak_wagon, engine
 
 | class | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9 | T10 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| scout | 8.5 W100 | 8.7 W100 | 7.9 W100 | 8.1 W100 | 8.2 W100 | 8.1 W100 | 8.1 W100 | 8.0 W100 | 8.1 W100 | 8.6 W100 |
-| medium | 9.1 W100 | 9.4 W100 | 8.5 W100 | 9.1 W100 | 9.3 W100 | 10.0 W100 | 9.9 W100 | 9.8 W100 | 10.2 W100 | 10.5 W100 |
-| heavy | 11.4 W100 | 11.9 W100 | 10.6 W100 | 11.2 W100 | 11.7 W100 | 12.4 W100 | 12.1 W100 | 11.9 W100 | 12.7 W100 | 11.9 W97 |
-| artillery | 8.9 W100 | 8.8 W100 | 7.9 W100 | 7.0 W100 | 7.0 W100 | 7.6 W100 | 7.5 W100 | 7.2 W97 | 7.6 W97 | 7.4 W96 |
-| support | 9.3 W100 | 9.7 W100 | 8.8 W100 | 9.2 W100 | 9.8 W100 | 10.1 W100 | 10.0 W100 | 10.6 W100 | 10.8 W100 | 11.1 W100 |
+| scout | 8.5 W100 | 8.8 W100 | 7.9 W100 | 8.2 W100 | 8.2 W100 | 8.2 W100 | 8.2 W100 | 8.0 W100 | 8.2 W100 | 8.5 W100 |
+| medium | 9.2 W100 | 9.5 W100 | 8.4 W100 | 8.8 W100 | 8.9 W100 | 9.2 W100 | 8.9 W100 | 8.7 W100 | 9.0 W100 | 9.1 W100 |
+| heavy | 10.6 W100 | 11.1 W100 | 10.0 W100 | 10.5 W100 | 10.7 W100 | 11.0 W100 | 10.8 W100 | 10.6 W100 | 10.9 W100 | 11.1 W100 |
+| artillery | 8.3 W100 | 8.2 W100 | 7.4 W100 | 6.6 W100 | 6.6 W100 | 6.9 W100 | 6.8 W100 | 6.7 W100 | 6.9 W100 | 7.1 W100 |
+| support | 9.4 W100 | 9.7 W100 | 8.8 W100 | 9.2 W100 | 9.5 W100 | 9.4 W100 | 9.3 W100 | 9.2 W100 | 9.3 W100 | 9.5 W100 |
 
-Overall: mean 9.4 s, min 7.0 s, max 12.7 s; cells in band: 50/50.
+Overall: mean 8.9 s, min 6.6 s, max 11.1 s; cells in band: 50/50.
 
 ## 2. Weapon families (medium class), normal enemies
 
 | family | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9 | T10 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| cannon | 9.1 W100 | 9.4 W100 | 8.5 W100 | 9.1 W100 | 9.3 W100 | 10.0 W100 | 9.9 W100 | 9.8 W100 | 10.2 W100 | 10.5 W100 |
-| rapid_fire | 8.9 W100 | 9.2 W100 | 8.4 W100 | 8.9 W100 | 8.9 W100 | 9.5 W100 | 9.5 W100 | 9.5 W100 | 9.7 W100 | 10.0 W100 |
-| rocket | 8.6 W100 | 8.9 W100 | 8.1 W100 | 8.7 W100 | 8.4 W100 | 9.1 W100 | 9.1 W100 | 9.0 W100 | 9.2 W100 | 9.5 W100 |
-| mortar | 8.7 W100 | 9.1 W100 | 8.3 W100 | 8.9 W100 | 8.8 W100 | 9.3 W100 | 9.3 W100 | 9.3 W100 | 9.5 W100 | 9.8 W100 |
-| railgun | 8.3 W100 | 8.6 W100 | 8.0 W100 | 8.4 W100 | 8.1 W100 | 8.6 W100 | 8.6 W100 | 8.5 W100 | 8.6 W100 | 9.0 W100 |
-| flamethrower | 8.6 W100 | 9.0 W100 | 8.2 W100 | 8.8 W100 | 8.6 W100 | 9.2 W100 | 9.2 W100 | 9.2 W100 | 9.4 W100 | 9.6 W100 |
+| cannon | 9.2 W100 | 9.5 W100 | 8.4 W100 | 8.8 W100 | 8.9 W100 | 9.2 W100 | 8.9 W100 | 8.7 W100 | 9.0 W100 | 9.1 W100 |
+| rapid_fire | 8.9 W100 | 9.2 W100 | 8.2 W100 | 8.6 W100 | 8.5 W100 | 8.7 W100 | 8.5 W100 | 8.3 W100 | 8.5 W100 | 8.7 W100 |
+| rocket | 8.6 W100 | 8.9 W100 | 8.0 W100 | 8.4 W100 | 8.0 W100 | 8.2 W100 | 8.0 W100 | 7.8 W100 | 8.0 W100 | 8.2 W100 |
+| mortar | 8.8 W100 | 9.1 W100 | 8.1 W100 | 8.5 W100 | 8.3 W100 | 8.5 W100 | 8.3 W100 | 8.2 W100 | 8.3 W100 | 8.5 W100 |
+| railgun | 8.3 W100 | 8.6 W100 | 7.8 W100 | 8.1 W100 | 7.8 W100 | 7.9 W100 | 7.7 W100 | 7.5 W100 | 7.6 W100 | 7.9 W100 |
+| flamethrower | 8.7 W100 | 9.0 W100 | 8.1 W100 | 8.4 W100 | 8.1 W100 | 8.3 W100 | 8.2 W100 | 8.0 W100 | 8.2 W100 | 8.4 W100 |
 
 ## 3. Each archetype, medium class
 
 | archetype | T1 | T3 | T5 | T7 | T10 |
 |---|---|---|---|---|---|
-| scout_buggy | 5.3 W100 | 4.8▼ W100 | 6.9 W100 | 7.3 W100 | 8.4 W100 |
-| gunner_truck | 9.1 W100 | 8.6 W100 | 9.1 W100 | 9.1 W100 | 9.5 W100 |
-| artillery | 6.8 W100 | 6.1 W100 | 6.5 W100 | 6.4 W100 | 6.5 W100 |
-| flak_wagon | 9.0 W100 | 8.2 W100 | 8.4 W100 | 8.9 W100 | 9.4 W100 |
-| engineer | 9.7 W100 | 8.9 W100 | 9.3 W100 | 14.4 W100 | 15.1▲ W100 |
-| ice_tank | 13.1 W100 | 12.0 W100 | 12.6 W100 | 12.4 W100 | 12.5 W100 |
-| swamp_crawler | 11.9 W100 | 10.8 W100 | 11.2 W100 | 11.2 W100 | 12.0 W100 |
-| lava_truck | 10.5 W100 | 9.6 W100 | 10.3 W100 | 9.9 W100 | 9.9 W100 |
-| sandstorm_raider | 6.8 W100 | 7.8 W100 | 9.3 W100 | 9.6 W100 | 11.0 W100 |
+| scout_buggy | 5.3 W100 | 4.9▼ W100 | 5.3 W100 | 5.5 W100 | 5.6 W100 |
+| gunner_truck | 9.2 W100 | 8.9 W100 | 9.2 W100 | 8.9 W100 | 9.4 W100 |
+| artillery | 6.9 W100 | 6.2 W100 | 6.7 W100 | 6.7 W100 | 6.7 W100 |
+| flak_wagon | 9.1 W100 | 8.3 W100 | 8.4 W100 | 8.9 W100 | 9.5 W100 |
+| engineer | 9.7 W100 | 8.7 W100 | 9.6 W100 | 9.5 W100 | 9.9 W100 |
+| ice_tank | 13.1 W100 | 12.1 W100 | 12.6 W100 | 12.3 W100 | 12.4 W100 |
+| swamp_crawler | 12.1 W100 | 10.9 W100 | 11.5 W100 | 11.4 W100 | 11.7 W100 |
+| lava_truck | 10.5 W100 | 9.6 W100 | 10.3 W100 | 9.9 W100 | 10.2 W100 |
+| sandstorm_raider | 6.9 W100 | 6.2 W100 | 6.8 W100 | 7.1 W100 | 7.0 W100 |
 
 ## 4. Elite enemies, class x tier (target 30-60 s)
 Elite gunner truck and elite scout buggy (5.5x hull, 1.1x damage).
 
 | class | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9 | T10 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| scout | 35.5 W100 | 36.8 W100 | 33.1 W100 | 33.9 W100 | 33.9 W100 | 34.1 W100 | 33.5 W100 | 32.7 W100 | 40.3 W100 | 42.8 W100 |
-| medium | 38.6 W100 | 39.3 W100 | 35.4 W100 | 42.3 W100 | 44.5 W100 | 45.4 W100 | 44.4 W100 | 45.0 W100 | 45.8 W100 | 46.8 W100 |
-| heavy | 47.1 W100 | 50.3 W100 | 45.5 W100 | 49.1 W100 | 51.5 W100 | 55.8 W100 | 54.7 W100 | 54.4 W100 | 44.6 W94 | 46.1 W94 |
-| artillery | 37.8 W100 | 37.7 W100 | 40.4 W100 | 31.8 W100 | 33.6 W100 | 33.7 W100 | 33.5 W100 | 26.9▼ W94 | 28.6▼ W94 | 28.1▼ W94 |
-| support | 39.2 W100 | 40.9 W100 | 36.7 W100 | 38.2 W100 | 39.0 W100 | 48.9 W100 | 48.0 W100 | 46.7 W100 | 49.5 W100 | 51.4 W100 |
+| scout | 41.5 W100 | 42.6 W100 | 38.4 W100 | 39.5 W100 | 39.4 W100 | 39.9 W100 | 39.1 W100 | 38.2 W100 | 39.0 W100 | 40.1 W100 |
+| medium | 44.7 W100 | 45.9 W100 | 41.2 W100 | 43.3 W100 | 43.2 W100 | 43.9 W100 | 42.6 W100 | 41.1 W100 | 42.0 W100 | 42.8 W100 |
+| heavy | 51.8 W100 | 54.2 W100 | 48.6 W100 | 50.8 W100 | 52.3 W100 | 53.8 W100 | 52.5 W100 | 50.6 W100 | 51.7 W100 | 53.7 W100 |
+| artillery | 40.0 W100 | 38.6 W100 | 36.4 W100 | 31.9 W100 | 31.8 W100 | 32.4 W100 | 31.8 W100 | 31.7 W100 | 33.1 W100 | 33.3 W100 |
+| support | 45.5 W100 | 47.5 W100 | 42.7 W100 | 44.5 W100 | 45.5 W100 | 46.5 W100 | 45.7 W100 | 44.2 W100 | 45.2 W100 | 46.2 W100 |
 
-Overall: mean 41.1 s, cells in band: 47/50.
+Overall: mean 42.9 s, cells in band: 50/50.
 
 ## 5. PvP, equal tier (target 20-40 s)
 Win rate of the row class against the column class (both start 450 units apart; each pairing is played from both sides). Last columns: overall win rate and mean duel length.
@@ -61,74 +61,74 @@ Win rate of the row class against the column class (both start 450 units apart; 
 
 | row \ col | scout | medium | heavy | artillery | support | overall | mean s |
 |---|---|---|---|---|---|---|---|
-| scout | 50% | 63% | 81% | 0% | 50% | 48% | 21.7 |
+| scout | 50% | 63% | 88% | 0% | 50% | 50% | 21.7 |
 | medium | 38% | 50% | 69% | 75% | 19% | 50% | 25.4 |
-| heavy | 19% | 31% | 50% | 75% | 25% | 38% | 31.7 |
-| artillery | 100% | 25% | 25% | 50% | 25% | 44% | 26.4 |
-| support | 50% | 81% | 75% | 75% | 50% | 70% | 26.8 |
+| heavy | 13% | 31% | 50% | 75% | 25% | 36% | 31.6 |
+| artillery | 100% | 25% | 25% | 50% | 25% | 44% | 26.0 |
+| support | 50% | 81% | 75% | 75% | 50% | 70% | 26.9 |
 
 ### Tier 4
 
 | row \ col | scout | medium | heavy | artillery | support | overall | mean s |
 |---|---|---|---|---|---|---|---|
-| scout | 50% | 69% | 44% | 50% | 44% | 52% | 38.3 |
-| medium | 31% | 50% | 50% | 63% | 38% | 45% | 39.9 |
-| heavy | 56% | 50% | 50% | 69% | 50% | 56% | 44.8▲ |
-| artillery | 50% | 38% | 31% | 50% | 44% | 41% | 27.2 |
-| support | 56% | 63% | 50% | 56% | 50% | 56% | 43.4▲ |
+| scout | 50% | 56% | 44% | 50% | 38% | 47% | 38.3 |
+| medium | 44% | 50% | 38% | 75% | 38% | 48% | 39.9 |
+| heavy | 56% | 63% | 50% | 69% | 63% | 63% | 44.8▲ |
+| artillery | 50% | 25% | 31% | 50% | 50% | 39% | 27.2 |
+| support | 63% | 63% | 38% | 50% | 50% | 53% | 43.5▲ |
 
 ### Tier 7
 
 | row \ col | scout | medium | heavy | artillery | support | overall | mean s |
 |---|---|---|---|---|---|---|---|
-| scout | 50% | 56% | 50% | 56% | 38% | 50% | 30.6 |
-| medium | 44% | 50% | 25% | 44% | 50% | 41% | 29.7 |
-| heavy | 50% | 75% | 50% | 75% | 63% | 66% | 35.7 |
-| artillery | 44% | 56% | 25% | 50% | 50% | 44% | 23.8 |
-| support | 63% | 50% | 38% | 50% | 50% | 50% | 32.6 |
+| scout | 50% | 56% | 50% | 50% | 31% | 47% | 30.5 |
+| medium | 44% | 50% | 31% | 50% | 44% | 42% | 29.6 |
+| heavy | 50% | 69% | 50% | 69% | 63% | 63% | 35.8 |
+| artillery | 50% | 50% | 31% | 50% | 44% | 44% | 24.0 |
+| support | 69% | 56% | 38% | 56% | 50% | 55% | 32.7 |
 
 ### Tier 10
 
 | row \ col | scout | medium | heavy | artillery | support | overall | mean s |
 |---|---|---|---|---|---|---|---|
-| scout | 50% | 63% | 69% | 44% | 50% | 56% | 29.3 |
-| medium | 38% | 50% | 50% | 50% | 56% | 48% | 27.6 |
-| heavy | 31% | 50% | 50% | 56% | 38% | 44% | 36.3 |
-| artillery | 56% | 50% | 44% | 50% | 50% | 50% | 25.2 |
-| support | 50% | 44% | 63% | 50% | 50% | 52% | 30.3 |
+| scout | 50% | 63% | 69% | 50% | 44% | 56% | 28.6 |
+| medium | 38% | 50% | 56% | 44% | 56% | 48% | 27.3 |
+| heavy | 31% | 44% | 50% | 50% | 38% | 41% | 34.7 |
+| artillery | 50% | 56% | 50% | 50% | 44% | 50% | 25.3 |
+| support | 56% | 44% | 63% | 56% | 50% | 55% | 30.2 |
 
-Class spread (cross-class PvP win rate): best **support 57%**, worst **artillery 45%**, ratio 1.28. Mean duel length 31.3 s.
+Class spread (cross-class PvP win rate): best **support 58%**, worst **artillery 44%**, ratio 1.32. Mean duel length 31.2 s.
 
 ### Weapon families in PvP (medium class, tier 5, win rate of row vs column)
 
 | row \ col | cannon | rapid_fire | rocket | mortar | railgun | flamethrower | overall |
 |---|---|---|---|---|---|---|---|
-| cannon | 50% | 19% | 13% | 19% | 0% | 19% | 14% |
-| rapid_fire | 81% | 50% | 25% | 38% | 0% | 31% | 35% |
-| rocket | 88% | 75% | 50% | 69% | 19% | 69% | 64% |
-| mortar | 81% | 63% | 31% | 50% | 13% | 44% | 46% |
-| railgun | 100% | 100% | 81% | 88% | 50% | 88% | 91% |
-| flamethrower | 81% | 69% | 31% | 56% | 13% | 50% | 50% |
+| cannon | 50% | 13% | 6% | 13% | 0% | 13% | 9% |
+| rapid_fire | 88% | 50% | 25% | 38% | 0% | 38% | 38% |
+| rocket | 94% | 75% | 50% | 69% | 19% | 69% | 65% |
+| mortar | 88% | 63% | 31% | 50% | 0% | 50% | 46% |
+| railgun | 100% | 100% | 81% | 100% | 50% | 100% | 96% |
+| flamethrower | 88% | 63% | 31% | 50% | 0% | 50% | 46% |
 
 ## 6. Bosses and gates, party of 4 (target 3-8 min)
 Party: heavy, medium, artillery, support at the boss level (best tier available, standard gear).
 
 | boss | type | level | time to kill | W | party health left |
 |---|---|---|---|---|---|
-| Cape Solitude Iron Warden | mini_boss | 15 | 5.0 min | 100% | 46% |
-| Eagle Pass Sky Breaker | mini_boss | 15 | 5.0 min | 100% | 45% |
-| Steppe Windmill Overlord | mini_boss | 15 | 5.0 min | 100% | 42% |
-| Highway Juggernaut Rex | world_boss | 42 | 5.0 min | 100% | 45% |
-| Storm Coast Dreadnought | world_boss | 80 | 5.3 min | 100% | 50% |
+| Cape Solitude Iron Warden | mini_boss | 15 | 5.0 min | 100% | 43% |
+| Eagle Pass Sky Breaker | mini_boss | 15 | 5.0 min | 100% | 43% |
+| Steppe Windmill Overlord | mini_boss | 15 | 5.0 min | 100% | 45% |
+| Highway Juggernaut Rex | world_boss | 42 | 5.0 min | 100% | 48% |
+| Storm Coast Dreadnought | world_boss | 80 | 5.2 min | 88% | 49% |
 
 ### Gates (full run: waves + boss, party of 4)
 
 | gate | level | clear time | W | party health left | limit |
 |---|---|---|---|---|---|
-| Rusted Depot | 12 | 8.8 min | 75% | 39% | 15 min |
-| Quarry Hold | 14 | 9.0 min | 100% | 50% | 15 min |
-| Windmill Bastion | 15 | 9.3 min | 75% | 37% | 15 min |
-| Frozen Foundry | 34 | 8.8 min | 100% | 59% | 15 min |
-| Glowworm Sump | 42 | 9.5 min | 100% | 43% | 15 min |
-| Iron Crown Vault | 86 | 8.8 min | 100% | 58% | 15 min |
+| Rusted Depot | 12 | 8.9 min | 100% | 38% | 15 min |
+| Quarry Hold | 14 | 8.7 min | 100% | 45% | 15 min |
+| Windmill Bastion | 15 | 8.6 min | 100% | 59% | 15 min |
+| Frozen Foundry | 34 | 8.8 min | 100% | 64% | 15 min |
+| Glowworm Sump | 42 | 9.4 min | 100% | 53% | 15 min |
+| Iron Crown Vault | 86 | 8.5 min | 100% | 58% | 15 min |
 

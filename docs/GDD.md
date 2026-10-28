@@ -44,6 +44,8 @@
   - **Armor Split**: Armor absorbs $80\%$ of remaining damage while armor $> 0$; $20\%$ penetrates directly to hull. When armor is depleted, $100\%$ penetrates to hull.
   - **Armor Regeneration**: Begins after 8 seconds without taking damage at $4\%$ of maximum armor per second.
   - **Hull Repair**: Restored in safe zones or via Repair Kit ability (channeling canceled on hit).
+- **Shots always hit (permanent rule, no setting)**: every attack has a target. The locked target is used; with auto-fire or the fire button the nearest valid enemy in weapon range is picked and locked automatically. The shell steers toward its target (lead aiming, turn rate capped at 7 rad/s) so it only misses if the target dies, enters a safe zone, becomes invulnerable, or leaves the weapon range plus a 50 % grace margin. Only a shot with no valid target at all flies straight. Applies to PvE, PvP and the arena, and to enemy shots at their target. Artillery keeps its ground telegraph (the ring is the warning, the shell still lands there). Angle multipliers, crits, ammo and armor rules are unchanged.
+- **Drones**: up to `droneSlots` companions per vehicle; positions follow a formation (a pure function of the owner and time, nothing but the small drone list is sent). Guardian (damage share + shield pool), Sentinel (guns at your target), Repair bot (heals out of combat), Recon (radar range), Arc (chain lightning), Sapper (slowing mines, max 3), Interceptor (shoots down shells, weakens ground strikes), Aegis (short shield after hits). They are harmless in safe zones, die with the owner and cannot be targeted.
 
 ---
 

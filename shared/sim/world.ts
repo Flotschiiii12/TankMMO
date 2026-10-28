@@ -328,6 +328,7 @@ function applyCommand(world: World, ent: SimEntity, cmd: SimCommand): void {
       break;
     }
     case 'FireMain': {
+      if (ent.targetId === undefined) acquireTarget(world, ent); // the fire button locks the nearest valid enemy in range
       fireMainCannon(world, ent);
       break;
     }
@@ -425,6 +426,9 @@ function updateAIAndTargeting(world: World, dt: number): void {
       }
     }
 
+    // Auto-fire without a lock picks the nearest valid enemy in weapon range (every 5th tick is plenty)
+    if (ent.autoFire && ent.targetId === undefined && ent.kind === 'player' && (world.tick + ent.id) % 5 === 0) acquireTarget(world, ent);
+
     // Auto-targeting / lock retention check
     if (ent.targetId !== undefined) {
       const target = world.entities.get(ent.targetId);
@@ -519,6 +523,25 @@ function updatePhysicsAndCollisions(world: World, dt: number): void {
   }
 }
 
+/** Nearest valid enemy inside the weapon range, locked as the entity's target. Returns it (or undefined when there is none). */
+export function acquireTarget(world: World, ent: SimEntity): SimEntity | undefined {
+  if (ent.hull <= 0 || isPosInSafeZone(world, ent.pos)) return undefined;
+  let best: SimEntity | undefined; let bd = ent.mainRange;
+  for (const o of world.entities.values()) {
+    if (o.id === ent.id || o.hull <= 0 || isInertKind(o.kind) || o.invulnerableTime > 0 || isPosInSafeZone(world, o.pos) || o.statusEffects.some((s) => s.type === 'smoked' || s.type === 'invulnerable')) continue;
+    if (!canEngage(world, ent, o)) continue;
+    const d = dist(ent.pos, o.pos);
+    if (d < bd || (d === bd && best && o.id < best.id)) { bd = d; best = o; }
+  }
+  if (best) ent.targetId = best.id;
+  return best;
+}
+
+/** Shells steer toward their target with a capped turn rate (rad/s). Fast enough to catch anything that can drive. */
+export const GUIDED_TURN_RATE = 7;
+/** A guided shell may fly this much farther than the weapon range (curved path + grace) before it gives up. */
+export const GUIDED_RANGE_FACTOR = 1.5;
+
 export function fireMainCannon(world: World, ent: SimEntity): boolean {
   if (ent.mainReloadRemaining > 0 || ent.hull <= 0) return false;
   if (isPosInSafeZone(world, ent.pos)) return false;
@@ -589,6 +612,13 @@ export function fireMainCannon(world: World, ent: SimEntity): boolean {
   proj.team = ent.team;
   (proj as any).distanceTraveled = 0;
   (proj as any).maxDistance = ent.mainRange * ammoConfig.rangeMultiplier;
+  // Every attack with a target is a guided shot (permanent game rule, see docs/GDD.md): it only misses if the target dies,
+  // enters a safe zone, turns invulnerable or leaves the range plus grace. Without any target it flies straight.
+  const lock = ent.targetId !== undefined ? world.entities.get(ent.targetId) : undefined;
+  if (lock && lock.hull > 0 && dist(ent.pos, lock.pos) <= ent.mainRange * 1.1) {
+    proj.targetId = lock.id;
+    (proj as any).maxDistance = ent.mainRange * ammoConfig.rangeMultiplier * GUIDED_RANGE_FACTOR;
+  }
   (proj as any).splashRadius = ammoConfig.splashRadius;
 
   world.entities.set(id, proj);
@@ -620,6 +650,7 @@ function updateCombat(world: World, dt: number): void {
   }
 
   for (const proj of projectiles) {
+    if (proj.targetId !== undefined) steerGuided(world, proj, dt);
     proj.pos.x += proj.vel.x * dt;
     proj.pos.y += proj.vel.y * dt;
     (proj as any).distanceTraveled += Math.hypot(proj.vel.x, proj.vel.y) * dt;
@@ -644,6 +675,22 @@ function updateCombat(world: World, dt: number): void {
       }
     }
   }
+}
+
+function steerGuided(world: World, proj: SimEntity, dt: number): void {
+  const t = world.entities.get(proj.targetId!);
+  if (!t || t.hull <= 0 || t.invulnerableTime > 0 || t.statusEffects.some((s) => s.type === 'invulnerable') || isPosInSafeZone(world, t.pos)) { proj.targetId = undefined; return; }
+  const speed = Math.hypot(proj.vel.x, proj.vel.y) || proj.mainProjectileSpeed;
+  const d = dist(proj.pos, t.pos);
+  // lead the target: where will it be when the shell arrives
+  const eta = d / Math.max(1, speed);
+  const ax = t.pos.x + t.vel.x * eta * 0.9; const ay = t.pos.y + t.vel.y * eta * 0.9;
+  const want = Math.atan2(ay - proj.pos.y, ax - proj.pos.x);
+  const cur = Math.atan2(proj.vel.y, proj.vel.x);
+  const turn = d < t.radius + 70 ? Math.PI : GUIDED_TURN_RATE * dt; // the last few metres: no more circling
+  const a = cur + clamp(angleDiff(want, cur), -turn, turn);
+  proj.vel.x = Math.cos(a) * speed; proj.vel.y = Math.sin(a) * speed;
+  proj.chassisAngle = a; proj.turretAngle = a;
 }
 
 /** Secondary machine gun: unlimited ammo, auto-fires at the nearest enemy within mgRange (hitscan). */

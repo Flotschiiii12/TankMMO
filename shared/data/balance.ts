@@ -9,7 +9,7 @@ export const BASELINE_TTK_SECONDS = 9;
 /** Minimum machine-gun damage as a share of the main gun's damage per shot (the machine gun fires ~9x as often). Players and bosses. */
 export const MG_MAIN_DAMAGE_RATIO = 0.03;
 /** Elites: ~4x the time to kill of a normal enemy (target 30-60 s) and a harder hit. */
-export const ELITE_HULL_MULT = 5.5;
+export const ELITE_HULL_MULT = 6.4;
 export const ELITE_DAMAGE_MULT = 1.1;
 
 export const ENEMY_SCALE_ANCHORS: ReadonlyArray<readonly [number, number, number]> = [

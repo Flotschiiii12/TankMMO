@@ -89,6 +89,9 @@ export type SocialOp =
   | { op: 'arena_queue'; mode: '1v1' | '3v3' | '5v5' }
   | { op: 'arena_leave' }
   | { op: 'arena_status' }
+  | { op: 'spectate_list' }
+  | { op: 'spectate_join'; matchId: string }
+  | { op: 'spectate_leave' }
   | { op: 'war_status' }
   | { op: 'ah_sell'; uid: string; price: number; hours: number }
   | { op: 'ah_search'; defId?: string; slot?: string; maxPrice?: number }
@@ -236,6 +239,8 @@ export interface ServerMapPacket {
   mapId: number;
   instanceId: string;
   assignedEntityId: number;
+  /** true: the client watches an arena match (no own vehicle, delayed stream) */
+  spectate?: boolean;
 }
 
 export type ServerMessage =

@@ -107,6 +107,10 @@ const ERRORS: Record<string, string> = {
   ally_cooldown: T('These clans broke up recently (7 day cooldown)'),
   no_proposal: T('No such proposal'),
   not_allied: T('Not allied'),
+  match_not_found: T('That match is not running (any more)'),
+  spectators_full: T('This match has no free spectator slots'),
+  already_spectating: T('You are already watching a match'),
+  not_spectating: T('You are not watching a match'),
 };
 export const errorText = (code: string): string => tr(ERRORS[code] || code.replace(/_/g, ' '));
 

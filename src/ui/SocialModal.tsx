@@ -9,6 +9,7 @@ import { ITEM_BY_ID } from '../../shared/data/items.ts';
 import { priceBandClient } from '../game/priceBand.ts';
 import { ACHIEVEMENTS_CATALOG } from '../../shared/data/achievements.ts';
 import { ClanExtras } from './ClanExtras.tsx';
+import { SpectateList } from './SpectateList.tsx';
 import { RankBadge, FactionCrest, ClanEmblemBadge, CurrencyIcon } from './GameIcon.tsx';
 import { CLAN_EMBLEMS } from '../../shared/data/emblems.ts';
 import { getRankForHonor } from '../../shared/data/ranks.ts';
@@ -182,6 +183,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
                 {data.queued ? <button className={ghost} onClick={() => call({ op: 'arena_leave' })}>{tr('Leave queue')} ({data.queued})</button> : <button className={btn} onClick={() => call({ op: 'arena_queue', mode })}>{tr('Queue')}</button>}
               </div>
               <button className={ghost} onClick={async () => { const r = await client.social({ op: 'war_status' }); setMsg(r.ok ? `${tr('War week')} ${r.data.week}: ${Object.entries(r.data.scores).map(([f, v]) => `${f} ${v}`).join(' · ')}` : ''); }}>{tr('Faction war scores')}</button>
+              <SpectateList client={client} onWatch={onClose} />
             </>
           )}
 

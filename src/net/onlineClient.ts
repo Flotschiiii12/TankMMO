@@ -28,6 +28,10 @@ export class OnlineGameClient implements GameClient {
   closeCode = 0;
   closeReason = '';
   pingMs = 0;
+  /** arena spectating: no own vehicle; camera follows `followId` or free-roams at `freeCam` */
+  spectating = false;
+  followId: number | null = null;
+  freeCam = { x: 2500, y: 2500 };
 
   private ws!: WebSocket;
   private entities = new Map<number, SimEntity>();
@@ -92,11 +96,14 @@ export class OnlineGameClient implements GameClient {
       case 's_map': {
         this.playerId = m.assignedEntityId;
         this.mapId = m.mapId;
+        this.spectating = !!m.spectate;
+        this.followId = null;
         this.entities.clear();
         this.interp.clear();
         this.predicted = null;
         this.clientWorld.mapId = String(m.mapId);
         this.clientWorld.mapDef = MAP_CATALOG[m.mapId] || MAP_CATALOG['green_valley'];
+        this.freeCam = { x: this.clientWorld.mapDef.width / 2, y: this.clientWorld.mapDef.height / 2 };
         this.mapReady?.();
         break;
       }
@@ -180,6 +187,7 @@ export class OnlineGameClient implements GameClient {
   // ----------------------------------------------------------- GameClient
 
   sendCommand(command: SimCommand): void {
+    if (this.spectating) return; // the server ignores spectator input anyway
     if (command.type === 'Drive') { this.driveX = command.x; this.driveY = command.y; }
     this.pendingInputs.push(command);
     if (this.pendingInputs.length > 32) this.pendingInputs.splice(0, this.pendingInputs.length - 32);
@@ -234,6 +242,26 @@ export class OnlineGameClient implements GameClient {
 
   getEntity(id: number): SimEntity | undefined { return this.entities.get(id); }
   getPredictedPlayer(): SimEntity | null { return this.predicted; }
+
+  /** Vehicles that can be followed while spectating. */
+  spectateFighters(): SimEntity[] { return [...this.entities.values()].filter((e) => e.kind === 'player').sort((a, b) => a.id - b.id); }
+  /** Cycles the followed vehicle (dir = +1 / -1); from free-roam it picks the first one. */
+  spectateCycle(dir: 1 | -1): void {
+    const ids = this.spectateFighters().map((e) => e.id);
+    if (!ids.length) { this.followId = null; return; }
+    const i = this.followId === null ? -1 : ids.indexOf(this.followId);
+    this.followId = ids[(i + dir + ids.length * 2) % ids.length];
+  }
+  spectateFree(): void { const f = this.followId === null ? undefined : this.entities.get(this.followId); if (f) this.freeCam = { ...f.pos }; this.followId = null; }
+  moveFreeCam(dx: number, dy: number): void {
+    const m = this.clientWorld.mapDef;
+    this.freeCam = { x: Math.max(0, Math.min(m.width, this.freeCam.x + dx)), y: Math.max(0, Math.min(m.height, this.freeCam.y + dy)) };
+  }
+  /** The entity (interpolated) the spectator camera currently follows. */
+  spectateTarget(): SimEntity | null {
+    if (!this.spectating || this.followId === null) return null;
+    return this.getSnapshot()?.entities.find((e) => e.id === this.followId) ?? null;
+  }
 
   onEvent(handler: (e: SimEvent) => void): () => void { this.eventHandlers.add(handler); return () => this.eventHandlers.delete(handler); }
   onCharacter(handler: (c: CharacterState, ammo: Record<string, number>) => void): () => void { this.characterHandlers.add(handler); return () => this.characterHandlers.delete(handler); }

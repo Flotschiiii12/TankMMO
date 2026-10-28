@@ -111,3 +111,9 @@ interface ServerChatPacket {
 `clan_allies` -> `[{clanId,name,tag,emblem,status:'active'|'incoming'|'outgoing',since}]`; `clan_ally_propose {tag}` (officer+), `clan_ally_accept|decline|break {clanId}` (leader; officers may decline).
 Errors: `storage_full`, `daily_limit`, `inventory_full`, `item_bound`, `item_equipped`, `no_permission`, `unknown_clan`, `already_allied`, `already_proposed`, `ally_limit`, `target_ally_limit`, `ally_cooldown`, `no_proposal`, `not_allied`.
 Chat channel `A` reaches the own clan plus allied clans. Social events `clan_storage` / `clan_allies` tell clan members to refresh.
+
+## Arena spectating (social ops)
+
+`spectate_list` -> `[{id, mode, league, round, wins, phase, teams:[[{name, entityId}]], spectators, capacity}]`; `spectate_join {matchId}` -> `{delaySeconds, matchId}` and the server sends `s_map {assignedEntityId: 0, spectate: true}`;
+from then on the session receives the delayed arena `s_state` stream (5 s behind, public entity views only, `lastProcessedSeq` 0) plus `arena_phase` events for the HUD chip; `c_input` is ignored. `spectate_leave` (or the end of the match) sends the normal `s_map` of the player's own map again.
+Errors: `match_not_found`, `spectators_full`, `already_spectating`, `not_spectating`, `busy`, `already_queued`.

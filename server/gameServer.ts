@@ -21,6 +21,7 @@ import { AbilityId, AmmoType, MapDef, SimCommand, SimEntity, SimEvent, SIM_TIMES
 import { AccountService } from './accounts.ts';
 import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
 import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
+import { MatchRecorder, MAX_SPECTATORS_PER_MATCH, SPECTATE_DELAY_TICKS, SpectateHud, SpectateMatchInfo } from './spectate.ts';
 import { AllianceRepo, ClanStorageRepo, STORAGE_DAILY_WITHDRAW } from './clanStorage.ts';
 import { allianceKey } from '../shared/sim/pvp.ts';
 import { SqliteArenaRepo, SqliteWarRepo } from './db.ts';
@@ -97,7 +98,7 @@ interface Instance {
   world: World;
   sessions: Set<Session>;
   chatSent: number;
-  arena?: { state: AR.MatchState; teams: [Session[], Session[]]; forfeits: Set<string>; mode: AR.ArenaMode; ratings: Map<string, number>; returnTo: Map<string, { mapId: number }>; lastPhase?: string; };
+  arena?: { state: AR.MatchState; teams: [Session[], Session[]]; forfeits: Set<string>; mode: AR.ArenaMode; ratings: Map<string, number>; returnTo: Map<string, { mapId: number }>; lastPhase?: string; league: string; rec: MatchRecorder; spectators: Set<Session>; };
 }
 
 interface Session {
@@ -123,6 +124,8 @@ interface Session {
   streak: number;
   bounty: number;
   arenaFree?: boolean;
+  /** watching an arena match (delayed stream); the session itself stays in its hub instance but gets no hub snapshots */
+  spectating?: { inst: Instance; lastFrameTick: number; lastHud: string };
   returnMap?: number;
   lastHonorAt: Map<number, number>;
   partyId?: number;
@@ -171,6 +174,8 @@ export class GameServer {
   private acc = 0;
   private clock: Clock;
   /** Inbound message budget per connection; tests and fuzzers may raise it. */
+  /** Spectators per arena match; tests lower it. */
+  spectatorCap = MAX_SPECTATORS_PER_MATCH;
   inboundLimit = { perSecond: MAX_MESSAGES_PER_SECOND, burst: MAX_MESSAGE_BURST };
   readonly metrics = { ticks: 0, maxTickMs: 0, avgTickMs: 0, bytesOut: 0, msgsIn: 0 };
   private instanceCounter = 0;
@@ -345,6 +350,7 @@ export class GameServer {
     this.instanceFailures.delete(inst);
     const list = this.instances.get(inst.mapId);
     if (list) this.instances.set(inst.mapId, list.filter((i) => i !== inst));
+    for (const sp of [...(inst.arena?.spectators ?? [])]) this.stopSpectating(sp, true);
     this.arenaInstances.delete(inst);
     this.dungeonInstances.delete(inst);
     const players = [...inst.sessions];
@@ -435,6 +441,7 @@ export class GameServer {
     const mapId = inst.mapId;
     const pos = at ?? this.spawnPos(inst);
     const ent = spawnPlayerFromCharacter(inst.world, s.character, pos, s.ammo);
+    if (s.spectating) this.stopSpectating(s, false);
     s.instance = inst;
     s.entityId = ent.id;
     if (!inst.arena && !s.character.visitedMaps.includes(mapId)) s.character.visitedMaps.push(mapId);
@@ -498,6 +505,7 @@ export class GameServer {
         this.leaveParty(session);
         const tr = this.trades.get(session.accountId); if (tr) this.endTrade(tr, 'partner_left');
         this.arenaQueue = this.arenaQueue.filter((e) => e.id !== session!.accountId);
+        if (session.spectating) this.stopSpectating(session, false);
         this.leave(session);
         this.save(session);
         this.antiCheat.leave(session.accountId);
@@ -599,6 +607,7 @@ export class GameServer {
   // ---------------------------------------------------------------- input validation
 
   private handleInput(s: Session, msg: Extract<ClientMessage, { type: 'c_input' }>): void {
+    if (s.spectating) return; // spectators cannot send commands
     if (!Array.isArray(msg.commands) || typeof msg.seq !== 'number' || !Number.isFinite(msg.seq)) return;
     if (msg.seq <= s.lastSeq) { s.suspicious++; this.antiCheat.rejected(s.accountId, 'replay'); return; } // replayed or out-of-order
     this.antiCheat.input(s.accountId, this.clock.nowMs());
@@ -942,6 +951,9 @@ export class GameServer {
       case 'trade_open': case 'trade_set': case 'trade_confirm': case 'trade_cancel': case 'trade_info':
       case 'fast_travel': case 'shop_list': case 'shop_buy': case 'shop_receipt':
         return this.handleMarket(s, req as any, reply);
+      case 'spectate_list': return reply({ ok: true, data: this.spectateList() });
+      case 'spectate_join': return reply(this.spectateJoin(s, req.matchId));
+      case 'spectate_leave': if (!s.spectating) return reply({ ok: false, error: 'not_spectating' }); this.stopSpectating(s, true); return reply({ ok: true });
       case 'arena_leave': this.arenaQueue = this.arenaQueue.filter((e) => e.id !== s.accountId); return reply({ ok: true });
       case 'arena_status': {
         const ratings = Object.fromEntries((Object.keys(AR.ARENA_MODES) as AR.ArenaMode[]).map((m) => [m, this.deps.arena.get(s.accountId, m)]));
@@ -1022,6 +1034,7 @@ export class GameServer {
     }
     for (const ev of world.events) {
       for (const s of inst.sessions) s.pendingEvents.push(ev);
+      inst.arena?.rec.addEvent(ev);
       switch (ev.type) {
         case 'entity_killed': {
           const killer = ev.killerId !== undefined ? byEntity.get(ev.killerId) : undefined;
@@ -1509,6 +1522,7 @@ export class GameServer {
   private arenaQueueJoin(s: Session, mode: AR.ArenaMode): C.Result {
     if (!(mode in AR.ARENA_MODES)) return { ok: false, error: 'bad_mode' };
     if (s.instance.arena) return { ok: false, error: 'in_match' };
+    if (s.spectating) return { ok: false, error: 'busy' };
     if (this.arenaQueue.some((e) => e.id === s.accountId)) return { ok: false, error: 'already_queued' };
     if ((this.arenaBans.get(s.accountId) ?? 0) > this.clock.nowMs()) return { ok: false, error: 'arena_ban' };
     if (!this.inSafeZone(s)) return { ok: false, error: 'safe_zone_only' };
@@ -1548,7 +1562,9 @@ export class GameServer {
     const returnTo = new Map<string, { mapId: number }>();
     [m.teamA, m.teamB].forEach((team, ti) => team.forEach((q) => { const s = this.sessions.get(q.id); if (s) { teams[ti].push(s); ratings.set(q.id, q.rating); } }));
     if (teams[0].length === 0 || teams[1].length === 0) { for (const t of teams) for (const s of t) this.send(s, { type: 's_social_event', kind: 'arena_result', data: { cancelled: true } }); return; }
-    inst.arena = { state: AR.newMatch(m.mode, 0), teams, forfeits: new Set(), mode: m.mode, ratings, returnTo };
+    const powers = teams.flat().map((s) => { const st = C.computeLoadoutStats(s.character); return st ? AR.arenaPower(st.dps, st.maxHull, st.maxArmor, st.flatReduction) : 1; });
+    const league = AR.leagueForPower(powers.reduce((a, b) => a + b, 0) / Math.max(1, powers.length));
+    inst.arena = { state: AR.newMatch(m.mode, 0), teams, forfeits: new Set(), mode: m.mode, ratings, returnTo, league, rec: new MatchRecorder(), spectators: new Set() };
     this.arenaInstances.add(inst);
     teams.forEach((t, ti) => t.forEach((s, i) => {
       returnTo.set(s.accountId, { mapId: s.instance.mapId });
@@ -1559,6 +1575,76 @@ export class GameServer {
       e.team = ti; e.invulnerableTime = AR.COUNTDOWN_SECONDS + 1;
       this.send(s, { type: 's_social_event', kind: 'arena_start', data: { mode: m.mode, team: ti, opponents: teams[1 - ti].map((o) => o.name) } });
     }));
+  }
+
+  // ---------------------------------------------------------------- arena spectating (see server/spectate.ts)
+
+  private arenaHud(inst: Instance): SpectateHud {
+    const a = inst.arena!;
+    const secondsLeft = a.state.phase === 'fighting' ? Math.max(0, AR.ROUND_TIME_LIMIT_SECONDS - (inst.world.time - a.state.roundStartedAt)) : Math.max(0, a.state.phaseEndsAt - inst.world.time);
+    return { phase: a.state.phase, round: a.state.round, wins: [...a.state.wins], secondsLeft: Math.round(secondsLeft) };
+  }
+
+  /** Records the public view of the match for delayed viewers and sends spectators the frame that is SPECTATE_DELAY_TICKS old. */
+  private recordSpectateFrame(inst: Instance, sharedView: (e: SimEntity) => SimEntity, all: SimEntity[]): void {
+    const a = inst.arena!;
+    const world = inst.world;
+    a.rec.record(world.tick, world.time, all.map(sharedView), this.arenaHud(inst));
+    for (const sp of a.spectators) {
+      const st = sp.spectating!;
+      const frame = a.rec.delayed(world.tick, SPECTATE_DELAY_TICKS);
+      if (!frame || frame.tick === st.lastFrameTick) continue;
+      st.lastFrameTick = frame.tick;
+      const { patches, removed } = sp.encoder.encode(frame.views);
+      this.sendText(sp.ws, `{"type":"s_state","tick":${frame.tick},"lastProcessedSeq":0,"serverTime":${frame.time},"patches":${JSON.stringify(patches)},"removed":${JSON.stringify(removed)},"events":${JSON.stringify(frame.events)}}`);
+      const hudKey = JSON.stringify(frame.hud.wins) + frame.hud.phase + frame.hud.round;
+      if (hudKey !== st.lastHud) {
+        st.lastHud = hudKey;
+        this.send(sp, { type: 's_social_event', kind: 'arena_phase', data: { phase: frame.hud.phase, round: frame.hud.round, wins: frame.hud.wins, secondsLeft: frame.hud.secondsLeft } });
+      }
+    }
+  }
+
+  private spectateList(): SpectateMatchInfo[] {
+    return [...this.arenaInstances].filter((i) => i.arena && i.arena.state.phase !== 'finished').map((i) => {
+      const a = i.arena!;
+      return {
+        id: i.id, mode: a.mode, league: a.league, round: a.state.round, wins: [...a.state.wins], phase: a.state.phase,
+        teams: a.teams.map((t) => t.filter((s) => !a.forfeits.has(s.accountId)).map((s) => ({ name: s.name, entityId: s.entityId }))),
+        spectators: a.spectators.size, capacity: this.spectatorCap,
+      };
+    });
+  }
+
+  private spectateJoin(s: Session, matchId: unknown): C.Result<any> {
+    if (typeof matchId !== 'string') return { ok: false, error: 'match_not_found' };
+    if (s.spectating) return { ok: false, error: 'already_spectating' };
+    if (s.instance.arena || s.instance.world.dungeon) return { ok: false, error: 'busy' };
+    if (this.arenaQueue.some((e) => e.id === s.accountId)) return { ok: false, error: 'already_queued' };
+    const inst = [...this.arenaInstances].find((i) => i.id === matchId && i.arena && i.arena.state.phase !== 'finished');
+    if (!inst) return { ok: false, error: 'match_not_found' };
+    const a = inst.arena!;
+    if (a.spectators.size >= this.spectatorCap) return { ok: false, error: 'spectators_full' };
+    s.spectating = { inst, lastFrameTick: -1, lastHud: '' };
+    a.spectators.add(s);
+    s.encoder.reset();
+    s.pending = [];
+    // entity id 0 = "no vehicle of mine": the client follows an arena entity or free-roams
+    this.send(s, { type: 's_map', mapId: inst.mapId, instanceId: inst.id, assignedEntityId: 0, spectate: true });
+    return { ok: true, data: { delaySeconds: SPECTATE_DELAY_TICKS / TICK_HZ, matchId: inst.id } };
+  }
+
+  /** Leaves the spectator view. `restore`: send the hub map again so the client gets its own vehicle back. */
+  private stopSpectating(s: Session, restore: boolean): void {
+    const sp = s.spectating;
+    if (!sp) return;
+    s.spectating = undefined;
+    sp.inst.arena?.spectators.delete(s);
+    s.encoder.reset();
+    if (restore && this.sessions.get(s.accountId) === s) {
+      this.send(s, { type: 's_map', mapId: s.instance.mapId, instanceId: s.instance.id, assignedEntityId: s.entityId });
+      this.sendCharacter(s);
+    }
   }
 
   private resetArenaRound(inst: Instance): void {
@@ -1618,6 +1704,7 @@ export class GameServer {
       if (e) e.invulnerableTime = 5;
       this.save(s);
     }
+    for (const sp of [...a.spectators]) this.stopSpectating(sp, true);
     this.arenaInstances.delete(inst);
   }
 
@@ -1676,7 +1763,9 @@ export class GameServer {
     };
     const r2 = INTEREST_RADIUS * INTEREST_RADIUS;
     const all = Array.from(world.entities.values());
+    if (inst.arena) this.recordSpectateFrame(inst, sharedView, all);
     for (const s of inst.sessions) {
+      if (s.spectating) { s.pendingEvents = []; continue; } // watching a match: gets the delayed arena stream instead
       const me = world.entities.get(s.entityId);
       if (!me) continue;
       const visible: SimEntity[] = [];

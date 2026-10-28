@@ -24,6 +24,7 @@ import { soundEngine } from '../audio/soundEngine.ts';
 import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts';
 import { HUD } from './HUD.tsx';
 import { ControlsOverlay } from './ControlsOverlay.tsx';
+import { SpectateBar } from './SpectateBar.tsx';
 import { GarageModal } from './GarageModal.tsx';
 import { InventoryModal } from './InventoryModal.tsx';
 import { SettingsModal } from './SettingsModal.tsx';
@@ -61,6 +62,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const moveTargetRef = useRef<{ x: number; y: number } | null>(null);
   const lastMoveSend = useRef(0);
   const [progress, setProgress] = useState<string | null>(null);
+  const [spectating, setSpectating] = useState(false);
+  useEffect(() => { if (!online) return; const t = setInterval(() => setSpectating(online.spectating), 400); return () => clearInterval(t); }, [online]);
   const [, forceRender] = useState(0);
   const [partyNames, setPartyNames] = useState<string[]>([]);
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -440,7 +443,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
         if (snapshot) {
           const entities = snapshot.entities;
-          const player = predictedPlayer || entities.find((e) => e.id === client.playerId) || null;
+          const specClient = client as unknown as { spectating?: boolean; freeCam?: { x: number; y: number }; spectateTarget?: () => import('../../shared/types.ts').SimEntity | null };
+          const spectate = !!specClient.spectating;
+          const player = spectate ? (specClient.spectateTarget?.() ?? null) : (predictedPlayer || entities.find((e) => e.id === client.playerId) || null);
+          if (spectate && !player && specClient.freeCam) camera.setTarget(specClient.freeCam);
 
           if (player) {
             camera.setTarget(player.pos);
@@ -858,6 +864,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           />
 
 
+          {spectating && online && <SpectateBar client={online} onLeave={() => { void online.social({ op: 'spectate_leave' }); }} />}
           <ControlsOverlay
             player={playerEntity}
             onCommand={handleCommand}

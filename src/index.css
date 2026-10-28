@@ -50,3 +50,8 @@
   background: rgba(255, 255, 255, 0.3);
 }
 .hud-scale { zoom: var(--ui-scale, 1); }
+
+/* low hull warning: red edges, slow pulse (opacity only, no layout) */
+.low-health-pulse { box-shadow: inset 0 0 70px 18px rgba(220, 38, 38, 0.55); animation: low-health 1.2s ease-in-out infinite; }
+@keyframes low-health { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.9; } }
+@media (prefers-reduced-motion: reduce) { .low-health-pulse { animation: none; opacity: 0.6; } }

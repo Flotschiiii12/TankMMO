@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { tr, nm } from '../i18n.ts';
+import { tr, nm, localizeEntityName } from '../i18n.ts';
 import { Camera } from '../render/camera.ts';
 import { ParticleSystem } from '../render/particles.ts';
 import { WorldRenderer } from '../render/worldRenderer.ts';
@@ -25,6 +25,8 @@ import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts
 import { HUD } from './HUD.tsx';
 import { ControlsOverlay } from './ControlsOverlay.tsx';
 import { SpectateBar } from './SpectateBar.tsx';
+import { KillFeed, LowHealthVignette, TargetPanel } from './CombatHud.tsx';
+import { DamageNumberMerger, killFeedEntry, type KillFeedEntry } from './combatLogic.ts';
 import { impactLevel, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../render/combatFx.ts';
 import { GarageModal } from './GarageModal.tsx';
 import { InventoryModal } from './InventoryModal.tsx';
@@ -64,6 +66,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const lastMoveSend = useRef(0);
   const [progress, setProgress] = useState<string | null>(null);
   const [spectating, setSpectating] = useState(false);
+  const mergerRef = useRef(new DamageNumberMerger());
+  const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([]);
   useEffect(() => { if (!online) return; const t = setInterval(() => setSpectating(online.spectating), 400); return () => clearInterval(t); }, [online]);
   const [, forceRender] = useState(0);
   const [partyNames, setPartyNames] = useState<string[]>([]);
@@ -216,9 +220,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   useEffect(() => {
     particlesRef.current.enabled = !profile.settings.reducedEffects;
     particlesRef.current.setReduced(!!profile.settings.reducedEffects);
-    if (rendererRef.current) rendererRef.current.reducedEffects = !!profile.settings.reducedEffects;
+    if (rendererRef.current) { rendererRef.current.reducedEffects = !!profile.settings.reducedEffects; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
-  }, [profile.settings.reducedEffects, profile.settings.uiScale]);
+  }, [profile.settings.reducedEffects, profile.settings.uiScale, profile.settings.colorBlind]);
 
   // Rotate daily/weekly quests on start and when the level changes (more quests become eligible)
   useEffect(() => {
@@ -280,14 +284,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             if (event.isRearHit) particles.emitDamageText({ x: event.pos.x, y: event.pos.y + 14 }, tr('REAR'), '#fb923c');
           }
           soundEngine.playImpact(event.armorDamage > 0);
-          if (event.finalDamage > 0) {
-            particles.emitDamageText(
-              event.pos,
-              `-${Math.round(event.finalDamage)}`,
-              event.armorDamage > 0 ? '#38bdf8' : '#ef4444',
-              event.isCrit || event.isRearHit
-            );
-          }
+          if (event.finalDamage > 0) mergerRef.current.add(event.targetId, event.pos, event.finalDamage, { crit: event.isCrit || event.isRearHit, armor: event.armorDamage > 0 }, performance.now());
           if (clientRef.current && event.targetId === clientRef.current.playerId) {
             camera.addShake(event.finalDamage > 400 ? 14 : 6);
           }
@@ -295,6 +292,12 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         }
 
         case 'entity_killed': {
+          {
+            const v = clientRef.current?.getEntity(event.victimId);
+            const k = event.killerId !== undefined ? clientRef.current?.getEntity(event.killerId) : undefined;
+            const fe = v ? killFeedEntry({ id: v.id, kind: v.kind, isElite: v.isElite, name: v.kind === 'player' ? v.name : localizeEntityName(v.name) }, k?.name ?? '?', performance.now()) : undefined;
+            if (fe) setKillFeed((f) => [...f.filter((x) => x.until > performance.now()), fe].slice(-4));
+          }
           particles.emitExplosion(event.pos, true);
           soundEngine.playExplosion(true);
           camera.addShake(10);
@@ -344,6 +347,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         case 'loot_collected': {
           if (!clientRef.current || event.collectorId !== clientRef.current.playerId) break;
           soundEngine.playPickup();
+          { const [k0, s0] = event.crateType.split(':'); const col = k0 === 'ore' ? '#38bdf8' : k0 === 'scrap' ? '#eab308' : k0 === 'parts' ? '#a78bfa' : '#4ade80'; if (clientRef.current.sendAction) particles.emitDamageText(event.pos, `+${event.amount} ${tr(String(k0 === 'ore' ? s0 || 'ore' : k0 === 'scrap' ? 'Scrap' : k0))}`, col); }
           if (clientRef.current.sendAction) break; // server applies the reward
           questEvent({ type: 'tutorial', step: 'loot' });
           const [kind, sub] = event.crateType.split(':');
@@ -488,6 +492,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             }
           }
 
+          for (const n of mergerRef.current.flush(performance.now())) particles.emitDamageText(n.pos, n.text, n.armor ? '#38bdf8' : '#ef4444', n.crit);
           camera.update(dt, 5000, 5000);
           particles.update(dt);
 
@@ -878,6 +883,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           />
 
 
+          <TargetPanel target={playerEntity?.targetId !== undefined ? (clientRef.current?.getEntity(playerEntity.targetId) ?? null) : null} me={playerEntity} ammo={profile.ammoInventory as any} colorBlind={profile.settings.colorBlind} />
+          <LowHealthVignette me={playerEntity} />
+          <KillFeed entries={killFeed.filter((e) => e.until > performance.now())} />
           {spectating && online && <SpectateBar client={online} onLeave={() => { void online.social({ op: 'spectate_leave' }); }} />}
           <ControlsOverlay
             player={playerEntity}

@@ -1,6 +1,7 @@
 import { localizeEntityName } from '../i18n.ts';
 import { DroneRenderer } from './droneDraw.ts';
 import { drawAuras, drawShellTrail } from './combatFx.ts';
+import { plateLod, selectThreats } from '../ui/combatLogic.ts';
 import { clamp, MapDef, SimEntity, Vec2, dist } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { ParticleSystem } from './particles.ts';
@@ -290,6 +291,11 @@ export class WorldRenderer {
   readonly drones = new DroneRenderer();
   /** Accessibility "Reduced effects": no smoke trails, flames or drone beams. */
   reducedEffects = false;
+  /** colour-blind palette: hostile = amber, friendly = blue (never red / green) */
+  colorBlind = false;
+  /** HUD scale setting (0.8 - 1.4): name plate text follows it */
+  uiScale = 1;
+  private localPlayer: SimEntity | null = null;
   private byId = new Map<number, SimEntity>();
 
   public render(
@@ -303,6 +309,7 @@ export class WorldRenderer {
     const height = this.camera.viewportHeight;
 
     ctx.clearRect(0, 0, width, height);
+    this.localPlayer = localPlayer;
 
     // 1. Render Natural Ground Texture
     this.renderTerrain(ctx, mapDef);
@@ -427,6 +434,12 @@ export class WorldRenderer {
 
     // 13. Render Particles & Floating Damage Numbers
     this.particles.renderParticles(ctx, this.camera);
+
+    // 13b. Target brackets and off-screen threat arrows
+    if (localPlayer && localPlayer.hull > 0) {
+      this.renderTargetMarker(ctx, entities, localPlayer, time);
+      this.renderThreats(ctx, entities, localPlayer);
+    }
 
     // 14. Render Local Player Status (Hull, Armor, Gate Traveling)
     if (localPlayer && localPlayer.hull > 0) {
@@ -880,12 +893,16 @@ export class WorldRenderer {
     const r = ent.radius * zoom;
 
     const yOffset = -r - 18;
+    const lp = this.localPlayer;
+    const isTarget = !!lp && lp.targetId === ent.id;
+    const lod = plateLod(ent, lp ? Math.hypot(ent.pos.x - lp.pos.x, ent.pos.y - lp.pos.y) : 0, isTarget);
+    if (!lod.name && !lod.bars) return;
 
     ctx.save();
     ctx.translate(s.x, s.y + yOffset);
 
     // Guaranteed minimum 11px font
-    const fontSize = Math.max(11, Math.round(11 * zoom));
+    const fontSize = Math.max(11, Math.round(11 * zoom * this.uiScale));
     ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.textAlign = 'center';
 
@@ -893,13 +910,15 @@ export class WorldRenderer {
     const clan = ent.clanTag ? `[${ent.clanTag}] ` : '';
     const label = `${clan}${String(ent.kind) === 'player' ? ent.name : localizeEntityName(ent.name)}`;
 
-    // Dark stroke outline so text is readable over sunlit grass & snow
-    ctx.strokeStyle = '#09090b';
-    ctx.lineWidth = 3;
-    ctx.strokeText(label, 0, -6);
+    if (lod.name) {
+      // Dark stroke outline so text is readable over sunlit grass & snow
+      ctx.strokeStyle = '#09090b';
+      ctx.lineWidth = 3;
+      ctx.strokeText(label, 0, -6);
 
-    ctx.fillStyle = isHostile ? '#f87171' : '#60a5fa';
-    ctx.fillText(label, 0, -6);
+      ctx.fillStyle = isHostile ? (this.colorBlind ? '#fbbf24' : '#f87171') : '#60a5fa';
+      ctx.fillText(label, 0, -6);
+    }
 
     const bubble = this.bubbles.get(ent.name);
     if (bubble && bubble.until > performance.now()) {
@@ -910,11 +929,12 @@ export class WorldRenderer {
       ctx.fillText(bubble.text, 0, -25);
     }
 
+    if (!lod.bars) { ctx.restore(); return; }
     // Health & Armor bar
     const barW = Math.max(42, r * 1.6);
     const barH = Math.max(3, 3 * zoom);
     const hpRatio = clamp(ent.hull / ent.maxHull, 0, 1);
-    const armorRatio = clamp(ent.armor / ent.maxArmor, 0, 1);
+    const armorRatio = clamp(ent.armor / Math.max(1, ent.maxArmor), 0, 1);
 
     // Background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
@@ -925,10 +945,44 @@ export class WorldRenderer {
     ctx.fillRect(-barW / 2, 0, barW * armorRatio, barH);
 
     // Hull bar (bottom)
-    ctx.fillStyle = isHostile ? '#ef4444' : '#22c55e';
+    ctx.fillStyle = isHostile ? (this.colorBlind ? '#f59e0b' : '#ef4444') : (this.colorBlind ? '#38bdf8' : '#22c55e');
     ctx.fillRect(-barW / 2, barH + 1, barW * hpRatio, barH);
 
     ctx.restore();
+  }
+
+  private renderTargetMarker(ctx: CanvasRenderingContext2D, entities: SimEntity[], me: SimEntity, _time: number) {
+    if (me.targetId === undefined) return;
+    const t = entities.find((e) => e.id === me.targetId);
+    if (!t || t.hull <= 0) return;
+    const s = this.camera.worldToScreen(t.pos); const z = this.camera.zoom; const q = (t.radius + 10) * z; const c = 7 * z + 3;
+    ctx.strokeStyle = this.colorBlind ? '#fbbf24' : '#f87171'; ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) { ctx.moveTo(s.x + sx * q, s.y + sy * (q - c)); ctx.lineTo(s.x + sx * q, s.y + sy * q); ctx.lineTo(s.x + sx * (q - c), s.y + sy * q); }
+    ctx.stroke();
+  }
+
+  private threatBuf: ReturnType<typeof selectThreats> = [];
+  /** Arrows on the screen edge pointing at enemies that attack the player (and the current target) when they are off-screen. */
+  private renderThreats(ctx: CanvasRenderingContext2D, entities: SimEntity[], me: SimEntity) {
+    const w = this.camera.viewportWidth; const h = this.camera.viewportHeight; const pad = 26;
+    const onScreen = (p: { x: number; y: number }) => { const s = this.camera.worldToScreen(p); return s.x > 0 && s.x < w && s.y > 0 && s.y < h; };
+    this.threatBuf = selectThreats(me, entities, onScreen);
+    if (!this.threatBuf.length) return;
+    const cx = w / 2; const cy = h / 2;
+    for (const t of this.threatBuf) {
+      const dx = Math.cos(t.angle); const dy = Math.sin(t.angle);
+      const k = Math.min((cx - pad) / Math.max(1e-6, Math.abs(dx)), (cy - pad) / Math.max(1e-6, Math.abs(dy)));
+      const x = cx + dx * k; const y = cy + dy * k;
+      const near = Math.max(0, 1 - t.distance / 1600);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(t.angle);
+      ctx.globalAlpha = 0.55 + 0.4 * near;
+      ctx.fillStyle = t.isTarget ? '#fde047' : this.colorBlind ? '#f59e0b' : '#ef4444';
+      ctx.strokeStyle = '#09090b'; ctx.lineWidth = 2;
+      const sz = 9 + 5 * near;
+      ctx.beginPath(); ctx.moveTo(sz, 0); ctx.lineTo(-sz * 0.7, sz * 0.75); ctx.lineTo(-sz * 0.35, 0); ctx.lineTo(-sz * 0.7, -sz * 0.75); ctx.closePath(); ctx.stroke(); ctx.fill();
+      ctx.restore();
+    }
   }
 
   private renderPlayerWorldHUD(ctx: CanvasRenderingContext2D, player: SimEntity) {

@@ -51,6 +51,7 @@ const DE: Record<string, string> = {
   'Spectating (stream is delayed)': 'Zuschauen (Übertragung verzögert)', 'Previous': 'Zurück', 'Next': 'Weiter', 'Free camera': 'Freie Kamera', 'Running matches': 'Laufende Matches', 'No match is running right now.': 'Gerade läuft kein Match.', 'watching': 'Zuschauer', 'Watch': 'Zuschauen',
   'That match is not running (any more)': 'Dieses Match läuft nicht (mehr)', 'This match has no free spectator slots': 'Dieses Match hat keine freien Zuschauerplätze', 'You are already watching a match': 'Du schaust schon ein Match', 'You are not watching a match': 'Du schaust kein Match',
   'Leave': 'Verlassen',
+  'best ammo': 'beste Munition', 'about {n} shots (~{s} s)': 'etwa {n} Schüsse (~{s} s)', 'Elite': 'Elite',
   'ARMOR BREAK': 'PANZERUNG GEBROCHEN', 'REAR': 'HECKTREFFER',
   'Drone power': 'Drohnenstärke',
   'CRITICAL ALERT: {name} detected on the battlefield!': 'KRITISCHER ALARM: {name} auf dem Schlachtfeld entdeckt!',

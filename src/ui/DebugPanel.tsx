@@ -21,7 +21,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
 }) => {
   return (
     <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none select-none z-50">
-      <div className="flex items-center gap-3 px-3 py-1 rounded bg-slate-950/80 border border-slate-800 text-[10px] font-mono tabular-nums text-slate-300">
+      <div className="flex items-center gap-3 px-3 py-1 rounded bg-slate-950/80 border border-slate-800 text-[11px] font-mono tabular-nums text-slate-300">
         <div>
           FPS: <span className={fps < 45 ? 'text-amber-400' : 'text-emerald-400'}>{fps}</span>
         </div>

@@ -26,16 +26,17 @@ export const ChatLog: React.FC<ChatLogProps> = ({ messages }) => {
 
   // Keep last 5 lines for clean unobtrusive HUD
   const visibleMessages = messages.slice(-5);
+  if (visibleMessages.length === 0) return null;
 
   return (
     <div
       ref={containerRef}
-      className="pointer-events-none select-none max-w-md w-full max-h-24 overflow-y-auto flex flex-col gap-1 px-3 py-1.5 rounded-lg bg-slate-950/45 backdrop-blur-none"
+      className="pointer-events-none select-none max-w-md w-full max-h-20 overflow-y-auto flex flex-col gap-1 px-3 py-1.5 rounded-lg bg-slate-950/45 backdrop-blur-none"
     >
       {visibleMessages.map((msg) => (
         <div key={msg.id} className="text-[11px] leading-tight flex items-baseline gap-1.5">
           <span
-            className={`font-semibold shrink-0 text-[10px] ${
+            className={`font-semibold shrink-0 text-[11px] ${
               msg.channel === 'G' ? 'text-emerald-400' : 'text-orange-400'
             }`}
           >

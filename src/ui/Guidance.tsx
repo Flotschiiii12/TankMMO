@@ -8,11 +8,11 @@ export const TutorialChip: React.FC<{ step?: string; done: number; total: number
   if (!step) return null;
   const text = TUTORIAL_HINT_KEYS[step] ?? '';
   return (
-    <div className="absolute left-3 top-32 z-20 hud-scale max-w-[260px]" data-testid="tutorial-chip">
+    <div className="mt-1" data-testid="tutorial-chip">
       <div className="rounded-lg border border-orange-500/60 bg-slate-950/85 px-2.5 py-1.5 text-[11px] text-slate-200">
-        <div className="flex items-center justify-between gap-2 text-[10px] text-orange-300">
+        <div className="flex items-center justify-between gap-2 text-[11px] text-orange-300">
           <span>{tr('Getting started')} {done + 1}/{total}</span>
-          <button className="text-slate-400 hover:text-white underline" onClick={onSkip}>{tr('Skip tutorial')}</button>
+          <button data-compact className="min-h-[44px] px-2 text-slate-400 hover:text-white underline" onClick={onSkip}>{tr('Skip tutorial')}</button>
         </div>
         <div className="mt-0.5 leading-snug">{tr(text)}</div>
       </div>
@@ -24,10 +24,10 @@ export const TutorialChip: React.FC<{ step?: string; done: number; total: number
 export const HintToast: React.FC<{ text: string | null; onClose: () => void }> = ({ text, onClose }) => {
   if (!text) return null;
   return (
-    <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 hud-scale max-w-[360px]" data-testid="hint-toast">
+    <div data-hud="hint" className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 hud-scale max-w-[min(360px,calc(100vw-30rem))]" data-testid="hint-toast">
       <div className="flex items-start gap-2 rounded-lg border border-sky-500/60 bg-slate-950/90 px-3 py-2 text-[11px] text-slate-100">
         <span className="text-sky-300">💡</span><span className="leading-snug">{tr(text)}</span>
-        <button className="ml-1 text-slate-400 hover:text-white" onClick={onClose} aria-label={tr('Close')}>✕</button>
+        <button data-compact className="ml-1 min-h-[44px] min-w-[44px] text-slate-400 hover:text-white" onClick={onClose} aria-label={tr('Close')}>✕</button>
       </div>
     </div>
   );

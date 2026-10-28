@@ -337,7 +337,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                     )}
 
                     {/* Small Node Name Label */}
-                    <div className="absolute -bottom-5 whitespace-nowrap text-[10px] font-semibold text-slate-300 drop-shadow-md pointer-events-none group-hover:text-white">
+                    <div className="absolute -bottom-5 whitespace-nowrap text-[11px] font-semibold text-slate-300 drop-shadow-md pointer-events-none group-hover:text-white">
                       {nm(meta.nameKey, meta.name)}
                     </div>
                   </button>
@@ -451,7 +451,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                         <span>{targetMeta.id}. {nm(targetMeta.nameKey, targetMeta.name)}</span>
                         <ArrowRight className="w-3 h-3 text-slate-400" />
                       </div>
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[11px] text-slate-400">
                         Lv.{targetMeta.levelRange[0]}-{targetMeta.levelRange[1]}
                       </span>
                     </button>

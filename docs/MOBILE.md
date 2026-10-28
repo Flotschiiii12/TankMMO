@@ -49,3 +49,7 @@ VITE_SERVER_URL=https://treadfront.213-199-44-82.sslip.io npm run mobile:sync
 - App icons and splash images are the Capacitor defaults. Add yours with `npx @capacitor/assets generate` (needs a 1024x1024 `assets/icon.png` and a 2732x2732 `assets/splash.png`) - **manual**, art is not generated in this repo.
 - Push notifications, in-app purchases and store receipts are not wired (`FLAGS.premiumCurrencyEnabled` is off).
 - Audio on iOS starts only after a first tap (the title screen's button does that).
+
+## Layout check (cloud run 3)
+`npm run layout-check` (needs `dist/`, builds it first) opens the real UI in Playwright mobile emulation at 844x390, 740x360, 667x375 (with notch / home-bar insets) and 1280x720 and fails with a list of violations: HUD blocks overlapping the joystick or fire buttons or each other, touch targets under 44x44 px, text under 11 px, elements inside the safe-area insets, windows that do not fit or cannot scroll, Escape not closing a window, horizontal page scroll, zoom slider / pinch zoom not saving, left-handed swap and the performance-mode DPR cap. `--screens docs/screenshots` saves a picture of every screen, `--report-only` never fails. In CI it is the opt-in `layout` job (tick it on a manual run or label a PR `layout`).
+Settings: *Left-handed controls* swaps joystick and fire cluster (and mirrors the top bar); *Performance mode* caps the canvas resolution at 1.5x, uses the reduced particle cap and plain ground, and switches itself on once if frames stay above 22 ms for 5 s (with a banner).

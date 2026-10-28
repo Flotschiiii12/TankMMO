@@ -58,7 +58,7 @@ export const StoryJournal: React.FC<{ ch: CharacterState; onReplay: (scene: Stor
           <div className="text-xs font-semibold text-white">{tr('Chapter')} {c.chapter}: {nm(`story.c${c.chapter}.title`, c.name)}</div>
           <div className="mt-0.5 text-[11px] text-slate-300 leading-snug">{nm(chapterSummaryKey(c.chapter), '')}</div>
           <div className="mt-1 flex flex-wrap gap-1">
-            {STORY_SCENES.filter((s) => s.chapter === c.chapter && sceneSeen(ch, s.id)).map((s) => <button key={s.id} className="px-2 py-0.5 rounded border border-slate-700 text-[10px] text-slate-300 hover:bg-slate-800" onClick={() => onReplay(s)}>▶ {s.index}</button>)}
+            {STORY_SCENES.filter((s) => s.chapter === c.chapter && sceneSeen(ch, s.id)).map((s) => <button key={s.id} className="px-2 py-0.5 rounded border border-slate-700 text-[11px] text-slate-300 hover:bg-slate-800" onClick={() => onReplay(s)}>▶ {s.index}</button>)}
           </div>
         </div>
       ))}

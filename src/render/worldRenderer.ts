@@ -291,6 +291,8 @@ export class WorldRenderer {
   readonly drones = new DroneRenderer();
   /** Accessibility "Reduced effects": no smoke trails, flames or drone beams. */
   reducedEffects = false;
+  /** performance mode: no per-chunk detail beyond the chunk image, no grid lines */
+  plainGround = false;
   /** colour-blind palette: hostile = amber, friendly = blue (never red / green) */
   colorBlind = false;
   /** HUD scale setting (0.8 - 1.4): name plate text follows it */
@@ -496,6 +498,18 @@ export class WorldRenderer {
       }
     }
 
+    if (!this.plainGround) this.renderGrid(ctx);
+
+    // World Boundary Perimeter
+    const topLeft = this.camera.worldToScreen({ x: 0, y: 0 });
+    const bottomRight = this.camera.worldToScreen({ x: mapDef.width, y: mapDef.height });
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+    ctx.lineWidth = 3 * zoom;
+    ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  }
+
+  private renderGrid(ctx: CanvasRenderingContext2D) {
+    const zoom = this.camera.zoom;
     // Subtle soft world grid
     const gridSize = 160 * zoom;
     const startX = ((this.camera.viewportWidth / 2 - this.camera.pos.x * zoom) % gridSize + gridSize) % gridSize;
@@ -513,13 +527,6 @@ export class WorldRenderer {
       ctx.lineTo(this.camera.viewportWidth, y);
     }
     ctx.stroke();
-
-    // World Boundary Perimeter
-    const topLeft = this.camera.worldToScreen({ x: 0, y: 0 });
-    const bottomRight = this.camera.worldToScreen({ x: mapDef.width, y: mapDef.height });
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
-    ctx.lineWidth = 3 * zoom;
-    ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
   }
 
   private renderRiverAndBridges(ctx: CanvasRenderingContext2D, mapDef: MapDef, time: number) {

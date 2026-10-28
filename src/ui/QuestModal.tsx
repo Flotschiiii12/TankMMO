@@ -78,10 +78,10 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
             return (
               <div key={aq.id} className="p-2.5 rounded border border-slate-800 bg-slate-950/40 text-xs">
                 <div className="flex items-center justify-between">
-                  <div><span className="text-white font-medium">{nm(def.nameKey, def.name)}</span> <span className="text-[10px] uppercase text-slate-500">{def.kind}</span></div>
+                  <div><span className="text-white font-medium">{nm(def.nameKey, def.name)}</span> <span className="text-[11px] uppercase text-slate-500">{def.kind}</span></div>
                   <div className="flex gap-2">
                     {aq.ready && <button onClick={() => run({ kind: 'claim_quest', questId: aq.id })} className="px-2 py-1 rounded bg-emerald-600/80 text-white">{tr('Claim')}</button>}
-                    {def.kind !== 'daily' && def.kind !== 'weekly' && <button onClick={() => run({ kind: 'abandon_quest', questId: aq.id })} className="text-[10px] text-slate-500 hover:text-slate-300">{tr('abandon')}</button>}
+                    {def.kind !== 'daily' && def.kind !== 'weekly' && <button onClick={() => run({ kind: 'abandon_quest', questId: aq.id })} className="text-[11px] text-slate-500 hover:text-slate-300">{tr('abandon')}</button>}
                   </div>
                 </div>
                 {def.objectives.map((o, i) => (
@@ -90,7 +90,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
                     <div className="h-1 rounded bg-slate-800 mt-0.5"><div className="h-1 rounded bg-orange-500" style={{ width: `${Math.min(100, (aq.progress[i] / aq.targets[i]) * 100)}%` }} /></div>
                   </div>
                 ))}
-                <div className="mt-1 text-[10px] text-slate-500">{tr('Reward')}: {rw.xp} XP, {rw.scrap} {tr('scrap')}{rw.gateKeys ? `, ${rw.gateKeys} ${tr('key')}` : ''}{rw.itemRarity ? `, ${rw.itemRarity} ${tr('item')}` : ''}</div>
+                <div className="mt-1 text-[11px] text-slate-500">{tr('Reward')}: {rw.xp} XP, {rw.scrap} {tr('scrap')}{rw.gateKeys ? `, ${rw.gateKeys} ${tr('key')}` : ''}{rw.itemRarity ? `, ${rw.itemRarity} ${tr('item')}` : ''}</div>
               </div>
             );
           })}
@@ -99,7 +99,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
           {tab === 'available' && available.map((def) => (
             <div key={def.id} className="flex items-center justify-between p-2.5 rounded border border-slate-800 bg-slate-950/40 text-xs">
               <div>
-                <div className="text-white">{nm(def.nameKey, def.name)} <span className="text-[10px] uppercase text-slate-500">{def.kind}{def.chapter ? ` · ch.${def.chapter}` : ''}</span></div>
+                <div className="text-white">{nm(def.nameKey, def.name)} <span className="text-[11px] uppercase text-slate-500">{def.kind}{def.chapter ? ` · ch.${def.chapter}` : ''}</span></div>
                 <div className="text-[11px] text-slate-400">{def.objectives.map((o) => objectiveText(o, o.count)).join(' · ')}</div>
               </div>
               <button onClick={() => run({ kind: 'accept_quest', questId: def.id })} className="px-2 py-1 rounded bg-orange-600/80 text-white shrink-0 ml-2">{tr('Accept')}</button>

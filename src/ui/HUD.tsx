@@ -1,3 +1,5 @@
+import { controlStrip } from './layoutStrip.ts';
+import { useShortScreen } from './useShortScreen.ts';
 import React from 'react';
 import { tr, nm } from '../i18n.ts';
 import { ChatMessage, SimEntity } from '../sim/types.ts';
@@ -11,6 +13,9 @@ import { GameIcon, CurrencyIcon } from './GameIcon.tsx';
 import { Volume2, VolumeX, Wrench, Package, ScrollText, Users, Map as MapIcon, Settings as SettingsIcon, HelpCircle } from 'lucide-react';
 
 interface HUDProps {
+  /** the guided-start chip, rendered inside the status block so it can never overlap it */
+  tutorialChip?: React.ReactNode;
+  leftHanded?: boolean;
   player: SimEntity | null;
   entities: SimEntity[];
   mapWidth: number;
@@ -54,14 +59,17 @@ export const HUD: React.FC<HUDProps> = ({
   eventLines,
   onOpenSettings,
   onOpenTutorial,
+  tutorialChip,
+  leftHanded,
 }) => {
+  const short = useShortScreen();
 
   return (
-    <div className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between p-3 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+    <div className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between p-3 pl-[max(0.75rem,var(--safe-left))] pr-[max(0.75rem,var(--safe-right))] pt-[max(0.75rem,var(--safe-top))] pb-[max(0.5rem,var(--safe-bottom))] overflow-hidden">
       {/* TOP BAR */}
-      <div className="flex items-start justify-between w-full">
+      <div className={`flex items-start justify-between w-full ${leftHanded ? 'flex-row-reverse' : ''}`}>
         {/* Top-Left Status: Level, Map, Currencies, Ammo */}
-        <div className="hud-scale origin-top-left flex flex-col gap-1 pointer-events-auto bg-slate-950/60 rounded-lg p-2 border border-slate-800/60 shadow-sm max-w-[280px]">
+        <div data-hud="status" className="hud-scale origin-top-left flex flex-col gap-1 pointer-events-auto bg-slate-950/60 rounded-lg p-2 border border-slate-800/60 shadow-sm max-w-[280px]">
           {/* Header Row: Level + Map Name + Safe Zone Status */}
           <div className="flex items-center gap-2 text-xs text-slate-300">
             <span className="font-semibold text-orange-400">Lv. {profile.character.level}</span>
@@ -94,14 +102,16 @@ export const HUD: React.FC<HUDProps> = ({
 
           {eventLines?.map((l) => <div key={l} className="text-[11px] font-semibold text-amber-300 truncate" data-testid="event-line">⚑ {l}</div>)}
 
-          {/* Quest tracker */}
-          {Object.values(profile.character.quests.active).sort((a, b) => Number(b.id.startsWith('tut_')) - Number(a.id.startsWith('tut_')) || Number(b.ready) - Number(a.ready)).slice(0, 3).map((aq) => {
+          {tutorialChip}
+
+          {/* Quest tracker: the guided start has its own chip, short screens show one line */}
+          {Object.values(profile.character.quests.active).filter((aq) => !(tutorialChip && aq.id.startsWith('tut_'))).sort((a, b) => Number(b.id.startsWith('tut_')) - Number(a.id.startsWith('tut_')) || Number(b.ready) - Number(a.ready)).slice(0, short ? 1 : 3).map((aq) => {
             const def = QUEST_BY_ID.get(aq.id);
             if (!def) return null;
             const done = aq.progress.reduce((a, b) => a + b, 0);
             const total = aq.targets.reduce((a, b) => a + b, 0);
             return (
-              <div key={aq.id} className="text-[10px] flex justify-between gap-2 text-slate-400 border-t border-slate-800/60 pt-0.5">
+              <div key={aq.id} className="text-[11px] flex justify-between gap-2 text-slate-400 border-t border-slate-800/60 pt-0.5">
                 <span className={`truncate ${aq.ready ? 'text-emerald-400' : ''}`}>{nm(def.nameKey, def.name)}</span>
                 <span className="tabular-nums shrink-0">{aq.ready ? tr('ready') : `${done}/${total}`}</span>
               </div>
@@ -110,7 +120,7 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
 
         {/* Top-Right: Clean Vertical Stack of Radar, with Icons Below (Zero Overlap) */}
-        <div className="flex flex-col items-center gap-2 pointer-events-auto">
+        <div data-hud="menu" className="hud-menu pointer-events-auto">
           {/* Circular Radar */}
           <Radar
             player={player}
@@ -123,7 +133,7 @@ export const HUD: React.FC<HUDProps> = ({
           />
 
           {/* Icon Button Column Below Radar: All buttons >= 44x44px */}
-          <div className="flex flex-col gap-2 mt-1">
+          <div className="hud-menu-btns">
             {/* Garage button (highlighted when in safe zone) */}
             <button
               onClick={() => {
@@ -131,7 +141,7 @@ export const HUD: React.FC<HUDProps> = ({
                 onOpenGarage();
               }}
               title={isSafeZone ? tr('Open Garage') : tr('Garage (Available in Safe Zone)')}
-              className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${
+              className={`hud-round w-11 h-11 rounded-full flex items-center justify-center transition-all ${
                 isSafeZone
                   ? 'bg-orange-500 text-slate-950 shadow-md hover:bg-orange-400 active:scale-95'
                   : 'bg-slate-900/90 border border-slate-700/80 text-slate-300 hover:text-white active:scale-95'
@@ -144,7 +154,7 @@ export const HUD: React.FC<HUDProps> = ({
               <button
                 onClick={() => { soundEngine.playUIClick(); onOpenSocial(); }}
                 title={tr('Social (friends, party, clan)')}
-                className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-violet-400 flex items-center justify-center hover:text-white active:scale-95"
+                className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-violet-400 flex items-center justify-center hover:text-white active:scale-95"
               >
                 <GameIcon name="friends" size={26} />
               </button>
@@ -157,7 +167,7 @@ export const HUD: React.FC<HUDProps> = ({
                 onOpenQuests();
               }}
               title={tr('Quests (J)')}
-              className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-emerald-400 flex items-center justify-center hover:text-white active:scale-95"
+              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-emerald-400 flex items-center justify-center hover:text-white active:scale-95"
             >
               <GameIcon name="quests" size={26} />
             </button>
@@ -169,7 +179,7 @@ export const HUD: React.FC<HUDProps> = ({
                 onOpenInventory();
               }}
               title={tr('Inventory & Loadout (I)')}
-              className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
+              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
               <GameIcon name="inventory" size={26} />
             </button>
@@ -181,7 +191,7 @@ export const HUD: React.FC<HUDProps> = ({
                 onOpenWorldMap();
               }}
               title={tr('World Map & Fast Travel (M)')}
-              className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-sky-400 flex items-center justify-center hover:text-white hover:border-sky-500 active:scale-95 shadow-sm"
+              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-sky-400 flex items-center justify-center hover:text-white hover:border-sky-500 active:scale-95 shadow-sm"
             >
               <GameIcon name="map" size={26} />
             </button>
@@ -194,7 +204,7 @@ export const HUD: React.FC<HUDProps> = ({
                 onOpenTutorial();
               }}
               title={tr('Combat Field Manual')}
-              className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
+              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
               <GameIcon name="tutorial" size={26} />
             </button>
@@ -206,7 +216,7 @@ export const HUD: React.FC<HUDProps> = ({
                 onToggleMute();
               }}
               title={soundMuted ? tr('Unmute Audio') : tr('Mute Audio')}
-              className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
+              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
               {soundMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
             </button>
@@ -218,7 +228,7 @@ export const HUD: React.FC<HUDProps> = ({
                 onOpenSettings();
               }}
               title={tr('Settings & Diagnostics')}
-              className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
+              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
             >
               <GameIcon name="settings" size={26} />
             </button>
@@ -227,7 +237,7 @@ export const HUD: React.FC<HUDProps> = ({
       </div>
 
       {/* BOTTOM-CENTER: Translucent Chat Log */}
-      <div className="w-full flex justify-center pb-1 pointer-events-none">
+      <div data-hud="chatlog" style={controlStrip(leftHanded, 'calc(max(0.75rem, var(--safe-bottom)) + 3.25rem)')} className="absolute flex justify-center pointer-events-none">
         <ChatLog messages={chatMessages} />
       </div>
     </div>

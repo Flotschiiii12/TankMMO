@@ -23,6 +23,7 @@
     "mobile:open:ios": "cap open ios",
     "mobile:open:android": "cap open android",
     "e2e": "vite build && tsx scripts/e2e.ts",
+    "layout-check": "vite build && tsx scripts/layout-check.ts",
     "fuzz": "tsx scripts/fuzz.ts",
     "balance-fit": "tsx scripts/balance-fit.ts",
     "balance-sim": "tsx scripts/balance-sim.ts",

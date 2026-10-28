@@ -9,6 +9,10 @@ on:
         description: 'Also run the Playwright smoke test'
         type: boolean
         default: false
+      layout:
+        description: 'Also run the mobile layout check (Playwright, 4 viewports)'
+        type: boolean
+        default: false
 
 jobs:
   test:
@@ -38,3 +42,18 @@ jobs:
       - run: npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
+
+  layout:
+    # Opt-in: manual run with the "layout" box ticked, or a PR labelled "layout".
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.layout) || contains(github.event.pull_request.labels.*.name, 'layout') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run layout-check

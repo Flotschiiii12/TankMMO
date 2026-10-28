@@ -18,6 +18,12 @@ export function getLang(): Lang {
 export function setLang(l: Lang): void { try { localStorage.setItem(KEY, l); } catch { /* ignore */ } window.location.reload(); }
 
 const DE: Record<string, string> = {
+  'Emotes': 'Emotes',
+  'Performance mode turned on because the game was running slowly. You can change it in Settings.': 'Leistungsmodus eingeschaltet, weil das Spiel langsam lief. Du kannst das in den Einstellungen ändern.',
+  'Lower resolution (max 1.5x), fewer effects, plain ground. Turns on by itself when the game runs slowly': 'Geringere Auflösung (max. 1,5x), weniger Effekte, schlichter Boden. Schaltet sich selbst ein, wenn das Spiel ruckelt',
+  'Performance mode': 'Leistungsmodus',
+  'Joystick on the right, fire buttons on the left': 'Joystick rechts, Feuer-Tasten links',
+  'Left-handed controls': 'Linkshänder-Steuerung',
   'Sending failed, please try again.': 'Senden fehlgeschlagen, bitte versuche es noch einmal.',
   'Too many reports in the last hour, thank you! Try again later.': 'Zu viele Meldungen in der letzten Stunde, danke! Versuche es später noch einmal.',
   'Please write a little more.': 'Bitte schreib etwas mehr.',

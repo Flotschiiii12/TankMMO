@@ -19,8 +19,8 @@ export const EventCalendar: React.FC<{ now?: number; limit?: number }> = ({ now 
           return (
             <div key={`${e.kind}@${e.startsAt}`} className="rounded border border-slate-800 p-1.5">
               <div className="flex justify-between gap-2"><b className="text-slate-100">{nm(`event.${e.kind}.name`, e.kind.replace(/_/g, ' '))}</b><span className={running ? 'text-emerald-400' : 'text-slate-400'}>{running ? tr('running now') : `${fmtTime(e.startsAt)} · ${tr('starts in')} ${fmtIn(e.startsAt - now)}`}</span></div>
-              <div className="text-[10px] text-slate-400">{tr('Maps')}: {maps}</div>
-              <div className="text-[10px] text-slate-300">{nm(`event.${e.kind}.reward`, '')}</div>
+              <div className="text-[11px] text-slate-400">{tr('Maps')}: {maps}</div>
+              <div className="text-[11px] text-slate-300">{nm(`event.${e.kind}.reward`, '')}</div>
             </div>
           );
         })}

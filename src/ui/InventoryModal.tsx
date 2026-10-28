@@ -109,10 +109,10 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                 return (
                   <div key={s.key} className="flex items-center justify-between p-2 rounded bg-slate-950/40 border border-slate-800/80 text-xs">
                     <div className="min-w-0">
-                      <div className="text-[10px] uppercase text-slate-500 flex items-center gap-1"><SlotIcon slot={s.key} />{s.key}</div>
+                      <div className="text-[11px] uppercase text-slate-500 flex items-center gap-1"><SlotIcon slot={s.key} />{s.key}</div>
                       <button disabled={!it} onClick={() => it && setSelected(it.uid)} className="truncate text-left" style={{ color: info?.color || '#64748b' }}>{info ? info.name : tr('empty')}</button>
                     </div>
-                    {it && <button onClick={() => run({ kind: 'unequip', vehicleId, slot: s.key })} className="text-[10px] text-slate-400 hover:text-white">{tr('Unequip')}</button>}
+                    {it && <button onClick={() => run({ kind: 'unequip', vehicleId, slot: s.key })} className="text-[11px] text-slate-400 hover:text-white">{tr('Unequip')}</button>}
                   </div>
                 );
               })}
@@ -122,10 +122,10 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
             <div className="col-span-4 flex flex-col min-h-0">
               <div className="flex gap-1 flex-wrap mb-1">
                 {SLOT_FILTERS.map((f) => (
-                  <button key={f} onClick={() => setFilter(f)} className={`px-2 py-0.5 rounded text-[10px] capitalize border inline-flex items-center gap-1 ${filter === f ? 'border-orange-500/70 text-orange-300' : 'border-slate-800 text-slate-400'}`}>{f !== 'all' && <SlotIcon slot={f} size={12} />}{f}</button>
+                  <button key={f} onClick={() => setFilter(f)} className={`px-2 py-0.5 rounded text-[11px] capitalize border inline-flex items-center gap-1 ${filter === f ? 'border-orange-500/70 text-orange-300' : 'border-slate-800 text-slate-400'}`}>{f !== 'all' && <SlotIcon slot={f} size={12} />}{f}</button>
                 ))}
               </div>
-              <div className="text-[10px] text-slate-500 mb-1">{ch.inventory.length} / {C.inventoryCapacity(ch)} slots
+              <div className="text-[11px] text-slate-500 mb-1">{ch.inventory.length} / {C.inventoryCapacity(ch)} slots
                 <button onClick={() => run({ kind: 'expand_inventory' }, T('Inventory expanded'))} className="ml-2 text-orange-400 hover:text-orange-300">{tr('Expand (+10)')} {C.expansionCost(ch).toLocaleString()} {tr('scrap')}</button>
               </div>
               <div className="overflow-y-auto space-y-1 pr-1">
@@ -136,7 +136,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                   return (
                     <button key={it.uid} onClick={() => setSelected(it.uid)} className={`w-full flex items-center justify-between p-2 rounded border text-left text-xs ${selected === it.uid ? 'border-orange-500/70 bg-orange-500/10' : 'border-slate-800 bg-slate-900/40'}`}>
                       <span className="truncate flex items-center gap-1" style={{ color: info.color }}><RarityGem rarity={it.rarity} /><FamilyIcon family={info.def.family} />{info.name}</span>
-                      <span className="text-[10px] text-slate-500 shrink-0 ml-2">{eq ? tr('equipped') + ' · ' : ''}{it.rarity}</span>
+                      <span className="text-[11px] text-slate-500 shrink-0 ml-2">{eq ? tr('equipped') + ' · ' : ''}{it.rarity}</span>
                     </button>
                   );
                 })}
@@ -163,10 +163,10 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                     {sel.affixes.map((a, i) => (
                       <div key={i} className="flex items-center justify-between text-sky-300">
                         <span>{tr(a.stat.replace('_', ' '))} +{a.value}{a.stat === 'flat_reduction' ? '' : '%'}</span>
-                        <button onClick={() => run({ kind: 'reroll', uid: sel.uid, index: i }, T('Affix rerolled'))} className="text-[10px] text-slate-400 hover:text-white">{tr('reroll')} ({C.rerollCost(sel).scrap})</button>
+                        <button onClick={() => run({ kind: 'reroll', uid: sel.uid, index: i }, T('Affix rerolled'))} className="text-[11px] text-slate-400 hover:text-white">{tr('reroll')} ({C.rerollCost(sel).scrap})</button>
                       </div>
                     ))}
-                    <div className="text-[10px] text-slate-500">{tr('Rerolls used')} {sel.rerolls}/{C.MAX_REROLLS}</div>
+                    <div className="text-[11px] text-slate-500">{tr('Rerolls used')} {sel.rerolls}/{C.MAX_REROLLS}</div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {!equippedSlot && <button onClick={equipSel} className="px-2 py-1 rounded bg-emerald-600/80 text-white">{tr('Equip')}</button>}
@@ -177,7 +177,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                         <>
                           <button onClick={() => run({ kind: 'upgrade', uid: sel.uid }, T('Upgrade attempted'))} className="px-2 py-1 rounded bg-orange-600/80 text-white">{tr('Upgrade')} +{sel.upgrade + 1} ({chance}%)</button>
                           {sel.upgrade >= 9 && <button onClick={() => run({ kind: 'upgrade', uid: sel.uid, safe: true }, T('Safe upgrade attempted'))} className="px-2 py-1 rounded bg-sky-700/80 text-white">{tr('Safe mode')}</button>}
-                          <span className="w-full text-[10px] text-slate-500">{tr('Cost')} {c1.scrap.toLocaleString()} {tr('scrap')}, {c1.ore} {tr('ore')}, {c1.fragments} {tr('fragments')}</span>
+                          <span className="w-full text-[11px] text-slate-500">{tr('Cost')} {c1.scrap.toLocaleString()} {tr('scrap')}, {c1.ore} {tr('ore')}, {c1.fragments} {tr('fragments')}</span>
                         </>
                       );
                     })()}
@@ -202,7 +202,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                 <div key={r.id} className="flex items-center justify-between p-2 rounded border border-slate-800 bg-slate-900/40 text-xs">
                   <div>
                     <div className="text-white">{itemName(def)}</div>
-                    <div className="text-[10px] text-slate-500">Lv {r.minLevel} · {r.costScrap} {tr('scrap')} · {Object.entries(r.costOre).map(([k, v]) => `${v} ${tr(k)}`).join(', ')} · {r.costFragments} {tr('frag')}</div>
+                    <div className="text-[11px] text-slate-500">Lv {r.minLevel} · {r.costScrap} {tr('scrap')} · {Object.entries(r.costOre).map(([k, v]) => `${v} ${tr(k)}`).join(', ')} · {r.costFragments} {tr('frag')}</div>
                   </div>
                   <button disabled={locked} onClick={() => run({ kind: 'craft', recipeId: r.id }, T('Crafted'))} className={`px-2 py-1 rounded ${locked ? 'bg-slate-800 text-slate-600' : 'bg-orange-600/80 text-white'}`}>{tr('Craft')}</button>
                 </div>

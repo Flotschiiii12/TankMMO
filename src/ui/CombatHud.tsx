@@ -26,14 +26,14 @@ export const TargetPanel: React.FC<{ target: SimEntity | null; me: SimEntity | n
           <b className="truncate text-white">{target.kind === 'player' ? target.name : localizeEntityName(target.name)}</b>
           <span className="text-slate-400 whitespace-nowrap">Lv {target.level}{target.isElite ? ` · ${tr('Elite')}` : ''}</span>
         </div>
-        <div className="text-[10px] text-slate-400">{label}</div>
+        <div className="text-[11px] text-slate-400">{label}</div>
         <div className="mt-1 h-1.5 rounded bg-slate-800 overflow-hidden"><div className="h-full" style={{ width: pct(target.armor, target.maxArmor), background: '#38bdf8' }} /></div>
         <div className="mt-0.5 h-1.5 rounded bg-slate-800 overflow-hidden"><div className="h-full" style={{ width: pct(target.hull, target.maxHull), background: hullColor }} /></div>
-        <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+        <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
           <span>{target.statusEffects.map((s) => STATUS_GLYPH[s.type] ?? '•').join(' ') || ' '}</span>
           <span>{tr('best ammo')}: <b className="text-slate-200">{ammoName}</b>{best.multiplier !== 1 ? ` ×${best.multiplier}` : ''}</span>
         </div>
-        <div className="text-[10px] text-slate-400">{tr('about {n} shots (~{s} s)', { n: ttk.shots, s: ttk.seconds })}</div>
+        <div className="text-[11px] text-slate-400">{tr('about {n} shots (~{s} s)', { n: ttk.shots, s: ttk.seconds })}</div>
       </div>
     </div>
   );

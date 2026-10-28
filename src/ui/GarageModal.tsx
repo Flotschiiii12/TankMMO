@@ -243,9 +243,9 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-white">{v.name}</span>
-                        <span className="text-[10px] text-orange-400 font-medium">T{v.tier}</span>
+                        <span className="text-[11px] text-orange-400 font-medium">T{v.tier}</span>
                         {equipped && (
-                          <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
+                          <span className="text-[11px] text-emerald-400 flex items-center gap-0.5">
                             <Check size={12} /> {tr('Active')}
                           </span>
                         )}
@@ -402,7 +402,7 @@ export const GarageModal: React.FC<GarageModalProps> = ({
                           onClick={() => run({ kind: 'rank_talent', talentId: t.id })}
                           className="w-full flex items-center justify-between p-1.5 rounded border border-slate-800 hover:border-slate-600 text-left text-xs"
                         >
-                          <span className="text-slate-200">{talentLabel(t)} <span className="text-[10px] text-slate-500">{t.effectPerRank.isPercent ? `+${Math.round(t.effectPerRank.valuePerRank * 1000) / 10}%` : `+${t.effectPerRank.valuePerRank}`}/{tr('rank')} · Lv {t.minLevel}</span></span>
+                          <span className="text-slate-200">{talentLabel(t)} <span className="text-[11px] text-slate-500">{t.effectPerRank.isPercent ? `+${Math.round(t.effectPerRank.valuePerRank * 1000) / 10}%` : `+${t.effectPerRank.valuePerRank}`}/{tr('rank')} · Lv {t.minLevel}</span></span>
                           <span className={`tabular-nums ${rank === t.maxRank ? 'text-emerald-400' : 'text-slate-400'}`}>{rank}/{t.maxRank}</span>
                         </button>
                       );

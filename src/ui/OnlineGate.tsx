@@ -55,8 +55,9 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
   if (phase === 'offline') return <>{children(null)}</>;
   if (client && !lost) return <>{children(client)}</>;
 
-  const box = 'fixed inset-0 z-[100] bg-slate-950 text-slate-200 flex items-center justify-center p-4';
-  const card = 'w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-3';
+  // m-auto on the card centres it but still lets a short landscape phone scroll to the bottom
+  const box = 'fixed inset-0 z-[100] bg-slate-950 text-slate-200 flex overflow-y-auto p-4';
+  const card = 'm-auto w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-3';
   const btn = 'w-full py-2.5 rounded-lg text-sm font-semibold bg-orange-500 text-slate-950 disabled:bg-slate-800 disabled:text-slate-500';
 
   if (lost) {

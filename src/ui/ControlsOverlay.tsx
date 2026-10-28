@@ -10,6 +10,8 @@ interface ControlsOverlayProps {
   onLockNearest: () => void;
   onCycleTarget: () => void;
   onCycleAmmo: () => void;
+  /** swaps the sides: fire cluster left, joystick right */
+  leftHanded?: boolean;
 }
 
 export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
@@ -18,6 +20,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   onLockNearest,
   onCycleTarget,
   onCycleAmmo,
+  leftHanded,
 }) => {
   // Joystick State
   const [stickActive, setStickActive] = useState(false);
@@ -178,7 +181,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   return (
     <div className="absolute inset-0 pointer-events-none select-none overflow-hidden touch-none">
       {/* LEFT THUMB: Virtual Joystick */}
-      <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1.25rem,env(safe-area-inset-left))] pointer-events-auto">
+      <div data-ui="joystick" className={`absolute bottom-[max(1rem,var(--safe-bottom))] ${leftHanded ? 'right-[max(1.25rem,var(--safe-right))]' : 'left-[max(1.25rem,var(--safe-left))]'} pointer-events-auto`}>
         <div
           ref={joystickBaseRef}
           onPointerDown={handlePointerDown}
@@ -205,7 +208,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
       </div>
 
       {/* RIGHT THUMB: Big Round Target/Fire Button + Satellite Ability Cluster (All buttons >= 44x44px) */}
-      <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] pointer-events-auto flex items-center justify-center">
+      <div data-ui="fire" className={`absolute bottom-[max(1rem,var(--safe-bottom))] ${leftHanded ? 'left-[max(1.25rem,var(--safe-left))]' : 'right-[max(1.25rem,var(--safe-right))]'} pointer-events-auto flex items-center justify-center`}>
         {/* Satellite Buttons Around Fire Button */}
         <div className="relative w-48 h-48 flex items-center justify-center">
           {/* Ability 1: Smoke (Top-Left) */}
@@ -216,7 +219,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
             }}
             disabled={smokeCd > 0}
             title={tr('Smoke')} aria-label={tr('Smoke')}
-            className={`absolute top-0 left-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
+            className={`absolute top-0 left-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[11px] font-medium transition-all ${
               smokeCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
                 : 'border-slate-700 bg-slate-900/90 text-slate-200 active:scale-95 active:border-orange-400 hover:border-slate-600'
@@ -234,7 +237,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
             }}
             disabled={repairCd > 0}
             title={tr('Repair kit')} aria-label={tr('Repair kit')}
-            className={`absolute -top-4 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
+            className={`absolute -top-4 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[11px] font-medium transition-all ${
               repairCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
                 : 'border-emerald-700/70 bg-slate-900/90 text-emerald-300 active:scale-95 active:border-emerald-400 hover:border-emerald-600'
@@ -252,7 +255,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
             }}
             disabled={overdriveCd > 0}
             title={tr('Boost')} aria-label={tr('Boost')}
-            className={`absolute top-0 right-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[10px] font-medium transition-all ${
+            className={`absolute top-0 right-2 w-11 h-11 rounded-full border flex flex-col items-center justify-center text-[11px] font-medium transition-all ${
               overdriveCd > 0
                 ? 'border-slate-800 bg-slate-950/60 text-slate-500 cursor-not-allowed'
                 : 'border-orange-500/60 bg-slate-900/90 text-orange-300 active:scale-95 active:border-orange-400 hover:border-orange-400'
@@ -269,7 +272,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onCycleTarget();
             }}
             title={tr('Next target')} aria-label={tr('Next target')}
-            className="absolute left-0 w-11 h-11 rounded-full border border-slate-700 bg-slate-900/90 text-slate-300 text-[10px] font-semibold flex items-center justify-center active:scale-95 hover:border-slate-500"
+            className="absolute left-0 w-11 h-11 rounded-full border border-slate-700 bg-slate-900/90 text-slate-300 text-[11px] font-semibold flex items-center justify-center active:scale-95 hover:border-slate-500"
           >
             <GameIcon name="switch_target" size={26} />
           </button>
@@ -281,7 +284,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
               onCycleAmmo();
             }}
             title={tr('Change ammo')} aria-label={tr('Change ammo')}
-            className="absolute -bottom-1 left-3 w-11 h-11 rounded-full border border-slate-700 bg-slate-900/90 text-orange-400 text-[10px] font-bold flex items-center justify-center active:scale-95 hover:border-orange-500"
+            className="absolute bottom-0 left-3 w-11 h-11 rounded-full border border-slate-700 bg-slate-900/90 text-orange-400 text-[11px] font-bold flex items-center justify-center active:scale-95 hover:border-orange-500"
           >
             <GameIcon name={AMMO_ICON[player?.selectedAmmo || 'STANDARD'] ?? 'ammo_standard'} size={28} />
           </button>
@@ -332,7 +335,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
             <span className="text-xs font-bold tracking-wider">
               {autoFire ? 'AUTO FIRE' : hasTarget ? 'LOCKED' : 'TARGET'}
             </span>
-            <span className="text-[10px] opacity-80 font-medium">
+            <span className="text-[11px] opacity-80 font-medium">
               {autoFire ? 'Tap to pause' : hasTarget ? 'Tap to fire' : 'Tap to lock'}
             </span>
           </button>

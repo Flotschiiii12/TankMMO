@@ -29,7 +29,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-5 text-slate-200 shadow-2xl">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-5 text-slate-200 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <SettingsIcon className="text-orange-500" size={20} />
@@ -116,7 +116,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }}
               className="w-full accent-orange-500 cursor-pointer"
             />
-            <div className="flex justify-between text-[10px] text-slate-500">
+            <div className="flex justify-between text-[11px] text-slate-500">
               <span>{tr('0.5x (Wide)')}</span>
               <span>{tr('0.85x (Default)')}</span>
               <span>{tr('1.2x (Close)')}</span>
@@ -156,6 +156,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div><span className="font-medium text-white">{tr('Reduced effects')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('No particles or tread marks (less motion, better on slow phones)')}</div></div>
             <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, reducedEffects: !profile.settings.reducedEffects }); }} className={`px-3 py-1 rounded text-xs font-semibold ${profile.settings.reducedEffects ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{profile.settings.reducedEffects ? tr('ON') : tr('OFF')}</button>
           </div>
+          {([
+            ['leftHanded', 'Left-handed controls', 'Joystick on the right, fire buttons on the left'],
+            ['performanceMode', 'Performance mode', 'Lower resolution (max 1.5x), fewer effects, plain ground. Turns on by itself when the game runs slowly'],
+          ] as const).map(([key, title, desc]) => (
+            <div key={key} className="flex items-center justify-between gap-2 p-3 rounded-lg bg-slate-950/50 border border-slate-800">
+              <div><span className="font-medium text-white">{tr(title)}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr(desc)}</div></div>
+              <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, [key]: !profile.settings[key], ...(key === 'performanceMode' ? { perfAutoDone: true } : {}) }); }} className={`min-h-[44px] min-w-[56px] px-3 rounded text-xs font-semibold ${profile.settings[key] ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`} aria-pressed={!!profile.settings[key]}>{profile.settings[key] ? tr('ON') : tr('OFF')}</button>
+            </div>
+          ))}
           {onHowToPlay && (
             <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
               <span className="font-medium text-white">{tr('How to play')}</span>

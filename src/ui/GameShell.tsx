@@ -39,6 +39,7 @@ import { DamageNumberMerger, killFeedEntry, type KillFeedEntry } from './combatL
 import { impactLevel, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../render/combatFx.ts';
 import { GarageModal } from './GarageModal.tsx';
 import { InventoryModal } from './InventoryModal.tsx';
+import { dprCap, PerfMonitor } from './perfMonitor.ts';
 import { SettingsModal } from './SettingsModal.tsx';
 import { FeedbackModal } from './FeedbackModal.tsx';
 import { TutorialOverlay } from './TutorialOverlay.tsx';
@@ -310,11 +311,13 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
   // Accessibility: reduced effects and UI scale follow the settings
   useEffect(() => {
-    particlesRef.current.enabled = !profile.settings.reducedEffects;
-    particlesRef.current.setReduced(!!profile.settings.reducedEffects);
-    if (rendererRef.current) { rendererRef.current.reducedEffects = !!profile.settings.reducedEffects; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
+    const lowFx = !!profile.settings.reducedEffects || !!profile.settings.performanceMode;
+    particlesRef.current.enabled = !profile.settings.reducedEffects; // performance mode keeps the effects but caps them
+    particlesRef.current.setReduced(lowFx);
+    if (rendererRef.current) { rendererRef.current.reducedEffects = lowFx; rendererRef.current.plainGround = !!profile.settings.performanceMode; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
-  }, [profile.settings.reducedEffects, profile.settings.uiScale, profile.settings.colorBlind]);
+  }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.uiScale, profile.settings.colorBlind]);
+  useEffect(() => { window.dispatchEvent(new Event('resize')); }, [profile.settings.performanceMode]); // re-applies the DPR cap
 
   // Rotate daily/weekly quests on start and when the level changes (more quests become eligible)
   useEffect(() => {
@@ -519,7 +522,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     let currentFps = 60;
 
     const handleResize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, dprCap(profileRef.current.settings.performanceMode));
       const w = window.innerWidth;
       const h = window.innerHeight;
       canvas.width = w * dpr;
@@ -533,6 +536,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     window.addEventListener('resize', handleResize);
 
     const loop = (currentTime: number) => {
+      if (perfRef.current.frame(currentTime - lastTime)) perfActionRef.current();
       const dt = Math.min((currentTime - lastTime) / 1000, 0.05);
       lastTime = currentTime;
 
@@ -680,6 +684,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         setInventoryOpen(false);
         setGarageOpen(false);
         setSettingsOpen(false);
+        setQuestOpen(false);
+        setSocialOpen(false);
+        setFeedbackOpen(false);
+        setHowToOpen(false);
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -777,6 +785,15 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   // Commands helper
   const profileRef = useRef(profile);
   profileRef.current = profile;
+  const perfRef = useRef(new PerfMonitor());
+  /** Frames stayed above 22 ms for 5 s: switch to performance mode once (never again after the player decided) and say so. */
+  const perfActionRef = useRef<() => void>(() => {});
+  perfActionRef.current = () => {
+    const p = profileRef.current;
+    if (p.settings.performanceMode || p.settings.perfAutoDone) return;
+    saveProfile({ ...p, settings: { ...p.settings, performanceMode: true, perfAutoDone: true } });
+    showBanner(tr('Performance mode turned on because the game was running slowly. You can change it in Settings.'));
+  };
 
   /** Workshop/garage/quest actions: sent to the server when online, executed with the same shared rules when offline. */
   const performAction = useCallback(async (action: ClientAction): Promise<{ ok: boolean; error?: string }> => {
@@ -944,6 +961,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       {gameState === 'PLAYING' && (
         <>
           <HUD
+            leftHanded={!!profile.settings.leftHanded}
+            tutorialChip={(() => { const t = tutorialStatus(profile.character); return t.step ? <TutorialChip step={t.step} done={t.done} total={t.total} onSkip={() => { void performAction({ kind: 'skip_tutorial' }); }} /> : undefined; })()}
             player={playerEntity}
             entities={activeSnapshot?.entities || []}
             mapWidth={currentMapDef?.width || 4000}
@@ -977,7 +996,6 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           />
 
 
-          {(() => { const t = tutorialStatus(profile.character); return t.step ? <TutorialChip step={t.step} done={t.done} total={t.total} onSkip={() => { void performAction({ kind: 'skip_tutorial' }); }} /> : null; })()}
           <HintToast text={hint?.text ?? null} onClose={() => setHint(null)} />
           <TargetPanel target={playerEntity?.targetId !== undefined ? (clientRef.current?.getEntity(playerEntity.targetId) ?? null) : null} me={playerEntity} ammo={profile.ammoInventory as any} colorBlind={profile.settings.colorBlind} />
           <LowHealthVignette me={playerEntity} />
@@ -989,23 +1007,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             onLockNearest={handleLockNearest}
             onCycleTarget={handleCycleTarget}
             onCycleAmmo={handleCycleAmmo}
+            leftHanded={!!profile.settings.leftHanded}
           />
 
-          {/* Non-Blocking Edge Hint Cards for Tutorial */}
-          {tutorialOpen && profile.tutorialStep < 4 && (
-            <TutorialOverlay
-              step={profile.tutorialStep}
-              onAdvance={() => {
-                const nextStep = profile.tutorialStep + 1;
-                saveProfile({ ...profile, tutorialStep: nextStep });
-                if (nextStep >= 4) setTutorialOpen(false);
-              }}
-              onSkip={() => {
-                saveProfile({ ...profile, tutorialStep: 4 });
-                setTutorialOpen(false);
-              }}
-            />
-          )}
+          {/* The old 4-card tutorial overlay is gone: the guided start (chip in the HUD) replaces it. */}
         </>
       )}
 
@@ -1018,7 +1023,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       />
 
       {online && <SocialModal client={online} isOpen={socialOpen} onClose={() => setSocialOpen(false)} notices={notices} character={profile.character} />}
-      {online && gameState === 'PLAYING' && <ChatInput client={online} />}
+      {online && gameState === 'PLAYING' && <ChatInput client={online} leftHanded={!!profile.settings.leftHanded} />}
       {gameState === 'PLAYING' && <Banner text={banner} />}
       {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `${tr('Arena')} · ${tr('Round')} ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? `${tr('Break')} ` : `${tr('Start in')} `}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `${tr('Gate')} · ${tr('Wave')} ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}

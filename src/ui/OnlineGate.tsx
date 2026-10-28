@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FactionCrest } from './GameIcon.tsx';
+import { Button } from './kit/Button.tsx';
+import { applyFactionTheme } from './kit/logic.ts';
+import { Logo } from './title/Logo.tsx';
+import { LoadingScreen } from './title/LoadingScreen.tsx';
+import { NewsPanel } from './title/NewsPanel.tsx';
+import { useServerInfo } from './title/useServerInfo.ts';
+import { soundEngine } from '../audio/soundEngine.ts';
 import { tr, T, currentLang, setLang } from '../i18n.ts';
 import { createGuest, clearCredential, detectServer, getCredential, recoverAccount, serverBase, setCredential } from '../net/connect.ts';
 import { OnlineGameClient } from '../net/onlineClient.ts';
@@ -26,6 +33,8 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
   const [client, setClient] = useState<OnlineGameClient | null>(null);
   const [lost, setLost] = useState('');
   const started = useRef(false);
+  const info = useServerInfo();
+  useEffect(() => { if (!client) applyFactionTheme(faction); }, [faction, client]);
 
   const connect = useCallback(async (credential: string) => {
     setPhase('connecting');
@@ -55,65 +64,90 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
   if (phase === 'offline') return <>{children(null)}</>;
   if (client && !lost) return <>{children(client)}</>;
 
-  // m-auto on the card centres it but still lets a short landscape phone scroll to the bottom
-  const box = 'fixed inset-0 z-[100] bg-slate-950 text-slate-200 flex overflow-y-auto p-4';
-  const card = 'm-auto w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-3';
-  const btn = 'w-full py-2.5 rounded-lg text-sm font-semibold bg-orange-500 text-slate-950 disabled:bg-slate-800 disabled:text-slate-500';
+  const box = 'tt-screen';
+  const ST = { coastal: T('Harbours, dunes and salt marshes: open ground to learn on.'), highland: T('Stone passes and cold ridges: terrain gives you cover.'), steppe: T('Wide grass plains and caravan roads: room to move.') } as Record<string, string>;
+  const FACTIONS: Array<[string, string]> = [['coastal', T('Coastal Union')], ['highland', T('Highland Union')], ['steppe', T('Steppe Caravan')]];
 
   if (lost) {
     return (
-      <div className={box}><div className={card}>
-        <h2 className="text-lg font-bold text-white">{tr('Disconnected')}</h2>
-        <p className="text-sm text-slate-400">{lost}</p>
-        <button className={btn} onClick={() => window.location.reload()}>{tr('Reconnect')}</button>
-      </div></div>
+      <div className={box}><div className="tt-wrap" style={{ gridTemplateColumns: 'minmax(0,1fr)', maxWidth: 380 }}><div className="tt-card">
+        <h2>{tr('Disconnected')}</h2>
+        <p className="tt-muted">{lost}</p>
+        <Button variant="primary" large onClick={() => window.location.reload()}>{tr('Reconnect')}</Button>
+      </div></div></div>
     );
   }
-  if (phase === 'probing' || phase === 'connecting') return <div className={box}><div className="text-sm text-slate-400">{phase === 'probing' ? tr('Looking for the server…') : tr('Connecting…')}</div></div>;
+  if (phase === 'probing' || phase === 'connecting') return <LoadingScreen stage={phase === 'probing' ? 'server' : 'connect'} />;
   if (phase === 'error') {
     return (
-      <div className={box}><div className={card}>
-        <h2 className="text-lg font-bold text-white">{tr('No connection')}</h2>
-        <p className="text-sm text-slate-400">{msg}</p>
-        <button className={btn} onClick={() => { const c = getCredential(); if (c) void connect(c); else setPhase('welcome'); }}>{tr('Try again')}</button>
-      </div></div>
+      <div className={box}><div className="tt-wrap" style={{ gridTemplateColumns: 'minmax(0,1fr)', maxWidth: 380 }}><div className="tt-card">
+        <Logo size="sm" />
+        <h2>{tr('No connection')}</h2>
+        <p className="tt-muted">{msg}</p>
+        <Button variant="primary" large onClick={() => { const c = getCredential(); if (c) void connect(c); else setPhase('welcome'); }}>{tr('Try again')}</Button>
+      </div></div></div>
     );
   }
+  const langRow = (
+    <div className="tt-topbar">
+      <span className="tt-status" data-testid="server-status" role="status">
+        <span className={`tt-dot tt-dot--${info.state}`} aria-hidden />
+        {info.state === 'online' ? `${tr('Server online')} · ${tr('{n} players', { n: info.online ?? 0 })} · ${info.pingMs} ms` : info.state === 'offline' ? tr('Server not reachable') : tr('Checking server…')}
+      </span>
+      <Button variant="ghost" onClick={() => setLang(currentLang === 'de' ? 'en' : 'de')} label={currentLang === 'de' ? 'Switch to English' : 'Auf Deutsch umstellen'}>{currentLang === 'de' ? 'English' : 'Deutsch'}</Button>
+    </div>
+  );
   if (phase === 'recover') {
     return (
-      <div className={box}><div className={card}>
-        <h2 className="text-lg font-bold text-white">{tr('I already have an account')}</h2>
-        <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" className="w-full h-11 px-3 rounded-lg bg-slate-950 border border-slate-800 font-mono text-sm outline-none focus:border-orange-500" />
-        {msg && <p className="text-xs text-rose-400">{msg}</p>}
-        <button className={btn} disabled={code.trim().length < 20} onClick={async () => {
-          const r = await recoverAccount(code);
-          if (r.ok) { setCredential(r.credential); void connect(r.credential); } else setMsg(tr('That code is not valid.'));
-        }}>{tr('Sign in')}</button>
-        <button className="w-full text-xs text-slate-500" onClick={() => { setMsg(''); setPhase('welcome'); }}>{tr('Back')}</button>
+      <div className={box}><div className="tt-wrap" style={{ gridTemplateColumns: 'minmax(0,1fr)', maxWidth: 420 }}>
+        {langRow}
+        <div className="tt-card">
+          <Logo size="sm" />
+          <h2>{tr('I already have an account')}</h2>
+          <p className="tt-muted">{tr('Enter the 20-character recovery code from your old device (Settings, Account).')}</p>
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" aria-label={tr('Recovery code')} autoCapitalize="characters" autoComplete="off" spellCheck={false} className="tt-input" />
+          {msg && <p className="tt-error" role="alert">{msg}</p>}
+          <Button variant="primary" large disabled={code.trim().length < 20} onClick={async () => {
+            const r = await recoverAccount(code);
+            if (r.ok) { soundEngine.init(); setCredential(r.credential); void connect(r.credential); } else setMsg(tr('That code is not valid.'));
+          }}>{tr('Sign in')}</Button>
+          <Button variant="ghost" onClick={() => { setMsg(''); setPhase('welcome'); }}>{tr('Back')}</Button>
+        </div>
       </div></div>
     );
   }
   return (
-    <div className={box}><div className={card}>
-      <h1 className="text-xl font-bold text-white tracking-tight">Treadfront</h1>
-      <p className="text-sm text-slate-400">{tr('An online tank MMO. Your progress lives on the server.')}</p>
-      <div className="text-xs text-slate-400">{tr('Choose your faction (your start region):')}</div>
-      <div className="grid grid-cols-3 gap-1.5">
-        {[['coastal', T('Coastal Union')], ['highland', T('Highland Union')], ['steppe', T('Steppe Caravan')]].map(([k, n]) => (
-          <button key={k} onClick={() => setFaction(k)} className={`py-2 rounded-lg text-[11px] border flex flex-col items-center gap-1 ${faction === k ? 'border-orange-500 text-orange-300' : 'border-slate-800 text-slate-400'}`}><FactionCrest faction={k} size={44} />{tr(n)}</button>
-        ))}
+    <div className={box} data-testid="title-screen"><div className="tt-wrap">
+      <div className="tt-col">
+        <Logo tagline={tr('An online tank MMO. Your progress lives on the server.')} />
+        <NewsPanel items={info.news} />
       </div>
-      <label className="flex items-start gap-2 text-xs text-slate-300">
-        <input type="checkbox" checked={age} onChange={(e) => setAge(e.target.checked)} className="mt-0.5" />
-        {tr('I am at least 13 years old.')}
-      </label>
-      {msg && <p className="text-xs text-orange-300">{msg}</p>}
-      <button className={btn} disabled={!age} onClick={async () => {
-        const r = await createGuest(faction);
-        if (r.ok) { setCredential(r.credential); void connect(r.credential); } else setMsg(r.error === 'network' ? tr('Could not reach the server.') : tr('Could not create the account.'));
-      }}>{tr('Play')}</button>
-      <button className="w-full text-xs text-slate-500" onClick={() => setLang(currentLang === 'de' ? 'en' : 'de')}>{currentLang === 'de' ? 'English' : 'Deutsch'}</button>
-      <button className="w-full text-xs text-slate-500 underline" onClick={() => { setMsg(''); setPhase('recover'); }}>{tr('I already have an account')}</button>
+      <div className="tt-col">
+        {langRow}
+        <div className="tt-card">
+          <h2>{tr('Choose your faction (your start region):')}</h2>
+          <div className="tt-factions" role="radiogroup" aria-label={tr('Faction')}>
+            {FACTIONS.map(([k, n]) => (
+              <button key={k} type="button" role="radio" aria-checked={faction === k} onClick={() => setFaction(k)} className="tt-faction">
+                <FactionCrest faction={k} size={36} />{tr(n)}
+              </button>
+            ))}
+          </div>
+          <p className="tt-factiontext">{tr(ST[faction])}</p>
+          <label className="tt-check">
+            <input type="checkbox" checked={age} onChange={(e) => setAge(e.target.checked)} />
+            {tr('I am at least 13 years old.')}
+          </label>
+          {msg && <p className="tt-error" role="alert">{msg}</p>}
+          <Button variant="primary" large disabled={!age} onClick={async () => {
+            soundEngine.init();
+            const r = await createGuest(faction);
+            if (r.ok) { setCredential(r.credential); void connect(r.credential); } else setMsg(r.error === 'network' ? tr('Could not reach the server.') : tr('Could not create the account.'));
+          }}>{tr('Play')}</Button>
+          <p className="tt-muted">{tr('No sign-up needed: a guest account is created on this device. You can save a recovery code later.')}</p>
+          <Button variant="ghost" onClick={() => { setMsg(''); setPhase('recover'); }}>{tr('I already have an account')}</Button>
+        </div>
+      </div>
     </div></div>
   );
 };

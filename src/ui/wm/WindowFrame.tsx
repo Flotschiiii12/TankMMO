@@ -7,6 +7,7 @@ import { Tooltip } from '../kit/Tooltip.tsx';
 import { Offset, clampOffset, loadOffsets, saveOffset, windows } from './windowStore.ts';
 import { WINDOW_BY_ID, WindowId } from './defs.ts';
 import { useWindowMode, useWindowStack } from './useWindows.ts';
+import { keybinds } from '../title/keybinds.ts';
 
 /**
  * The one frame every in-game window uses: stacking and focus, header with title and close, Escape/back close the top window
@@ -49,7 +50,7 @@ export const WindowFrame: React.FC<{ id: WindowId; title?: string; icon?: string
         <header className="k-panel__head" style={{ cursor: sheet ? 'default' : 'grab', touchAction: 'none', background: sheet ? 'var(--c-bg-1)' : undefined, flex: 'none' }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           {(icon ?? def?.icon) && <GameIcon name={icon ?? def!.icon} size={24} />}
           <h3 className="k-panel__title">{label}</h3>
-          {def?.key && !sheet && <Tooltip content={tr('Keyboard shortcut')}><kbd className="k-badge" style={{ cursor: 'help' }}>{def.key}</kbd></Tooltip>}
+          {def?.key && !sheet && <Tooltip content={tr('Keyboard shortcut')}><kbd className="k-badge" style={{ cursor: 'help' }}>{def.id === 'shortcuts' ? def.key : keybinds.label(`win:${def.id}`)}</kbd></Tooltip>}
           {headerExtra}
           <Button variant="icon" label={tr('Close')} onClick={() => windows.close(id)} data-autofocus>✕</Button>
         </header>

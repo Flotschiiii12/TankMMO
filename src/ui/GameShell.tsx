@@ -59,6 +59,7 @@ import { FeedbackModal } from './FeedbackModal.tsx';
 import { TutorialOverlay } from './TutorialOverlay.tsx';
 import { DebugPanel } from './DebugPanel.tsx';
 import { TitleScreen } from './TitleScreen.tsx';
+import { ZoneTransition } from './title/ZoneTransition.tsx';
 import { PortraitWarning } from './PortraitWarning.tsx';
 import { WorldMapModal } from './WorldMapModal.tsx';
 import { isInSafeZone, spawnDebugTargetEnemies } from '../sim/world.ts';
@@ -333,6 +334,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     if (rendererRef.current) { rendererRef.current.reducedEffects = lowFx; rendererRef.current.plainGround = !!profile.settings.performanceMode; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
   }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.uiScale, profile.settings.colorBlind]);
+  useEffect(() => { document.documentElement.classList.toggle('reduced-motion', !!profile.settings.reduceMotion); }, [profile.settings.reduceMotion]);
   useEffect(() => { window.dispatchEvent(new Event('resize')); }, [profile.settings.performanceMode]); // re-applies the DPR cap
 
   // Rotate daily/weekly quests on start and when the level changes (more quests become eligible)
@@ -1043,6 +1045,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       <ChatWindow client={online ?? null} character={profile.character} myName={profile.character.name} />
       <ProfileWindow client={online ?? null} myName={profile.character.name} />
       {gameState === 'PLAYING' && <Banner text={banner} />}
+      <ZoneTransition mapId={online ? online.mapId : Number(profile.currentMapId) || 1} playing={gameState === 'PLAYING'} />
       {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `${tr('Arena')} · ${tr('Round')} ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? `${tr('Break')} ` : `${tr('Start in')} `}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `${tr('Gate')} · ${tr('Wave')} ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}
 

@@ -40,3 +40,19 @@ export async function requestRecoveryCode(credential: string): Promise<string | 
     return r.ok ? ((await r.json()) as any).code : null;
   } catch { return null; }
 }
+
+/** Data export (GDPR): everything the server stores about the account. */
+export async function exportAccount(credential: string): Promise<unknown | null> {
+  try {
+    const r = await fetch(`${serverBase()}/api/export`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ credential }) });
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+
+/** Permanently deletes the account on the server. */
+export async function deleteAccount(credential: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${serverBase()}/api/delete-account`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ credential }) });
+    return r.ok;
+  } catch { return false; }
+}

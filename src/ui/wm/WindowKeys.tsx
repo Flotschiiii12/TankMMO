@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { keybinds, windowForBoundCode } from '../title/keybinds.ts';
 import { windowForCode } from './defs.ts';
 import { windows } from './windowStore.ts';
 
@@ -15,7 +16,7 @@ export function WindowKeys({ enabled = true }: { enabled?: boolean }) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.code === 'Escape') { if (typing(e.target) && windows.size === 0) return; if (windows.closeTop()) e.stopPropagation(); return; }
       if (typing(e.target)) return;
-      const def = windowForCode(e.code);
+      const def = e.code === 'Slash' || e.code === 'F1' ? windowForCode(e.code) : windowForBoundCode(keybinds.get(), e.code);
       if (!def) return;
       if (e.code === 'Slash' && !e.shiftKey) return; // plain "/" is for chat commands, only "?" opens the help
       e.preventDefault();

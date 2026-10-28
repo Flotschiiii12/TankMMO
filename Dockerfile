@@ -13,6 +13,7 @@ RUN npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund && npm 
 COPY --from=build /app/dist ./dist
 COPY shared ./shared
 COPY server ./server
+COPY docs/legal ./docs/legal
 COPY tsconfig.json ./
 VOLUME /data
 EXPOSE 3000

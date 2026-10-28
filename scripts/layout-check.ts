@@ -225,12 +225,25 @@ async function main() {
         await gear.first().click({ force: true }).catch(() => {}); await page.waitForTimeout(300);
         await check(page, vp, 'modal-settings', { modal: true });
         // zoom setting is written to the profile
-        const slider = page.locator('input[type=range]').nth(1);
+        const slider = page.locator('input[data-setting=zoom]');
         if (await slider.count()) {
           await slider.fill('0.6');
           const z = await page.evaluate(`JSON.parse(localStorage.getItem('treadfront_save_v1') || '{}').settings?.zoom`);
           if (z !== 0.6) violations.push({ viewport: vp.name, screen: 'modal-settings', rule: 'zoom-setting', element: 'zoom slider', detail: `profile zoom is ${z}, expected 0.6` });
         }
+        // every tab fits (rules run per tab), then a key is remapped and reset
+        for (const tabName of ['Audio', 'Controls', 'Interface', 'Accessibility', 'Account', 'About']) {
+          await page.getByRole('tab', { name: tabName }).click().catch(() => violations.push({ viewport: vp.name, screen: 'modal-settings', rule: 'settings-tab', element: tabName, detail: 'tab missing' }));
+          await page.waitForTimeout(150);
+          await check(page, vp, `modal-settings-${tabName.toLowerCase()}`, { modal: true });
+        }
+        await page.getByRole('tab', { name: 'Controls' }).click(); await page.waitForTimeout(150);
+        await page.locator('[data-bind=smoke]').click(); await page.keyboard.press('KeyZ'); await page.waitForTimeout(100);
+        const remapped = await page.locator('[data-bind=smoke]').innerText();
+        if (remapped.trim() !== 'Z') violations.push({ viewport: vp.name, screen: 'modal-settings', rule: 'keybind', element: 'smoke', detail: `expected Z after remap, got ${remapped}` });
+        await page.getByRole('button', { name: 'Reset keys to default' }).click();
+        if ((await page.locator('[data-bind=smoke]').innerText()).trim() !== 'Q') violations.push({ viewport: vp.name, screen: 'modal-settings', rule: 'keybind', element: 'smoke', detail: 'reset did not restore Q' });
+        await page.getByRole('tab', { name: 'Graphics' }).click(); await page.waitForTimeout(100);
         await closeModal(page, vp, 'modal-settings');
       }
       // hangar: switch views on phones, drag an equipped item out and back in (desktop), preview power shows a number
@@ -311,8 +324,9 @@ async function main() {
         const before = await canvasRatio();
         // the toggle rows are buttons named ON/OFF right after their title: click by the row text
         await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200);
-        await page.locator('div:has(> div > span:text-is("Left-handed controls")) button').first().click();
-        await page.locator('div:has(> div > span:text-is("Performance mode")) button').first().click();
+        await page.locator('[data-setting=performanceMode]').first().click();
+        await page.getByRole('tab', { name: 'Controls' }).click(); await page.waitForTimeout(150);
+        await page.locator('[data-setting=leftHanded]').first().click();
         await closeModal(page, vp, 'modal-settings');
         await page.waitForTimeout(400);
         await check(page, vp, 'game-left-handed-performance');

@@ -1,10 +1,15 @@
-import { SegmentedControl } from './kit/Tabs.tsx';
-import { WindowFrame } from './wm/WindowFrame.tsx';
 import React, { useState } from 'react';
+import { WindowFrame } from './wm/WindowFrame.tsx';
+import { Tabs, SegmentedControl } from './kit/Tabs.tsx';
+import { Button } from './kit/Button.tsx';
 import { tr, currentLang, setLang } from '../i18n.ts';
 import { UserProfile } from '../save/profile.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
-import { Settings as SettingsIcon, Volume2, VolumeX, RefreshCcw, X } from 'lucide-react';
+import { getCredential } from '../net/connect.ts';
+import { Row, Slider, Toggle } from './settings/parts.tsx';
+import { KeysTab } from './settings/KeysTab.tsx';
+import { AccountTab } from './settings/AccountTab.tsx';
+import { AboutTab } from './settings/AboutTab.tsx';
 
 interface SettingsModalProps {
   profile: UserProfile;
@@ -16,221 +21,95 @@ interface SettingsModalProps {
   onFeedback?: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({
-  profile,
-  isOpen,
-  onClose,
-  onUpdateSettings,
-  onResetProgress,
-  onHowToPlay,
-  onFeedback,
-}) => {
-  const [confirmReset, setConfirmReset] = useState(false);
+type Tab = 'graphics' | 'audio' | 'controls' | 'interface' | 'access' | 'account' | 'about';
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: 'graphics', label: 'Graphics' }, { id: 'audio', label: 'Audio' }, { id: 'controls', label: 'Controls' },
+  { id: 'interface', label: 'Interface' }, { id: 'access', label: 'Accessibility' }, { id: 'account', label: 'Account' }, { id: 'about', label: 'About' },
+];
+const pct = (v: number) => `${Math.round(v * 100)}%`;
 
+/** Settings window with seven tabs. Everything is stored in the profile settings, except key bindings (per device, see title/keybinds.ts). */
+export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, onClose, onUpdateSettings, onResetProgress, onHowToPlay, onFeedback }) => {
+  const [tab, setTab] = useState<Tab>('graphics');
   if (!isOpen) return null;
+  const s = profile.settings;
+  const set = (patch: Partial<UserProfile['settings']>) => onUpdateSettings({ ...s, ...patch });
 
   return (
-    <WindowFrame id="settings" title="Game Settings" width="min(520px, 96vw)">
-        <div className="mt-4 space-y-4 text-xs">
-          {/* Sound Mute Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-            <div className="flex items-center gap-2.5">
-              {profile.settings.soundEnabled ? (
-                <Volume2 size={16} className="text-orange-400" />
-              ) : (
-                <VolumeX size={16} className="text-slate-500" />
-              )}
-              <span className="font-medium text-white">{tr('Audio Effects & Engine Hum')}</span>
-            </div>
-            <button
-              onClick={() => {
-                const next = !profile.settings.soundEnabled;
-                soundEngine.setSoundEnabled(next);
-                onUpdateSettings({ ...profile.settings, soundEnabled: next });
-              }}
-              className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
-                profile.settings.soundEnabled
-                  ? 'bg-orange-500 text-slate-950'
-                  : 'bg-slate-800 text-slate-400'
-              }`}
-            >
-              {profile.settings.soundEnabled ? tr('Enabled') : tr('Muted')}
-            </button>
-          </div>
-
-          {/* Volume Slider */}
-          <div className="p-3 rounded-lg bg-slate-950/50 border border-slate-800 space-y-2">
-            <div className="flex justify-between text-slate-400">
-              <span>{tr('Master Volume')}</span>
-              <span className="tabular-nums text-white">
-                {Math.round(profile.settings.masterVolume * 100)}%
-              </span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={profile.settings.masterVolume}
-              onChange={(e) => {
-                const vol = parseFloat(e.target.value);
-                soundEngine.setVolume(vol);
-                onUpdateSettings({ ...profile.settings, masterVolume: vol });
-              }}
-              className="w-full accent-orange-500 cursor-pointer"
-            />
-          </div>
-
-          {/* Camera Viewport Zoom Slider */}
-          <div className="p-3 rounded-lg bg-slate-950/50 border border-slate-800 space-y-2">
-            <div className="flex justify-between text-slate-400">
-              <span>{tr('Battlefield Camera Zoom')}</span>
-              <span className="tabular-nums text-white">
-                {Math.round((profile.settings.zoom || 0.85) * 100)}%
-              </span>
-            </div>
-            <input
-              type="range"
-              min="0.5"
-              max="1.2"
-              step="0.05"
-              value={profile.settings.zoom || 0.85}
-              onChange={(e) => {
-                const z = parseFloat(e.target.value);
-                onUpdateSettings({ ...profile.settings, zoom: z });
-              }}
-              className="w-full accent-orange-500 cursor-pointer"
-            />
-            <div className="flex justify-between text-[11px] text-slate-500">
-              <span>{tr('0.5x (Wide)')}</span>
-              <span>{tr('0.85x (Default)')}</span>
-              <span>{tr('1.2x (Close)')}</span>
-            </div>
-          </div>
-
-          {/* Debug Overlay Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-            <div>
-              <span className="font-medium text-white">{tr('Developer Diagnostics Overlay (F3)')}</span>
-              <div className="text-[11px] text-slate-400 mt-0.5">
-                {tr('Displays real-time FPS, tick time, and entity counts')}
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                soundEngine.playUIClick();
-                onUpdateSettings({ ...profile.settings, showDebug: !profile.settings.showDebug });
-              }}
-              className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
-                profile.settings.showDebug
-                  ? 'bg-orange-500 text-slate-950'
-                  : 'bg-slate-800 text-slate-400'
-              }`}
-            >
-              {profile.settings.showDebug ? tr('ON') : tr('OFF')}
-            </button>
-          </div>
-
-
-            <div className="flex items-center justify-between text-xs text-slate-300 py-2"><span>{tr('Language')}</span><select value={currentLang} onChange={(e) => setLang(e.target.value as any)} className="bg-slate-950 border border-slate-700 rounded px-2 py-1"><option value="en">English</option><option value="de">Deutsch</option></select></div>
-          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-            <div><span className="font-medium text-white">{tr('Colour-blind mode')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('Radar uses amber instead of red for enemies')}</div></div>
-            <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, colorBlind: !profile.settings.colorBlind }); }} className={`px-3 py-1 rounded text-xs font-semibold ${profile.settings.colorBlind ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{profile.settings.colorBlind ? tr('ON') : tr('OFF')}</button>
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-            <div><span className="font-medium text-white">{tr('Reduced effects')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('No particles or tread marks (less motion, better on slow phones)')}</div></div>
-            <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, reducedEffects: !profile.settings.reducedEffects }); }} className={`px-3 py-1 rounded text-xs font-semibold ${profile.settings.reducedEffects ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{profile.settings.reducedEffects ? tr('ON') : tr('OFF')}</button>
-          </div>
-          {([
-            ['leftHanded', 'Left-handed controls', 'Joystick on the right, fire buttons on the left'],
-            ['performanceMode', 'Performance mode', 'Lower resolution (max 1.5x), fewer effects, plain ground. Turns on by itself when the game runs slowly'],
-          ] as const).map(([key, title, desc]) => (
-            <div key={key} className="flex items-center justify-between gap-2 p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-              <div><span className="font-medium text-white">{tr(title)}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr(desc)}</div></div>
-              <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, [key]: !profile.settings[key], ...(key === 'performanceMode' ? { perfAutoDone: true } : {}) }); }} className={`min-h-[44px] min-w-[56px] px-3 rounded text-xs font-semibold ${profile.settings[key] ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`} aria-pressed={!!profile.settings[key]}>{profile.settings[key] ? tr('ON') : tr('OFF')}</button>
-            </div>
-          ))}
-          {onHowToPlay && (
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-              <span className="font-medium text-white">{tr('How to play')}</span>
-              <button onClick={() => { soundEngine.playUIClick(); onHowToPlay(); }} className="px-3 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-200">{tr('Replay tutorial hints')}</button>
-            </div>
-          )}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-            <span className="font-medium text-white">{tr('HUD scale')} {Math.round((profile.settings.uiScale || 1) * 100)}%</span>
-            <input type="range" min="0.8" max="1.4" step="0.1" value={profile.settings.uiScale || 1} onChange={(e) => onUpdateSettings({ ...profile.settings, uiScale: Number(e.target.value) })} className="w-40" aria-label={tr('HUD scale')} />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-            <span className="font-medium text-white">{tr('HUD opacity')} {Math.round((profile.settings.hudOpacity ?? 0.7) * 100)}%</span>
-            <input type="range" min="0.3" max="1" step="0.05" value={profile.settings.hudOpacity ?? 0.7} onChange={(e) => onUpdateSettings({ ...profile.settings, hudOpacity: Number(e.target.value) })} className="w-40" aria-label={tr('HUD opacity')} />
-          </div>
-          <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-            <div><span className="font-medium text-white">{tr('Minimal HUD')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('Only bars, target and controls: no quest tracker, events or party frames')}</div></div>
-            <button onClick={() => { soundEngine.playUIClick(); onUpdateSettings({ ...profile.settings, minimalHud: !profile.settings.minimalHud }); }} className={`min-h-[44px] min-w-[56px] px-3 rounded text-xs font-semibold ${profile.settings.minimalHud ? 'bg-orange-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`} aria-pressed={!!profile.settings.minimalHud}>{profile.settings.minimalHud ? tr('ON') : tr('OFF')}</button>
-          </div>
-          <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-            <div><span className="font-medium text-white">{tr('On-screen controls')}</span><div className="text-[11px] text-slate-400 mt-0.5">{tr('Joystick and thumb buttons. Auto uses them on touch screens and the hotbar with mouse and keyboard')}</div></div>
-            <SegmentedControl label={tr('On-screen controls')} value={profile.settings.touchControls ?? 'auto'} onChange={(v) => onUpdateSettings({ ...profile.settings, touchControls: v as 'auto' | 'on' | 'off' })} options={[{ id: 'auto', label: tr('Auto') }, { id: 'on', label: tr('On') }, { id: 'off', label: tr('Off') }]} />
-          </div>
-
-          {/* Reset Progress Section */}
-          <div className="p-3 rounded-lg bg-red-950/20 border border-red-900/40">
-            <div className="text-red-300 font-medium flex items-center gap-1.5">
-              <RefreshCcw size={14} />
-              <span>{tr('Reset Game Progress')}</span>
-            </div>
-            <div className="text-[11px] text-slate-400 mt-1">
-              {tr('Clears saved vehicles, scrap, and returns profile to starter Patchwork Scout.')}
-            </div>
-
-            {confirmReset ? (
-              <div className="flex items-center gap-2 mt-3">
-                <button
-                  onClick={() => {
-                    soundEngine.playUIClick();
-                    onResetProgress();
-                    setConfirmReset(false);
-                    onClose();
-                  }}
-                  className="px-3 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-semibold transition-colors"
-                >
-                  {tr('Confirm Reset')}
-                </button>
-                <button
-                  onClick={() => setConfirmReset(false)}
-                  className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                >
-                  {tr('Cancel')}
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirmReset(true)}
-                className="mt-2.5 px-3 py-1 rounded bg-red-900/50 hover:bg-red-800/80 text-red-200 font-medium transition-colors"
-              >
-                {tr('Reset Progress')}
-              </button>
-            )}
-          </div>
+    <WindowFrame id="settings" title="Settings" width="min(640px, 96vw)" height="min(620px, 92vh)">
+      <Tabs label={tr('Settings')} value={tab} onChange={(id) => setTab(id as Tab)} tabs={TABS.map((t) => ({ id: t.id, label: tr(t.label) }))} />
+      {tab === 'graphics' && (
+        <div className="st-body" data-testid="tab-graphics">
+          <Row title={tr('Battlefield Camera Zoom')} hint={tr('0.5x is wide, 1.2x is close. Pinch or scroll in the game also works.')}>
+            <Slider setting="zoom" label={tr('Battlefield Camera Zoom')} min={0.5} max={1.2} step={0.05} value={s.zoom || 0.85} onChange={(zoom) => set({ zoom })} format={(v) => `${v.toFixed(2)}x`} />
+          </Row>
+          <Row title={tr('Performance mode')} hint={tr('Lower resolution (max 1.5x), fewer effects, plain ground. Turns on by itself when the game runs slowly')}>
+            <Toggle setting="performanceMode" label={tr('Performance mode')} on={!!s.performanceMode} onChange={(v) => set({ performanceMode: v, perfAutoDone: true })} />
+          </Row>
+          <Row title={tr('Reduced effects')} hint={tr('No particles or tread marks (less motion, better on slow phones)')}>
+            <Toggle setting="reducedEffects" label={tr('Reduced effects')} on={!!s.reducedEffects} onChange={(v) => set({ reducedEffects: v })} />
+          </Row>
+          <Row title={tr('Developer Diagnostics Overlay (F3)')} hint={tr('Displays real-time FPS, tick time, and entity counts')}>
+            <Toggle setting="showDebug" label={tr('Developer Diagnostics Overlay (F3)')} on={!!s.showDebug} onChange={(v) => set({ showDebug: v })} />
+          </Row>
         </div>
-
-        {onFeedback && (
-          <button onClick={() => { soundEngine.playUIClick(); onFeedback(); }} className="mt-4 min-h-[44px] px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm text-white">
-            {tr('Send feedback')}
-          </button>
-        )}
-
-        <div className="mt-5 text-right">
-          <button
-            onClick={() => {
-              soundEngine.playUIClick();
-              onClose();
-            }}
-            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium transition-colors"
-          >
-            {tr('Close')}
-          </button>
+      )}
+      {tab === 'audio' && (
+        <div className="st-body" data-testid="tab-audio">
+          <Row title={tr('Audio Effects & Engine Hum')}>
+            <Toggle setting="soundEnabled" label={tr('Audio Effects & Engine Hum')} on={s.soundEnabled} onText={tr('Enabled')} offText={tr('Muted')} onChange={(v) => { soundEngine.setSoundEnabled(v); set({ soundEnabled: v }); }} />
+          </Row>
+          <Row title={tr('Master Volume')}>
+            <Slider setting="masterVolume" label={tr('Master Volume')} min={0} max={1} step={0.05} value={s.masterVolume} onChange={(v) => { soundEngine.setVolume(v); set({ masterVolume: v }); }} format={pct} />
+          </Row>
         </div>
+      )}
+      {tab === 'controls' && (
+        <div className="st-body">
+          <Row title={tr('On-screen controls')} hint={tr('Joystick and thumb buttons. Auto uses them on touch screens and the hotbar with mouse and keyboard.')}>
+            <SegmentedControl label={tr('On-screen controls')} value={s.touchControls ?? 'auto'} onChange={(v) => set({ touchControls: v as 'auto' | 'on' | 'off' })} options={[{ id: 'auto', label: tr('Auto') }, { id: 'on', label: tr('On') }, { id: 'off', label: tr('Off') }]} />
+          </Row>
+          <Row title={tr('Left-handed controls')} hint={tr('Joystick on the right, fire buttons on the left')}>
+            <Toggle setting="leftHanded" label={tr('Left-handed controls')} on={!!s.leftHanded} onChange={(v) => set({ leftHanded: v })} />
+          </Row>
+          {onHowToPlay && <Row title={tr('How to play')}><Button onClick={() => { soundEngine.playUIClick(); onHowToPlay(); }}>{tr('Replay tutorial hints')}</Button></Row>}
+          <KeysTab />
+        </div>
+      )}
+      {tab === 'interface' && (
+        <div className="st-body" data-testid="tab-interface">
+          <Row title={tr('Language')}>
+            <SegmentedControl label={tr('Language')} value={currentLang} onChange={(v) => { if (v !== currentLang) setLang(v as 'de' | 'en'); }} options={[{ id: 'de', label: 'Deutsch' }, { id: 'en', label: 'English' }]} />
+          </Row>
+          <Row title={tr('HUD scale')}>
+            <Slider setting="uiScale" label={tr('HUD scale')} min={0.8} max={1.4} step={0.1} value={s.uiScale || 1} onChange={(uiScale) => set({ uiScale })} format={pct} />
+          </Row>
+          <Row title={tr('HUD opacity')}>
+            <Slider setting="hudOpacity" label={tr('HUD opacity')} min={0.3} max={1} step={0.05} value={s.hudOpacity ?? 0.7} onChange={(hudOpacity) => set({ hudOpacity })} format={pct} />
+          </Row>
+          <Row title={tr('Minimal HUD')} hint={tr('Only bars, target and controls: no quest tracker, events or party frames')}>
+            <Toggle setting="minimalHud" label={tr('Minimal HUD')} on={!!s.minimalHud} onChange={(v) => set({ minimalHud: v })} />
+          </Row>
+        </div>
+      )}
+      {tab === 'access' && (
+        <div className="st-body" data-testid="tab-access">
+          <Row title={tr('Colour-blind mode')} hint={tr('Radar uses amber instead of red for enemies')}>
+            <Toggle setting="colorBlind" label={tr('Colour-blind mode')} on={!!s.colorBlind} onChange={(v) => set({ colorBlind: v })} />
+          </Row>
+          <Row title={tr('Reduce motion')} hint={tr('Turns off window and banner animations. Also follows your system setting.')}>
+            <Toggle setting="reduceMotion" label={tr('Reduce motion')} on={!!s.reduceMotion} onChange={(v) => set({ reduceMotion: v })} />
+          </Row>
+          <Row title={tr('HUD scale')} hint={tr('Larger buttons and text on the HUD')}>
+            <Slider setting="uiScale-a11y" label={tr('HUD scale')} min={0.8} max={1.4} step={0.1} value={s.uiScale || 1} onChange={(uiScale) => set({ uiScale })} format={pct} />
+          </Row>
+          <Row title={tr('Reduced effects')} hint={tr('No particles or tread marks (less motion, better on slow phones)')}>
+            <Toggle setting="reducedEffects-a11y" label={tr('Reduced effects')} on={!!s.reducedEffects} onChange={(v) => set({ reducedEffects: v })} />
+          </Row>
+        </div>
+      )}
+      {tab === 'account' && <AccountTab playerName={profile.playerName} online={!!getCredential()} onResetProgress={onResetProgress} onClose={onClose} />}
+      {tab === 'about' && <AboutTab onFeedback={onFeedback} />}
     </WindowFrame>
   );
 };

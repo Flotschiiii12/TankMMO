@@ -32,6 +32,7 @@ export interface UserProfile {
     touchControls?: 'auto' | 'on' | 'off'; // joystick + thumb cluster (auto = coarse pointer)
     leftHanded?: boolean; // joystick on the right, fire cluster on the left
     performanceMode?: boolean; // DPR cap 1.5, fewer particles, plain ground
+    reduceMotion?: boolean; // no window/banner animations (also follows prefers-reduced-motion)
     perfAutoDone?: boolean; // the automatic switch to performance mode has already happened once (never nag again)
   };
 }

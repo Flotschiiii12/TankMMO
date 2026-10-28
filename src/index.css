@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "./ui/kit/tokens.css";
 @import "./ui/kit/kit.css";
+@import "./ui/title/title.css";
+@import "./ui/settings/settings.css";
 
 @layer base {
   html, body, #root {

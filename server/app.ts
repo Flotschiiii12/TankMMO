@@ -10,6 +10,10 @@ import { GameServer, log } from './gameServer.ts';
 import { computeAnalytics, FeedbackRepo, TelemetryRepo } from './telemetry.ts';
 import { TUTORIAL_STEPS } from '../shared/data/quests.ts';
 import { FailureBackoff, normalizeIp } from './throttle.ts';
+import { NewsStore } from './news.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { PROTOCOL_VERSION } from '../shared/protocol.ts';
 
 export interface AppOptions { backupDir?: string; dbPath?: string; staticDir?: string; adminToken?: string; clock?: { nowMs(): number } }
 
@@ -53,6 +57,7 @@ export function createApp(opts: AppOptions = {}) {
   // Behind Caddy/nginx every request comes from the proxy's address, so the per-IP REST limits would be shared by all players.
   // Opt in with TRUST_PROXY=1 (number of proxy hops) so X-Forwarded-For is used.
   if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
+  app.use('/admin/api/news', express.json({ limit: '32kb' })); // news items are longer than the usual bodies
   app.use(express.json({ limit: '8kb' }));
   app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => { // malformed / oversized JSON bodies
     if (err?.status && err.status < 500) return void res.status(err.status).json({ error: 'bad_request' });
@@ -106,6 +111,20 @@ export function createApp(opts: AppOptions = {}) {
   });
 
   app.get('/api/time', (_req, res) => res.json({ now: Date.now() }));
+
+  // Title screen: news (admin editable), server status and the legal texts (plain text, rendered by the client)
+  const news = new NewsStore(opts.dbPath && opts.dbPath !== ':memory:' ? join(dirname(opts.dbPath), 'news.json') : undefined);
+  const bootedAt = Date.now();
+  app.get('/api/news', (_req, res) => res.json({ items: news.list() }));
+  app.get('/api/status', (_req, res) => res.json({ online: game.playerCount(), protocol: PROTOCOL_VERSION, uptimeSec: Math.floor((Date.now() - bootedAt) / 1000) }));
+  const legalDir = resolve(process.env.LEGAL_DIR ?? join(process.cwd(), 'docs', 'legal'));
+  const LEGAL: Record<string, string> = { terms: 'Nutzungsbedingungen.md', privacy: 'Datenschutzerklaerung.md', youth: 'Jugendschutz.md', imprint: 'Impressum-Vorlage.md' };
+  app.get('/legal/:doc', (req, res) => {
+    const f = LEGAL[req.params.doc];
+    const full = f ? join(legalDir, f) : '';
+    if (!f || !existsSync(full)) return void res.status(404).type('text/plain').send('not found');
+    res.type('text/plain; charset=utf-8').send(readFileSync(full, 'utf8'));
+  });
   app.get('/api/leaderboard', (_req, res) => res.json({ top: profiles.topByLevel(20).map((p) => ({ name: p.name, level: p.level })) }));
 
   /** Data export (GDPR) and account deletion, both authenticated with the account credential. */
@@ -175,6 +194,8 @@ export function createApp(opts: AppOptions = {}) {
     res.json({ ok: true });
   });
   admin.post('/announce', (req, res) => { const t = String(req.body?.text ?? '').trim(); if (!t) return void res.status(400).json({ error: 'empty' }); game.announce(t); social.audit('admin', 'announce', t); res.json({ ok: true }); });
+  admin.get('/news', (_req, res) => res.json(news.list()));
+  admin.post('/news', (req, res) => { const items = news.set(req.body?.items); social.audit('admin', 'news', `${items.length} items`); res.json(items); });
   admin.get('/reports', (_req, res) => res.json(social.openReports()));
   admin.post('/reports/close', (req, res) => { social.closeReport(Number(req.body?.id)); res.json({ ok: true }); });
   admin.get('/analytics', (_req, res) => res.json(computeAnalytics(telemetry.rows(), nowSec(), TUTORIAL_STEPS)));
@@ -200,6 +221,7 @@ table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border-bottom:1px s
 <input id=pn placeholder="player name"><input id=ph size=4 value=24 title="hours"><button onclick="act('ban')">Ban</button><button onclick="act('mute')">Mute</button><button onclick="act('kick')">Kick</button><button onclick="act('delete')">Delete</button>
 <input id=nn placeholder="new name"><button onclick="act('rename')">Rename</button>
 <h2>Announcement</h2><input id=an size=50><button onclick="announce()">Send</button>
+<h2>News (title screen)</h2><textarea id=nw rows=8 style="width:100%;font-family:monospace" placeholder='[{"id":"v1","date":"2026-10-28","tag":"update","title":{"de":"..","en":".."},"body":{"de":"..","en":".."}}]'></textarea><br><button onclick="saveNews()">Save news</button>
 <h2>Analytics (beta)</h2><div id=an_sum></div><div id=an_conc></div><div id=an_funnel></div>
 <h2>Player feedback</h2><div id=fb></div>
 <h2>Open reports</h2><div id=reports></div>
@@ -210,7 +232,7 @@ const call=async(p,body)=>{const r=await fetch('/admin/api/'+p,{method:body?'POS
 const esc=v=>String(v).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 const tbl=(rows)=>'<table><tr>'+Object.keys(rows[0]||{}).map(k=>'<th>'+esc(k)+'</th>').join('')+'</tr>'+rows.map(r=>'<tr>'+Object.values(r).map(v=>'<td>'+esc(v!==null&&typeof v==='object'?JSON.stringify(v):v)+'</td>').join('')+'</tr>').join('')+'</table>';
 async function load(){const s=await call('stats');$('stats').textContent=JSON.stringify({accounts:s.accounts,online:s.online,instances:s.instances,tickAvgMs:s.metrics.avgTickMs.toFixed(2)},null,1);
-$('online').innerHTML=tbl(await call('online'));const rp=await call('reports');$('reports').innerHTML=tbl(rp)+rp.map(r=>'<button onclick="closeR('+r.id+')">close #'+r.id+'</button>').join('');$('audit').innerHTML=tbl(await call('audit'));loadAnalytics()}
+$('online').innerHTML=tbl(await call('online'));const rp=await call('reports');$('reports').innerHTML=tbl(rp)+rp.map(r=>'<button onclick="closeR('+r.id+')">close #'+r.id+'</button>').join('');$('audit').innerHTML=tbl(await call('audit'));$('nw').value=JSON.stringify(await call('news'),null,1);loadAnalytics()}
 const bars=(vals,labels,w,h,fmt)=>{const max=Math.max(1,...vals);const bw=w/vals.length;return '<svg viewBox="0 0 '+w+' '+(h+34)+'" width="100%" style="max-width:'+w+'px;background:#101830;border-radius:8px">'+vals.map((v,i)=>{const bh=Math.round(v/max*h);return '<rect x="'+(i*bw+2)+'" y="'+(h-bh+8)+'" width="'+(bw-4)+'" height="'+bh+'" fill="#f97316"><title>'+esc(labels[i])+': '+esc(fmt(v))+'</title></rect><text x="'+(i*bw+bw/2)+'" y="'+(h+24)+'" font-size="9" fill="#9fb0d8" text-anchor="middle">'+esc(labels[i])+'</text>'}).join('')+'</svg>'};
 const pct=v=>v==null?'-':Math.round(v*100)+' %';
 async function loadAnalytics(){const a=await call('analytics');
@@ -218,6 +240,7 @@ $('an_sum').innerHTML=tbl([{accounts:a.accounts,'D1':pct(a.retention.d1.rate)+' 
 $('an_conc').innerHTML='<h3>Players per hour (UTC, last 24 h)</h3>'+bars(a.concurrentByHour.map(c=>c.players),a.concurrentByHour.map(c=>new Date(c.hourStart*1000).getUTCHours()),720,90,v=>v+' players');
 $('an_funnel').innerHTML='<h3>Tutorial funnel (players who reached each step)</h3>'+bars(a.funnel.map(f=>f.players),a.funnel.map(f=>f.step),720,90,v=>v+' players')+tbl(a.funnel.map(f=>({step:f.step,players:f.players,'of signups':pct(f.ofSignups),'of previous':pct(f.ofPrevious)})))+'<h3>Milestones (distinct players)</h3>'+tbl([a.milestones]);
 const fb=await call('feedback');$('fb').innerHTML=tbl(fb.map(f=>({id:f.id,when:new Date(f.ts*1000).toISOString().slice(0,16),kind:f.kind,status:f.status,text:f.text,state:f.state})))+fb.filter(f=>f.status==='open').map(f=>'<button onclick="closeF('+f.id+')">close #'+f.id+'</button>').join('')}
+async function saveNews(){try{const items=JSON.parse($('nw').value||'[]');$('nw').value=JSON.stringify(await call('news',{items}),null,1)}catch(e){$('err').textContent='invalid JSON'}}
 async function closeF(id){await call('feedback/close',{id});load()}
 async function act(a){await call(a,{name:$('pn').value,hours:+$('ph').value,newName:$('nn').value});load()}
 async function announce(){await call('announce',{text:$('an').value});load()}

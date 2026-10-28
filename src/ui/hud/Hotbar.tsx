@@ -4,6 +4,8 @@ import { soundEngine } from '../../audio/soundEngine.ts';
 import type { AmmoType, SimCommand, SimEntity } from '../../sim/types.ts';
 import { AMMO_ICON, GameIcon } from '../GameIcon.tsx';
 import { Tooltip } from '../kit/Tooltip.tsx';
+import { keybinds } from '../title/keybinds.ts';
+import { useKeybinds } from '../title/useKeybinds.ts';
 import { CooldownSweep, ABILITY_COOLDOWN } from './Cooldown.tsx';
 
 const ABILITIES = [
@@ -11,8 +13,10 @@ const ABILITIES = [
   { id: 'repair_kit', key: 'E', icon: 'repair', label: 'Repair kit' },
   { id: 'boost', key: 'F', icon: 'boost', label: 'Boost' },
 ] as const;
+const ABILITY_ACTION = { smoke: 'smoke', repair_kit: 'repair', boost: 'boost' } as const;
 const AMMO_ORDER: AmmoType[] = ['STANDARD', 'ARMOR_PIERCING', 'EXPLOSIVE', 'REINFORCED', 'SHAPED_CHARGE'];
-const AMMO_KEYS: Partial<Record<AmmoType, string>> = { STANDARD: '1', ARMOR_PIERCING: '2', EXPLOSIVE: '3' };
+const AMMO_ACTION: Partial<Record<AmmoType, 'ammo1' | 'ammo2' | 'ammo3'>> = { STANDARD: 'ammo1', ARMOR_PIERCING: 'ammo2', EXPLOSIVE: 'ammo3' };
+const ammoKey = (a: AmmoType): string => (AMMO_ACTION[a] ? keybinds.label(AMMO_ACTION[a]!) : '');
 const AMMO_LABEL: Record<string, string> = { STANDARD: 'Standard', ARMOR_PIERCING: 'Armor piercing', EXPLOSIVE: 'Explosive', REINFORCED: 'Reinforced', SHAPED_CHARGE: 'Shaped charge' };
 
 /**
@@ -20,6 +24,7 @@ const AMMO_LABEL: Record<string, string> = { STANDARD: 'Standard', ARMOR_PIERCIN
  * counts, and the lock / fire button. Phones keep the thumb cluster (ControlsOverlay), which shows the same cooldown sweep.
  */
 export const Hotbar: React.FC<{ player: SimEntity | null; onCommand: (c: SimCommand) => void; onLockNearest: () => void }> = ({ player, onCommand, onLockNearest }) => {
+  useKeybinds();
   const autoFire = !!player?.autoFire; const hasTarget = player?.targetId !== undefined;
   const ammo = AMMO_ORDER.filter((a) => a === 'STANDARD' || (player?.ammoInventory[a] ?? 0) !== 0);
   return (
@@ -27,10 +32,10 @@ export const Hotbar: React.FC<{ player: SimEntity | null; onCommand: (c: SimComm
       {ABILITIES.map((a) => {
         const cd = player?.abilityCooldowns[a.id] || 0;
         return (
-          <Tooltip key={a.id} content={`${tr(a.label)} (${a.key})`}>
+          <Tooltip key={a.id} content={`${tr(a.label)} (${keybinds.label(ABILITY_ACTION[a.id])})`}>
             <button type="button" className="k-slot" aria-label={tr(a.label)} disabled={cd > 0} onClick={() => { soundEngine.playUIClick(); onCommand({ type: 'UseAbility', abilityId: a.id }); }}>
               <GameIcon name={a.icon} size={32} className={cd > 0 ? 'opacity-40' : ''} />
-              <span className="k-slot__key">{a.key}</span>
+              <span className="k-slot__key">{keybinds.label(ABILITY_ACTION[a.id])}</span>
               <CooldownSweep remaining={cd} total={ABILITY_COOLDOWN[a.id]} />
             </button>
           </Tooltip>
@@ -40,10 +45,10 @@ export const Hotbar: React.FC<{ player: SimEntity | null; onCommand: (c: SimComm
       {ammo.map((a) => {
         const n = player?.ammoInventory[a] ?? 0; const sel = player?.selectedAmmo === a;
         return (
-          <Tooltip key={a} content={`${tr(AMMO_LABEL[a] ?? a)}${AMMO_KEYS[a] ? ` (${AMMO_KEYS[a]})` : ''}`}>
+          <Tooltip key={a} content={`${tr(AMMO_LABEL[a] ?? a)}${ammoKey(a) ? ` (${ammoKey(a)})` : ''}`}>
             <button type="button" className="k-slot" style={{ width: 44, height: 44 }} aria-pressed={sel} aria-label={tr(AMMO_LABEL[a] ?? a)} onClick={() => { soundEngine.playUIClick(); onCommand({ type: 'SelectAmmo', ammo: a }); }}>
               <GameIcon name={AMMO_ICON[a] ?? 'ammo_standard'} size={28} />
-              {AMMO_KEYS[a] && <span className="k-slot__key">{AMMO_KEYS[a]}</span>}
+              {ammoKey(a) && <span className="k-slot__key">{ammoKey(a)}</span>}
               <span className="k-slot__count">{n < 0 ? '∞' : n}</span>
             </button>
           </Tooltip>

@@ -3,6 +3,7 @@ import { tr } from '../i18n.ts';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AmmoType, SimCommand, SimEntity } from '../sim/types.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
+import { actionForCode, keybinds } from './title/keybinds.ts';
 import { CooldownSweep, ABILITY_COOLDOWN } from './hud/Cooldown.tsx';
 
 interface ControlsOverlayProps {
@@ -52,27 +53,28 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
 
       keysDown.current.add(e.code);
+      const act = actionForCode(keybinds.get(), e.code);
 
-      if (e.code === 'Space') {
+      if (act === 'autoFire') {
         e.preventDefault();
         soundEngine.playUIClick();
         onCommand({ type: 'ToggleAutoFire' });
-      } else if (e.code === 'KeyQ') {
+      } else if (act === 'smoke') {
         soundEngine.playUIClick();
         onCommand({ type: 'UseAbility', abilityId: 'smoke' });
-      } else if (e.code === 'KeyE') {
+      } else if (act === 'repair') {
         soundEngine.playUIClick();
         onCommand({ type: 'UseAbility', abilityId: 'repair_kit' });
-      } else if (e.code === 'KeyF') {
+      } else if (act === 'boost') {
         soundEngine.playUIClick();
         onCommand({ type: 'UseAbility', abilityId: 'boost' });
-      } else if (e.code === 'Digit1') {
+      } else if (act === 'ammo1') {
         onCommand({ type: 'SelectAmmo', ammo: 'STANDARD' });
-      } else if (e.code === 'Digit2') {
+      } else if (act === 'ammo2') {
         onCommand({ type: 'SelectAmmo', ammo: 'ARMOR_PIERCING' });
-      } else if (e.code === 'Digit3') {
+      } else if (act === 'ammo3') {
         onCommand({ type: 'SelectAmmo', ammo: 'EXPLOSIVE' });
-      } else if (e.code === 'Tab') {
+      } else if (act === 'cycleTarget') {
         e.preventDefault();
         onCycleTarget();
       }
@@ -88,10 +90,12 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
     const evaluateKeyDrive = () => {
       let dx = 0;
       let dy = 0;
-      if (keysDown.current.has('KeyW') || keysDown.current.has('ArrowUp')) dy -= 1;
-      if (keysDown.current.has('KeyS') || keysDown.current.has('ArrowDown')) dy += 1;
-      if (keysDown.current.has('KeyA') || keysDown.current.has('ArrowLeft')) dx -= 1;
-      if (keysDown.current.has('KeyD') || keysDown.current.has('ArrowRight')) dx += 1;
+      const b = keybinds.get();
+      const down = (code: string, alias: string) => (!!code && keysDown.current.has(code)) || keysDown.current.has(alias);
+      if (down(b.moveUp, 'ArrowUp')) dy -= 1;
+      if (down(b.moveDown, 'ArrowDown')) dy += 1;
+      if (down(b.moveLeft, 'ArrowLeft')) dx -= 1;
+      if (down(b.moveRight, 'ArrowRight')) dx += 1;
 
       if (dx !== 0 || dy !== 0) {
         const len = Math.hypot(dx, dy);

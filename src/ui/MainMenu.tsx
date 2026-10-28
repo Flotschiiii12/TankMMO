@@ -9,6 +9,8 @@ import { Tooltip } from './kit/Tooltip.tsx';
 import { WINDOW_DEFS, WindowId } from './wm/defs.ts';
 import { windows } from './wm/windowStore.ts';
 import { useWindowStack } from './wm/useWindows.ts';
+import { keybinds } from './title/keybinds.ts';
+import { useKeybinds } from './title/useKeybinds.ts';
 
 export type NavPips = Partial<Record<WindowId, number | boolean>>;
 
@@ -17,6 +19,7 @@ export type NavPips = Partial<Record<WindowId, number | boolean>>;
  * the garage button lights up in safe zones. Layout (column / 4x2 block) comes from .hud-menu-btns in index.css.
  */
 export const MainMenu: React.FC<{ pips?: NavPips; hasSocial: boolean; isSafeZone: boolean; soundMuted: boolean; onToggleMute: () => void }> = ({ pips = {}, hasSocial, isSafeZone, soundMuted, onToggleMute }) => {
+  useKeybinds();
   const stack = useWindowStack(); const short = useShortScreen();
   const items = WINDOW_DEFS.filter((d) => d.menu && (d.id !== 'social' || hasSocial));
   return (
@@ -25,7 +28,7 @@ export const MainMenu: React.FC<{ pips?: NavPips; hasSocial: boolean; isSafeZone
         const open = stack.includes(d.id);
         const hint = d.id === 'garage' && !isSafeZone ? tr('Garage (Available in Safe Zone)') : tr(d.title);
         return (
-          <Tooltip key={d.id} content={`${hint}${d.key ? ` (${d.key})` : ''}`} placement="left">
+          <Tooltip key={d.id} content={`${hint}${d.key ? ` (${keybinds.label(`win:${d.id}`)})` : ''}`} placement="left">
             <PipHost count={pips[d.id]} label={tr(d.title)}>
               <button type="button" aria-label={tr(d.title)} aria-pressed={open} onClick={() => { soundEngine.playUIClick(); windows.toggle(d.id); }}
                 className={`hud-round w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-95 ${d.id === 'garage' && isSafeZone ? 'bg-orange-500 text-slate-950 shadow-md' : 'bg-slate-900/90 border border-slate-700/80 text-slate-300 hover:text-white'} ${open ? 'ring-2 ring-[var(--accent)]' : ''}`}>

@@ -6,6 +6,7 @@ import { SocialRepo } from './social.ts';
 import { MarketRepo, PremiumWallet } from './market.ts';
 import { backupDatabase, openDatabase, SqliteArenaRepo, SqliteWarRepo, SqliteAccountRepo, SqliteChatRepo, SqliteProfileRepo } from './db.ts';
 import { GameServer, log } from './gameServer.ts';
+import { FailureBackoff } from './throttle.ts';
 
 export interface AppOptions { backupDir?: string; dbPath?: string; staticDir?: string; adminToken?: string; clock?: { nowMs(): number } }
 
@@ -56,12 +57,19 @@ export function createApp(opts: AppOptions = {}) {
   app.get('/metrics', (_req, res) => {
     res.type('text/plain').send(
       [`treadfront_players ${game.playerCount()}`, `treadfront_ticks_total ${game.metrics.ticks}`, `treadfront_tick_ms_avg ${game.metrics.avgTickMs.toFixed(3)}`,
-        `treadfront_tick_ms_max ${game.metrics.maxTickMs.toFixed(3)}`, `treadfront_bytes_out_total ${game.metrics.bytesOut}`,
+        `treadfront_tick_ms_max ${game.metrics.maxTickMs.toFixed(3)}`, `treadfront_teleport_corrections_total ${game.plausibility.moveCorrections}`, `treadfront_shots_dropped_total ${game.plausibility.shotsDropped}`, `treadfront_max_move_ratio ${game.plausibility.maxMoveRatio.toFixed(3)}`, `treadfront_instances_quarantined_total ${game.quarantined.length}`, `treadfront_bytes_out_total ${game.metrics.bytesOut}`,
         ...game.instanceInfo().map((i) => `treadfront_instance_players{id="${i.id}",map="${i.mapId}"} ${i.players}`)].join('\n') + '\n'
     );
   });
 
+  /** Account creation per IP: 30 free per hour (schools, cafes), then 30 s doubling up to 1 h. */
+  const createBackoff = new FailureBackoff({ free: 30, baseMs: 30_000, maxMs: 3600_000, decayMs: 3600_000 });
   app.post('/api/guest', rateLimit(10, 60_000), (req, res) => {
+    if (process.env.LOAD_TEST !== '1') {
+      const wait = createBackoff.blockedFor(req.ip ?? '', Date.now());
+      if (wait > 0) return void res.status(429).set('Retry-After', String(Math.ceil(wait / 1000))).json({ error: 'rate_limited', retryAfterSeconds: Math.ceil(wait / 1000) });
+      createBackoff.fail(req.ip ?? '', Date.now());
+    }
     const r = service.createGuest(req.body?.ageConfirmed === true, ['coastal', 'highland', 'steppe'].includes(req.body?.faction) ? req.body.faction : 'coastal');
     if (!r.ok) return void res.status(400).json({ error: r.error });
     res.json({ credential: r.cred.credential, accountId: r.cred.accountId, name: r.cred.name });

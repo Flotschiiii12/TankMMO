@@ -96,6 +96,7 @@ const ERRORS: Record<string, string> = {
   unreachable: T('Not reachable from here'),
   vehicle_not_owned: T('You do not own that vehicle'),
   failed: T('Failed'),
+  too_far: T('You are too far apart to trade'),
 };
 export const errorText = (code: string): string => tr(ERRORS[code] || code.replace(/_/g, ' '));
 

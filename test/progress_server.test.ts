@@ -113,6 +113,7 @@ describe('Server: dungeons, achievements, explorer secrets', () => {
     const sess = ctx.game.getSession(p.id)!;
     const secret = sess.instance.map.secrets![0];
     sess.instance.world.entities.get(sess.entityId)!.pos = { x: secret.x, y: secret.y };
+    ctx.game.forgetPositions();
     const ch = p.st().character; ch.level = 100;
     ctx.game.getWorld(p.id)!.safeZones = [];
     for (let i = 0; i < 70; i++) ctx.game.stepAll();

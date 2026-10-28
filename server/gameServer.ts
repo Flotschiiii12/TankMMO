@@ -17,7 +17,7 @@ import { canEngage, BOUNTY_SCRAP_PER_STREAK, BOUNTY_STREAK, HONOR_LOSS_ON_DEATH,
 import { refreshPlayerStats, spawnPlayerFromCharacter } from '../shared/sim/playerEntity.ts';
 import { createWorld, stepWorld, World } from '../shared/sim/world.ts';
 import { weeklyWinner } from '../shared/sim/war.ts';
-import { AmmoType, MapDef, SimCommand, SimEntity, SimEvent, SIM_TIMESTEP } from '../shared/types.ts';
+import { AbilityId, AmmoType, MapDef, SimCommand, SimEntity, SimEvent, SIM_TIMESTEP } from '../shared/types.ts';
 import { AccountService } from './accounts.ts';
 import { AccountRepo, ChatRepo, ProfileRepo } from './db.ts';
 import { CLAN_CREATE_COST, SocialRepo } from './social.ts';
@@ -26,6 +26,9 @@ import { AntiCheat } from './anticheat.ts';
 import { bump, checkAchievements, codexAdd } from '../shared/rules/achievements.ts';
 import { DUNGEONS, getDungeon, DUNGEON_FREE_KEYS_PER_DAY } from '../shared/data/dungeons.ts';
 import { createDungeonWorld, dungeonEntryPoint } from '../shared/sim/dungeon.ts';
+import { FailureBackoff, clientIp } from './throttle.ts';
+import { checkShot, movementBound, teleportCorrection, type PlausibilityStats } from './plausibility.ts';
+import { allowedAbilities } from '../shared/rules/abilities.ts';
 import { auctionTax, AUCTION_MAX_LISTINGS, DAILY_TRADE_VOLUME_CAP, MarketRepo, PremiumWallet, rejectingValidator, ReceiptValidator, SHOP_CATALOG, INVENTORY_FREE } from './market.ts';
 import { FLAGS } from '../shared/flags.ts';
 import { MAP_CONNECTIONS } from '../shared/data/maps.ts';
@@ -50,6 +53,8 @@ export const MAX_MESSAGES_PER_SECOND = 120;
 export const MAX_MESSAGE_BURST = 240;
 /** Connections that never authenticate are dropped after this many bad messages / failed joins. */
 export const MAX_BAD_MESSAGES = 10;
+/** Trades need both players in a safe zone, or in the same instance within this distance. */
+export const TRADE_MAX_DISTANCE = 500;
 export const CHAT_MIN_INTERVAL_MS = 1000;
 export const CHAT_BURST = { count: 5, windowMs: 10_000 };
 
@@ -122,6 +127,9 @@ interface Session {
   clanId?: number;
   clanTag?: string;
   clanEmblem?: string;
+  /** plausibility: where the vehicle was at the end of the previous tick, and when it last fired the main gun (sim time) */
+  lastPos?: { x: number; y: number };
+  lastShotAt?: number;
 }
 
 interface Party { id: number; leader: string; members: Set<string> }
@@ -180,7 +188,7 @@ export class GameServer {
     this.clock = deps.clock ?? realClock;
     this.http = httpServer ?? http.createServer();
     this.wss = new WebSocketServer({ server: this.http, path: '/ws', maxPayload: 64 * 1024 });
-    this.wss.on('connection', (ws) => this.onConnection(ws));
+    this.wss.on('connection', (ws, req) => this.onConnection(ws, clientIp(req)));
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -222,36 +230,129 @@ export class GameServer {
     {
       for (const inst of all) {
         if (inst.sessions.size === 0) continue;
-        const cmds = new Map<number, SimCommand[]>();
-        for (const s of inst.sessions) {
-          if (s.pending.length) { cmds.set(s.entityId, s.pending); s.pending = []; }
-          s.cmdBudget = Math.min(MAX_COMMANDS_PER_SECOND, s.cmdBudget + MAX_COMMANDS_PER_SECOND / TICK_HZ);
+        try {
+          this.testFault?.(inst);
+          const cmds = new Map<number, SimCommand[]>();
+          for (const s of inst.sessions) {
+            if (s.pending.length) { cmds.set(s.entityId, s.pending); s.pending = []; }
+            s.cmdBudget = Math.min(MAX_COMMANDS_PER_SECOND, s.cmdBudget + MAX_COMMANDS_PER_SECOND / TICK_HZ);
+          }
+          took('prep');
+          stepWorld(inst.world, cmds);
+          took('sim');
+          this.checkPlausibility(inst);
+          this.processEvents(inst);
+          took('events');
+          this.handleRespawns(inst);
+          if (inst.arena) this.stepArena(inst);
+          this.rememberPositions(inst);
+          took('respawns');
+          if (this.tick % SNAPSHOT_EVERY_TICKS === 0) this.sendSnapshots(inst);
+          took('snapshots');
+        } catch (err) {
+          this.onInstanceFailure(inst, err);
         }
-        took('prep');
-        stepWorld(inst.world, cmds);
-        took('sim');
-        this.processEvents(inst);
-        took('events');
-        this.handleRespawns(inst);
-        if (inst.arena) this.stepArena(inst);
-        took('respawns');
-        if (this.tick % SNAPSHOT_EVERY_TICKS === 0) this.sendSnapshots(inst);
-        took('snapshots');
       }
     }
-    if (this.tick % TICK_HZ === 0) { this.runMatchmaking(); this.checkSecrets(); }
+    this.guarded('periodic', () => { if (this.tick % TICK_HZ === 0) { this.runMatchmaking(); this.checkSecrets(); } });
     took('every_second');
-    if (this.tick % (TICK_HZ * 30) === 0) this.flushWarScores();
+    this.guarded('war_scores', () => { if (this.tick % (TICK_HZ * 30) === 0) this.flushWarScores(); });
     took('war_scores');
-    if (this.tick % (TICK_HZ * 60) === 0) { this.sweepAuctions(); this.runScheduler(); }
+    this.guarded('minute_jobs', () => { if (this.tick % (TICK_HZ * 60) === 0) { this.sweepAuctions(); this.runScheduler(); } });
     took('minute_jobs');
-    this.autosaveSome();
+    this.guarded('autosave', () => this.autosaveSome());
     took('autosave');
     const ms = performance.now() - t0;
     if (ms > 60) log('warn', 'slow_tick', { ms: Math.round(ms), players: this.sessions.size, ...Object.fromEntries(Object.entries(lap).map(([k, v]) => [k, Math.round(v)])) });
     this.metrics.ticks++;
     this.metrics.maxTickMs = Math.max(this.metrics.maxTickMs, ms);
     this.metrics.avgTickMs += (ms - this.metrics.avgTickMs) / Math.min(this.metrics.ticks, 300);
+  }
+
+  // ---------------------------------------------------------------- plausibility (second line of defence)
+
+  readonly plausibility: PlausibilityStats = { moveCorrections: 0, shotsDropped: 0, maxMoveRatio: 0 };
+
+  private checkPlausibility(inst: Instance): void {
+    const w = inst.world;
+    for (const s of inst.sessions) {
+      const e = w.entities.get(s.entityId);
+      if (!e) continue;
+      if (s.lastPos) this.plausibility.maxMoveRatio = Math.max(this.plausibility.maxMoveRatio, Math.hypot(e.pos.x - s.lastPos.x, e.pos.y - s.lastPos.y) / movementBound(e));
+      const back = teleportCorrection(e, s.lastPos);
+      if (back) {
+        log('warn', 'teleport_corrected', { account: s.accountId, from: s.lastPos, to: { x: Math.round(e.pos.x), y: Math.round(e.pos.y) } });
+        e.pos = { ...back }; e.vel = { x: 0, y: 0 };
+        this.plausibility.moveCorrections++;
+        this.antiCheat.rejected(s.accountId, 'invalid');
+        s.suspicious++;
+      }
+    }
+    for (const ev of w.events) {
+      if (ev.type !== 'projectile_fired') continue;
+      const s = [...inst.sessions].find((x) => x.entityId === ev.shooterId);
+      if (!s) continue; // NPC shots are not player input
+      const verdict = checkShot(ev, w.entities.get(ev.shooterId), s.lastShotAt ?? -Infinity, w.time);
+      if (verdict.ok) { if (!ev.isSecondary) s.lastShotAt = w.time; continue; }
+      for (const [id, p] of w.entities) {
+        if (p.kind === 'projectile' && (p as any).sourceEntityId === ev.shooterId && (p as any).distanceTraveled <= ev.speed * SIM_TIMESTEP * 2 + 1 && Math.hypot(p.pos.x - ev.pos.x, p.pos.y - ev.pos.y) <= ev.speed * SIM_TIMESTEP * 2 + 1) { w.entities.delete(id); break; }
+      }
+      log('warn', 'shot_dropped', { account: s.accountId, reason: verdict.reason });
+      this.plausibility.shotsDropped++;
+      this.antiCheat.rejected(s.accountId, 'invalid');
+      s.suspicious++;
+    }
+  }
+
+  /** Test/admin hook: treat all current positions as legitimate (after code moved entities directly). */
+  forgetPositions(): void { for (const s of this.sessions.values()) s.lastPos = undefined; }
+
+  private rememberPositions(inst: Instance): void {
+    for (const s of inst.sessions) { const e = inst.world.entities.get(s.entityId); s.lastPos = e ? { x: e.pos.x, y: e.pos.y } : undefined; }
+  }
+
+  // ---------------------------------------------------------------- failure isolation
+
+  /** Test hook: called at the start of every instance step (lets tests simulate a crashing world). */
+  testFault?: (inst: Instance) => void;
+  private instanceFailures = new Map<Instance, { count: number; lastTick: number }>();
+  readonly quarantined: string[] = [];
+
+  /** A non-instance job of the tick must never take the loop down. */
+  private guarded(name: string, fn: () => void): void {
+    try { fn(); } catch (err) { log('error', 'tick_job_failed', { job: name, error: String((err as Error)?.stack ?? err).slice(0, 600) }); }
+  }
+
+  /** One failing instance is logged; the third failure within ~10 s quarantines it and moves its players to a fresh instance. */
+  private onInstanceFailure(inst: Instance, err: unknown): void {
+    log('error', 'instance_step_failed', { instance: inst.id, map: inst.mapId, players: inst.sessions.size, error: String((err as Error)?.stack ?? err).slice(0, 800) });
+    const rec = this.instanceFailures.get(inst);
+    if (!rec || this.tick - rec.lastTick > TICK_HZ * 10) this.instanceFailures.set(inst, { count: 1, lastTick: this.tick });
+    else { rec.count++; rec.lastTick = this.tick; }
+    if ((this.instanceFailures.get(inst)?.count ?? 0) >= 3) this.quarantine(inst);
+  }
+
+  private quarantine(inst: Instance): void {
+    log('error', 'instance_quarantined', { instance: inst.id, map: inst.mapId, players: inst.sessions.size });
+    this.quarantined.push(inst.id);
+    this.instanceFailures.delete(inst);
+    const list = this.instances.get(inst.mapId);
+    if (list) this.instances.set(inst.mapId, list.filter((i) => i !== inst));
+    this.arenaInstances.delete(inst);
+    this.dungeonInstances.delete(inst);
+    const players = [...inst.sessions];
+    inst.sessions.clear();
+    for (const s of players) {
+      try {
+        const special = !!inst.arena || !!inst.world?.dungeon;
+        const target = special ? C.HOME_MAP_BY_FACTION[s.character.faction] : inst.mapId;
+        this.enter(s, target); // the old instance is no longer listed, so this creates/joins a healthy one
+        this.send(s, { type: 's_error', code: 'instance_recovered', message: 'The area was restarted' });
+      } catch (err) {
+        log('error', 'quarantine_move_failed', { account: s.accountId, error: String((err as Error)?.message ?? err) });
+        s.ws.close(1011, 'instance_failure');
+      }
+    }
   }
 
   // ---------------------------------------------------------------- instances
@@ -264,7 +365,7 @@ export class GameServer {
     const map = getMapById(mapId) as MapDef;
     const n = ++this.instanceCounter;
     const world = createWorld({ map, seed: mapId * 7919 + n, clockOffset: Math.floor(this.clock.nowMs() / 1000) });
-    const inst: Instance = { id: `i${mapId}-${list.length + 1}`, mapId, map, world, sessions: new Set(), chatSent: world.chat.length };
+    const inst: Instance = { id: `i${mapId}-${n}`, mapId, map, world, sessions: new Set(), chatSent: world.chat.length };
     list.push(inst);
     void preferInstanceOf;
     return inst;
@@ -332,6 +433,7 @@ export class GameServer {
     if (!inst.arena && !inst.world.dungeon) codexAdd(s.character, 'map', String(mapId));
     s.encoder.reset();
     s.pending = [];
+    s.lastPos = undefined; s.lastShotAt = undefined; // a map change is a legitimate teleport
     inst.sessions.add(s);
     this.send(s, { type: 's_map', mapId, instanceId: inst.id, assignedEntityId: ent.id });
     this.sendCharacter(s);
@@ -350,13 +452,13 @@ export class GameServer {
 
   // ---------------------------------------------------------------- connection handling
 
-  private onConnection(ws: WebSocket): void {
+  private onConnection(ws: WebSocket, ip: string): void {
     let session: Session | undefined;
     const joinTimeout = setTimeout(() => { if (!session) ws.close(4408, 'join_timeout'); }, 10_000);
     let tokens = this.inboundLimit.burst; let lastRefill = this.clock.nowMs(); let bad = 0;
     const reject = (code: string, message: string) => {
       this.sendRaw(ws, { type: 's_error', code, message });
-      if (++bad >= MAX_BAD_MESSAGES) ws.close(4400, 'too_many_bad_messages');
+      if (++bad >= MAX_BAD_MESSAGES) { if (!session) this.joinThrottle.fail(ip, this.clock.nowMs()); ws.close(4400, 'too_many_bad_messages'); }
     };
     ws.on('message', (data) => {
       this.metrics.msgsIn++;
@@ -372,7 +474,7 @@ export class GameServer {
         if (typeof msg !== 'object' || msg === null || Array.isArray(msg) || typeof (msg as any).type !== 'string') return reject('bad_message', 'Invalid message');
         if (!session) {
           if (msg.type !== 'c_join') return reject('join_first', 'Send c_join first');
-          session = this.handleJoin(ws, msg) ?? undefined;
+          session = this.handleJoin(ws, msg, ip) ?? undefined;
           return;
         }
         this.handleMessage(session, msg);
@@ -403,23 +505,37 @@ export class GameServer {
     return true;
   }
 
-  private handleJoin(ws: WebSocket, msg: Extract<ClientMessage, { type: 'c_join' }>): Session | null {
+  /** Failed joins per IP: free allowance for shared NATs, then exponential back-off. Accounts that already logged in from this IP are never blocked by it. */
+  readonly joinThrottle = new FailureBackoff({ free: 20, baseMs: 1000, maxMs: 15 * 60_000, decayMs: 10 * 60_000 });
+  private trustedLogins = new Map<string, Set<string>>();
+
+  private handleJoin(ws: WebSocket, msg: Extract<ClientMessage, { type: 'c_join' }>, ip = 'unknown'): Session | null {
+    const nowMs = this.clock.nowMs();
+    const known = typeof msg.accountId === 'string' && this.trustedLogins.get(ip)?.has(msg.accountId);
+    if (!known && this.joinThrottle.blockedFor(ip, nowMs) > 0) {
+      this.sendRaw(ws, { type: 's_error', code: 'rate_limited', message: 'Too many failed logins, try again later', critical: true });
+      ws.close(4429, 'rate_limited');
+      return null;
+    }
     if (!this.versionOk(typeof msg.protocolVersion === 'string' ? msg.protocolVersion : '0.0.0')) {
       this.sendRaw(ws, { type: 's_error', code: 'update_required', message: `Please update the game (need protocol ${MIN_PROTOCOL_VERSION})`, critical: true });
       ws.close(4426, 'update_required');
       return null;
     }
     if (typeof msg.accountId !== 'string' || typeof msg.secret !== 'string' || msg.accountId.length > 64 || msg.secret.length > 128) {
+      this.joinThrottle.fail(ip, nowMs);
       this.sendRaw(ws, { type: 's_error', code: 'bad_credentials', message: 'Unknown account', critical: true });
       ws.close(4404, 'bad_credentials');
       return null;
     }
     const auth = this.deps.service.verify(msg.accountId, msg.secret);
     if (!auth.ok) {
+      if (auth.error !== 'banned') this.joinThrottle.fail(ip, nowMs);
       this.sendRaw(ws, { type: 's_error', code: auth.error, message: auth.error === 'banned' ? 'This account is banned' : 'Unknown account', critical: true });
       ws.close(auth.error === 'banned' ? 4403 : 4404, auth.error);
       return null;
     }
+    { let set = this.trustedLogins.get(ip); if (!set) this.trustedLogins.set(ip, set = new Set()); if (set.size < 500) set.add(auth.account.id); }
     // One active connection per account: the new login kicks the old one.
     const existing = this.sessions.get(auth.account.id);
     if (existing) {
@@ -507,7 +623,7 @@ export class GameServer {
       }
       case 'ToggleAutoFire': return { type: 'ToggleAutoFire' };
       case 'FireMain': return { type: 'FireMain' };
-      case 'UseAbility': return typeof c.abilityId === 'string' ? { type: 'UseAbility', abilityId: c.abilityId } : undefined;
+      case 'UseAbility': return typeof c.abilityId === 'string' && allowedAbilities(s.character).has(c.abilityId as AbilityId) ? { type: 'UseAbility', abilityId: c.abilityId } : undefined;
       case 'SelectAmmo': {
         if (typeof c.ammo !== 'string' || !AMMO_IDS.includes(c.ammo)) return undefined;
         const ent = s.instance.world.entities.get(s.entityId);
@@ -980,6 +1096,14 @@ export class GameServer {
 
   // ---------------------------------------------------------------- economy: auction house, mail, trade, fast travel, premium shop
 
+  /** Both players inside a safe zone (anywhere), or standing close together in the same instance. */
+  private canTradeHere(a: Session, b: Session): boolean {
+    if (this.inSafeZone(a) && this.inSafeZone(b)) return true;
+    if (a.instance !== b.instance) return false;
+    const ea = a.instance.world.entities.get(a.entityId); const eb = b.instance.world.entities.get(b.entityId);
+    return !!ea && !!eb && (ea.pos.x - eb.pos.x) ** 2 + (ea.pos.y - eb.pos.y) ** 2 <= TRADE_MAX_DISTANCE ** 2;
+  }
+
   private inHub(s: Session): boolean { return s.instance.mapId === 13 && this.inSafeZone(s); }
 
   private warDiscount(s: Session): number {
@@ -1064,6 +1188,7 @@ export class GameServer {
         if (!other || other === s) return reply({ ok: false, error: 'player_offline' });
         const ok = this.deps.social.areFriends(s.accountId, other.accountId) || (s.clanId !== undefined && s.clanId === other.clanId);
         if (!ok) return reply({ ok: false, error: 'friends_or_clan_only' });
+        if (!this.canTradeHere(s, other)) return reply({ ok: false, error: 'too_far' });
         if (this.trades.has(s.accountId) || this.trades.has(other.accountId)) return reply({ ok: false, error: 'already_trading' });
         if (this.deps.social.isBlocked(other.accountId, s.accountId)) return reply({ ok: false, error: 'blocked' });
         const t: TradeSession = { a: s.accountId, b: other.accountId, offers: { [s.accountId]: { items: [], scrap: 0 }, [other.accountId]: { items: [], scrap: 0 } }, confirmed: new Set() };
@@ -1183,6 +1308,7 @@ export class GameServer {
       for (const uid of offer.items) { const it = C.findItem(from.character, uid); if (!it || it.bound || C.isEquipped(from.character, uid)) return 'item_invalid'; }
       return undefined;
     };
+    if (!this.canTradeHere(sa, sb)) return { ok: false, error: 'too_far' };
     const e = check(sa, oa) ?? check(sb, ob);
     if (e) return { ok: false, error: e };
     if (INVENTORY_FREE(sa.character) + oa.items.length < ob.items.length || INVENTORY_FREE(sb.character) + ob.items.length < oa.items.length) return { ok: false, error: 'inventory_full' };

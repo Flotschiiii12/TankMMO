@@ -381,6 +381,8 @@ const DE: Record<string, string> = {
   'ARENA': 'ARENA',
   'Neutral Middle': 'Neutrale Mitte',
   'PvP Borderlands': 'PvP-Grenzland',
+  // --- UI pass 2 ---
+  'You are too far apart to trade': 'Ihr seid zu weit voneinander entfernt, um zu handeln',
 };
 
 const lang = getLang();

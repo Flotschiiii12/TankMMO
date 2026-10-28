@@ -24,11 +24,11 @@ Regression tests: `test/security.test.ts`. Line numbers refer to the state after
 - **Economy**: auction listing is price-band checked (integer, 0.5x..60x NPC value), seller account age and listing cap enforced, `close()` is an atomic `UPDATE ... WHERE status='active'` so a double buy is impossible, the daily volume cap applies to both sides, bound and equipped items cannot be traded, trades re-validate everything at execution time and swap in one step, mail is deleted on claim. Premium shop is inert while `FLAGS.premiumCurrencyEnabled` is false and the receipt validator rejects everything.
 - **Inventory counts / negative numbers**: scrap amounts in trade are floored and clamped at 0; donation requires `n > 0`; fast travel checks visited maps, distance and level.
 
-## Design-level notes (behaviour not changed)
-1. **Abilities are not gated by loadout**: any client can send `UseAbility` for any ability id (`smoke`, `boost`, `emergency_shield`, `fortify`, `repair_kit`); only the cooldown applies. If abilities are meant to come from class or modules, `activateAbility` needs a per-vehicle allow-list.
-2. **Trades have no distance or safe-zone requirement** and work between any online friends/clanmates (acceptable, but note it for gold-seller scenarios; the daily volume cap limits damage).
-3. **Failed `c_join` attempts are not throttled per IP** (secrets are 192 bit, so this only matters for log noise); consider a per-IP join limiter next to the REST limiter.
-4. **`SetTarget` leaks existence of entity ids** (accepted/ignored); harmless today.
-5. **Anti-cheat is statistical only** (`server/anticheat.ts`): it flags but never acts. Flagged accounts are visible at `/admin/api/flagged`.
-6. **`/metrics` and `/health` are public**. They contain no personal data; restrict at the reverse proxy if desired.
-7. **No global process safety net**: handlers are now guarded, but a bug inside the 30 Hz tick would still throw out of the interval. Consider wrapping `stepAll` per instance in try/catch and logging.
+## Design-level items (resolved in the second cloud run, `test/hardening.test.ts`)
+1. **Abilities gated by loadout**: `shared/rules/abilities.ts` - smoke/repair kit/boost for everyone, one signature ability per vehicle class, `emergency_shield` only with the module equipped; the server drops other `UseAbility` commands. Special ammo needs stock (bought with scrap) as before. Old behaviour: any client had 2 s invulnerability every 45 s.
+2. **Trade distance**: both players in a safe zone, or in the same instance within 500 units; re-checked when the second player confirms (`too_far`).
+3. **Failed-login / account-creation throttling** (`server/throttle.ts`): 20 free failed joins per IP per 10 min (shared NAT), then 1 s doubling to 15 min; accounts that already logged in from that IP are never blocked by it. Guest creation: 30 free per hour per IP, then 30 s doubling to 1 h. IP is `X-Forwarded-For` aware with `TRUST_PROXY=<hops>` (right-most trusted hop).
+4. **Tick isolation**: every instance step and snapshot runs in try/catch with `log('error', ...)`; the third failure within 10 s quarantines the instance and moves its players to a fresh one (arena/gate players go to their home map). Periodic jobs are guarded too. Metric `treadfront_instances_quarantined_total`.
+5. **Plausibility** (`server/plausibility.ts`): vehicles displaced more than `3 x top speed x dt + 4 radii + 60` in one tick are put back (no kick); main-gun shells are checked for origin, rate (>= half the reload) and range, and dropped otherwise. Measured with 200 bots: 0 corrections, max displacement 51 % of the bound. Metrics `treadfront_teleport_corrections_total`, `treadfront_shots_dropped_total`, `treadfront_max_move_ratio`.
+
+Still open: trades have no value cap per trade beyond the daily volume cap; `/metrics` and `/health` are public; anti-cheat scores are visibility only.

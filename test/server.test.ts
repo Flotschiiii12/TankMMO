@@ -191,6 +191,7 @@ describe('Server: authoritative gameplay', () => {
     // leave the safe zone -> workshop refused
     const world = ctx.game.getWorld(g.accountId)!;
     ctx.game.getSessionState(g.accountId)!.entity.pos = { x: 10, y: 10 };
+    ctx.game.forgetPositions();
     void world;
     const r2 = await act(2, { kind: 'dismantle', uid });
     expect(r2).toMatchObject({ ok: false, error: 'safe_zone_only' });
@@ -206,6 +207,7 @@ describe('Server: authoritative gameplay', () => {
     const sess = ctx.game.getSessionState(g.accountId)!;
     const gate = [...world.entities.values()].find((e) => e.kind === 'gate')!;
     sess.entity.pos = { ...gate.pos };
+    ctx.game.forgetPositions();
     sess.character.level = 30;
     await c.until(() => c.msgs.some((m) => m.type === 's_map' && m.mapId !== 1), 6000);
     const st = ctx.game.getSessionState(g.accountId)!;

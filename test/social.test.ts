@@ -100,6 +100,7 @@ describe('Parties', () => {
     const wa = ctx.game.getWorld(a.id)!; const sa = ctx.game.getSessionState(a.id)!; const sb = ctx.game.getSessionState(b.id)!;
     wa.safeZones = [];
     sb.entity.pos = { x: sa.entity.pos.x + 50, y: sa.entity.pos.y };
+    ctx.game.forgetPositions();
     const foe = [...wa.entities.values()].find((e) => e.kind === 'scout_buggy')!;
     foe.level = 30; foe.pos = { x: sa.entity.pos.x + 200, y: sa.entity.pos.y }; foe.hull = 1; foe.armor = 0;
     sa.entity.invulnerableTime = 1e9; sb.entity.invulnerableTime = 1e9;
@@ -272,7 +273,9 @@ describe('PvP, bounties, arena and faction war (server)', () => {
     v.hull = 1; v.armor = 0; v.invulnerableTime = 0; k.invulnerableTime = 0;
     k.hull = k.maxHull; k.armor = k.maxArmor;
     k.pos = { x: 2000, y: 2000 }; // away from portals (400-unit protection radius)
+    ctx.game.forgetPositions();
     v.pos = { x: k.pos.x + 200, y: k.pos.y };
+    ctx.game.forgetPositions();
     killer.p.input({ type: 'SetTarget', targetId: v.id }, { type: 'ToggleAutoFire' });
     try { await killer.p.until(() => v.hull <= 0, 3000); } catch (err) { console.log('KILL FAIL', { kPos: k.pos, vPos: v.pos, kHull: k.hull, kInv: k.invulnerableTime, vInv: v.invulnerableTime, kFac: k.faction, vFac: v.faction, kLvl: k.level, vLvl: v.level, tgt: k.targetId, vid: v.id, auto: k.autoFire, reload: k.mainReloadRemaining, safe: ctx.game.getWorld(killer.p.id)!.safeZones.length, pvp: ctx.game.getWorld(killer.p.id)!.pvp }); throw err; }
     for (let i = 0; i < 3; i++) ctx.game.stepAll();
@@ -293,6 +296,7 @@ describe('PvP, bounties, arena and faction war (server)', () => {
     expect(a.s.bounty).toBe(2000);
     // another highland player claims the bounty
     a.e.pos = { x: 2000, y: 2000 }; c.e.invulnerableTime = 0; a.e.invulnerableTime = 0; c.e.hull = c.e.maxHull; c.e.pos = { x: 2150, y: 2000 }; a.e.hull = 1; a.e.armor = 0;
+    ctx.game.forgetPositions();
     const scrap = c.s.character.wallet.scrap;
     c.p.input({ type: 'SetTarget', targetId: a.e.id }, { type: 'ToggleAutoFire' });
     await c.p.until(() => a.e.hull <= 0, 6000);
@@ -355,15 +359,18 @@ describe('PvP, bounties, arena and faction war (server)', () => {
     const w = a.w;
     const cp = w.war![0];
     a.e.pos = { x: cp.x, y: cp.y }; b.e.pos = { x: 100, y: 100 };
+    ctx.game.forgetPositions();
     a.e.invulnerableTime = b.e.invulnerableTime = 1e9;
     for (let i = 0; i < 30 * 14; i++) ctx.game.stepAll();
     expect(cp.owner).toBe('coastal');
     // contested: both inside, nobody progresses
     b.e.pos = { x: cp.x + 20, y: cp.y };
+    ctx.game.forgetPositions();
     for (let i = 0; i < 30; i++) ctx.game.stepAll();
     expect(cp.contested).toBe(true);
     // the owner keeps scoring
     b.e.pos = { x: 100, y: 100 };
+    ctx.game.forgetPositions();
     const before = w.warScore.coastal;
     for (let i = 0; i < 90; i++) ctx.game.stepAll();
     expect(w.warScore.coastal).toBeGreaterThan(before);

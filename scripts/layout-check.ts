@@ -368,6 +368,10 @@ async function main() {
       if (vp.touch && (await page.getByRole('button', { name: /^Settings$/ }).count())) {
         const toggle = async (label: string) => { await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200); await page.getByRole('button', { name: label }).first().evaluate((el) => (el as HTMLElement).click()).catch(() => {}); };
         const canvasRatio = async () => (await page.evaluate("(() => { const c = document.querySelector('canvas'); return c.width / window.innerWidth; })()")) as number;
+        // the automatic performance mode may have switched itself on already (slow machine, frames > 22 ms): start from OFF so this check is deterministic
+        await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200);
+        if ((await page.locator('[data-setting=performanceMode]').first().getAttribute('aria-checked')) === 'true') await page.locator('[data-setting=performanceMode]').first().click();
+        await closeModal(page, vp, 'modal-settings'); await page.waitForTimeout(400);
         const before = await canvasRatio();
         // the toggle rows are buttons named ON/OFF right after their title: click by the row text
         await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200);

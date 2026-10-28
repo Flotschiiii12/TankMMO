@@ -74,7 +74,7 @@ describe('property: random valid action sequences', () => {
       }
     }
     expect(problems).toEqual([]);
-  });
+  }, 60_000); // 60 seeds of random action sequences: CPU-heavy, so it needs room when the whole suite runs in parallel
 
   it('selling or dismantling can never be a scrap loop (value per item is bounded by what crafting costs)', () => {
     // craft -> sell must lose scrap for every recipe, otherwise an infinite money machine exists

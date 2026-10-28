@@ -7,7 +7,7 @@ import { AllianceRepo, ClanStorageRepo } from './clanStorage.ts';
 import { MarketRepo, PremiumWallet } from './market.ts';
 import { backupDatabase, openDatabase, SqliteArenaRepo, SqliteWarRepo, SqliteAccountRepo, SqliteChatRepo, SqliteProfileRepo } from './db.ts';
 import { GameServer, log } from './gameServer.ts';
-import { FailureBackoff } from './throttle.ts';
+import { FailureBackoff, normalizeIp } from './throttle.ts';
 
 export interface AppOptions { backupDir?: string; dbPath?: string; staticDir?: string; adminToken?: string; clock?: { nowMs(): number } }
 
@@ -17,7 +17,7 @@ let lastPrune = 0;
 function rateLimit(max: number, windowMs: number): express.RequestHandler {
   return (req, res, next) => {
     if (process.env.LOAD_TEST === '1') return next();
-    const key = `${req.ip}:${req.path}`;
+    const key = `${normalizeIp(req.ip ?? '')}:${req.path}`;
     const now = Date.now();
     if (now - lastPrune > 60_000) { // keep the map from growing with every IP ever seen
       lastPrune = now;
@@ -69,9 +69,9 @@ export function createApp(opts: AppOptions = {}) {
   const createBackoff = new FailureBackoff({ free: 30, baseMs: 30_000, maxMs: 3600_000, decayMs: 3600_000 });
   app.post('/api/guest', rateLimit(10, 60_000), (req, res) => {
     if (process.env.LOAD_TEST !== '1') {
-      const wait = createBackoff.blockedFor(req.ip ?? '', Date.now());
+      const wait = createBackoff.blockedFor(normalizeIp(req.ip ?? ''), Date.now());
       if (wait > 0) return void res.status(429).set('Retry-After', String(Math.ceil(wait / 1000))).json({ error: 'rate_limited', retryAfterSeconds: Math.ceil(wait / 1000) });
-      createBackoff.fail(req.ip ?? '', Date.now());
+      createBackoff.fail(normalizeIp(req.ip ?? ''), Date.now());
     }
     const r = service.createGuest(req.body?.ageConfirmed === true, ['coastal', 'highland', 'steppe'].includes(req.body?.faction) ? req.body.faction : 'coastal');
     if (!r.ok) return void res.status(400).json({ error: r.error });

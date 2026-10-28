@@ -45,7 +45,16 @@ export function clientIp(req: IncomingMessage): string {
   const hops = Number(process.env.TRUST_PROXY ?? 0);
   if (hops > 0) {
     const xff = String(req.headers['x-forwarded-for'] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
-    if (xff.length >= hops) return xff[xff.length - hops];
+    if (xff.length >= hops) return normalizeIp(xff[xff.length - hops]);
   }
-  return req.socket.remoteAddress ?? 'unknown';
+  return normalizeIp(req.socket.remoteAddress ?? 'unknown');
+}
+
+/**
+ * One key per client: dual-stack sockets report IPv4 clients as IPv4-mapped IPv6 (`::ffff:1.2.3.4`), proxies and Express
+ * report them as plain `1.2.3.4`. Without this the same player would get two throttle buckets / "known address" entries.
+ */
+export function normalizeIp(addr: string): string {
+  const a = addr.trim().toLowerCase();
+  return a.startsWith('::ffff:') && a.includes('.') ? a.slice(7) : a;
 }

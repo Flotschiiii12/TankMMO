@@ -239,3 +239,14 @@ describe('plausibility checks', () => {
     p.ws.close();
   });
 });
+
+describe('client address normalisation', () => {
+  it('IPv4-mapped IPv6 addresses map to the plain IPv4 key, everything else is kept', async () => {
+    const { normalizeIp } = await import('../server/throttle.ts');
+    expect(normalizeIp('::ffff:203.0.113.7')).toBe('203.0.113.7');
+    expect(normalizeIp('::FFFF:203.0.113.7')).toBe('203.0.113.7');
+    expect(normalizeIp('203.0.113.7')).toBe('203.0.113.7');
+    expect(normalizeIp('2001:db8::1')).toBe('2001:db8::1');
+    expect(normalizeIp('::1')).toBe('::1');
+  });
+});

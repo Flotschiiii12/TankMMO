@@ -1,3 +1,4 @@
+import { WindowFrame } from './wm/WindowFrame.tsx';
 import React, { useState } from 'react';
 import { tr } from '../i18n.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
@@ -25,9 +26,7 @@ export const FeedbackModal: React.FC<Props> = ({ open, onClose, send }) => {
     if (r.ok) { setState('sent'); setText(''); } else setState(`error:${r.error ?? 'failed'}`);
   };
   return (
-    <div className="fixed inset-0 z-[60] bg-slate-950/80 flex items-center justify-center p-4" role="dialog" aria-label={tr('Send feedback')}>
-      <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-4 text-slate-200 max-h-[90vh] overflow-y-auto">
-        <h3 className="font-semibold text-white text-base mb-2">{tr('Send feedback')}</h3>
+    <WindowFrame id="feedback" width="min(480px, 94vw)" height="auto">
         {!send ? <p className="text-sm text-slate-400">{tr('Feedback needs an online connection.')}</p> : state === 'sent' ? <p className="text-sm text-emerald-300">{tr('Thank you! Your report was sent.')}</p> : (
           <>
             <div className="flex gap-2 mb-2">
@@ -44,7 +43,6 @@ export const FeedbackModal: React.FC<Props> = ({ open, onClose, send }) => {
           {send && state !== 'sent' && <button disabled={state === 'sending' || text.trim().length < 3} onClick={submit} className="min-h-[44px] px-4 rounded-lg bg-orange-500 disabled:opacity-40 text-white text-sm font-medium">{tr('Send')}</button>}
           <button onClick={() => { setState('idle'); onClose(); }} className="min-h-[44px] px-4 rounded-lg bg-slate-800 text-white text-sm">{tr('Close')}</button>
         </div>
-      </div>
-    </div>
+    </WindowFrame>
   );
 };

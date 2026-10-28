@@ -1,4 +1,5 @@
 import React from 'react';
+import { WindowFrame } from './wm/WindowFrame.tsx';
 import { tr } from '../i18n.ts';
 import { TUTORIAL_HINT_KEYS } from '../../shared/rules/hints.ts';
 import { TUTORIAL_STEPS } from '../../shared/data/quests.ts';
@@ -37,13 +38,12 @@ export const HintToast: React.FC<{ text: string | null; onClose: () => void }> =
 export const HowToPlay: React.FC<{ open: boolean; onClose: () => void; done: string[] }> = ({ open, onClose, done }) => {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4" data-testid="how-to-play">
-      <div className="max-w-md w-full max-h-[90vh] overflow-y-auto rounded-xl border border-slate-800 bg-slate-900 p-4 text-slate-200">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2"><b className="text-white text-sm">{tr('How to play')}</b><button onClick={onClose} className="text-slate-400 hover:text-white">✕</button></div>
+    <WindowFrame id="howto" width="min(480px, 94vw)" height="min(520px, 90vh)">
+      <div data-testid="how-to-play">
         <ol className="mt-2 space-y-1.5 text-xs">
           {TUTORIAL_STEPS.map((s, i) => <li key={s} className="flex gap-2"><span className={done.includes(s) ? 'text-emerald-400' : 'text-slate-500'}>{done.includes(s) ? '✓' : `${i + 1}.`}</span><span>{tr(TUTORIAL_HINT_KEYS[s] ?? s)}</span></li>)}
         </ol>
       </div>
-    </div>
+    </WindowFrame>
   );
 };

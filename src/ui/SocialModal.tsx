@@ -1,3 +1,4 @@
+import { WindowFrame } from './wm/WindowFrame.tsx';
 import React, { useCallback, useEffect, useState } from 'react';
 import { tr, nm, titleText } from '../i18n.ts';
 import { DUNGEONS } from '../../shared/data/dungeons.ts';
@@ -59,12 +60,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
   const ghost = 'px-2 py-1 rounded border border-slate-700 text-slate-300 text-xs';
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 select-none">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl max-h-[94vh] flex flex-col p-4 text-slate-200 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-          <div className="flex items-center gap-2"><Users className="text-orange-500" size={18} /><h3 className="font-semibold text-white text-sm">{tr('Social')}</h3></div>
-          <button onClick={() => { soundEngine.playUIClick(); onClose(); }} className="text-slate-400 hover:text-white"><X size={18} /></button>
-        </div>
+    <WindowFrame id="social" width="min(900px, 96vw)">
         <div className="flex gap-2 mt-2 text-xs items-center">
           {(['friends', 'party', 'clan', 'war', 'ranking', 'market', 'arena', 'gates', 'career'] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded capitalize ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>{tr(t)}</button>)}
           {msg && <span className="ml-auto text-[11px] text-orange-300">{msg}</span>}
@@ -200,8 +196,7 @@ export const SocialModal: React.FC<{ client: OnlineGameClient; isOpen: boolean; 
             </>
           )}
         </div>
-      </div>
-    </div>
+    </WindowFrame>
   );
 };
 

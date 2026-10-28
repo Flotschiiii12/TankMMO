@@ -1,3 +1,4 @@
+import { WindowFrame } from './wm/WindowFrame.tsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { tr, nm } from '../i18n.ts';
 import { CurrencyIcon } from './GameIcon.tsx';
@@ -123,18 +124,8 @@ export const GarageModal: React.FC<GarageModalProps> = ({
   const buyAmmo = (type: AmmoType, _count: number, _cost: number) => { void run({ kind: 'buy_ammo', ammo: type, packs: 1 }); };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col p-4 md:p-6 text-slate-200 select-none overflow-hidden">
-      {/* Top Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div className="flex items-center gap-3">
-          <Wrench className="text-orange-500" size={22} />
-          <h2 className="text-lg font-semibold tracking-tight text-white">{tr('Base Outpost Hangar')}</h2>
-          <span className="text-xs text-slate-500">·</span>
-          <span className="text-xs text-slate-400">{tr('Safe Zone Depot')}</span>
-        </div>
-
-        {/* Currency Strip */}
-        <div className="flex items-center gap-5 text-xs">
+    <WindowFrame id="garage" title="Base Outpost Hangar" width="min(1100px, 98vw)" height="min(720px, 95vh)" headerExtra={
+                <div className="flex items-center gap-5 text-xs">
           <span className="tabular-nums">
             <CurrencyIcon kind="scrap" /> {tr('Scrap')}: <span className="font-semibold text-white">{ch.wallet.scrap.toLocaleString()}</span>
           </span>
@@ -144,18 +135,8 @@ export const GarageModal: React.FC<GarageModalProps> = ({
           <span className="tabular-nums">
             {tr('Level')}: <span className="font-semibold text-orange-400">{ch.level}</span>
           </span>
-          <button
-            onClick={() => {
-              soundEngine.playUIClick();
-              onClose();
-            }}
-            className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X size={20} />
-          </button>
         </div>
-      </div>
-
+    }>
       {/* Tabs */}
       <div className="flex items-center gap-2 mt-3 border-b border-slate-800 pb-2">
         <button
@@ -488,6 +469,6 @@ export const GarageModal: React.FC<GarageModalProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </WindowFrame>
   );
 };

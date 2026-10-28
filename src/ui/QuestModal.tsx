@@ -1,3 +1,4 @@
+import { WindowFrame } from './wm/WindowFrame.tsx';
 import React, { useState } from 'react';
 import { tr, nm } from '../i18n.ts';
 import { X, ScrollText } from 'lucide-react';
@@ -55,12 +56,7 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
   const tier = Q.seasonTier(ch);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 select-none">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-3xl max-h-[94vh] flex flex-col p-4 text-slate-200 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-          <div className="flex items-center gap-2"><ScrollText className="text-orange-500" size={18} /><h3 className="font-semibold text-white text-sm">{tr('Quests')}</h3></div>
-          <button onClick={() => { soundEngine.playUIClick(); onClose(); }} className="text-slate-400 hover:text-white"><X size={18} /></button>
-        </div>
+    <WindowFrame id="quests" width="min(860px, 96vw)">
         <div className="flex gap-2 mt-2 text-xs">
           {(['active', 'available', 'journal', 'season'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded capitalize ${tab === t ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>
@@ -126,7 +122,6 @@ export const QuestModal: React.FC<Props> = ({ profile, isOpen, onClose, onAction
             </>
           )}
         </div>
-      </div>
-    </div>
+    </WindowFrame>
   );
 };

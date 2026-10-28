@@ -18,6 +18,20 @@ export function getLang(): Lang {
 export function setLang(l: Lang): void { try { localStorage.setItem(KEY, l); } catch { /* ignore */ } window.location.reload(); }
 
 const DE: Record<string, string> = {
+  'Settings': 'Einstellungen',
+  'Garage': 'Garage',
+  'Close the top window': 'Oberstes Fenster schließen',
+  'Debug panel': 'Debug-Fenster',
+  'Chat': 'Chat',
+  'Select ammo': 'Munition wählen',
+  'Smoke, repair kit, boost': 'Rauch, Reparaturset, Boost',
+  'Toggle auto fire': 'Autofeuer umschalten',
+  'Drive': 'Fahren',
+  'World Map': 'Weltkarte',
+  'Keyboard shortcuts': 'Tastenkürzel',
+  'Keyboard shortcut': 'Tastenkürzel',
+  'Experience': 'Erfahrung',
+  'Main menu': 'Hauptmenü',
   'Emotes': 'Emotes',
   'Performance mode turned on because the game was running slowly. You can change it in Settings.': 'Leistungsmodus eingeschaltet, weil das Spiel langsam lief. Du kannst das in den Einstellungen ändern.',
   'Lower resolution (max 1.5x), fewer effects, plain ground. Turns on by itself when the game runs slowly': 'Geringere Auflösung (max. 1,5x), weniger Effekte, schlichter Boden. Schaltet sich selbst ein, wenn das Spiel ruckelt',

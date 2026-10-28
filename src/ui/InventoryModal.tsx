@@ -1,3 +1,4 @@
+import { WindowFrame } from './wm/WindowFrame.tsx';
 import React, { useMemo, useState } from 'react';
 import { tr, T, nm } from '../i18n.ts';
 import { RarityGem, CurrencyIcon, SlotIcon, FamilyIcon } from './GameIcon.tsx';
@@ -55,23 +56,16 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
   const fusionCandidates = sel ? ch.inventory.filter((i) => i.defId === sel.defId && i.rarity === sel.rarity && !C.isEquipped(ch, i.uid)) : [];
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 select-none">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-5xl max-h-[96vh] flex flex-col p-4 text-slate-200 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-          <div className="flex items-center gap-2">
-            <Package className="text-orange-500" size={18} />
-            <h3 className="font-semibold text-white text-sm">{tr('Loadout & Workshop')}</h3>
-          </div>
-          <div className="flex items-center gap-4 text-[11px] text-slate-400 tabular-nums">
+    <WindowFrame id="inventory" title="Loadout & Workshop" width="min(1040px, 98vw)" height="min(700px, 94vh)" headerExtra={
+<div className="flex items-center gap-3 max-[1100px]:hidden text-[11px] text-slate-400 tabular-nums">
             <span><CurrencyIcon kind="scrap" /> {tr('Scrap')} <b className="text-white">{ch.wallet.scrap.toLocaleString()}</b></span>
             <span><CurrencyIcon kind="iron" /> {tr('Iron')} <b className="text-white">{ch.wallet.ore.iron}</b></span>
             <span><CurrencyIcon kind="copper" /> {tr('Copper')} <b className="text-white">{ch.wallet.ore.copper}</b></span>
             <span><CurrencyIcon kind="titanium" /> {tr('Titanium')} <b className="text-white">{ch.wallet.ore.titanium}</b></span>
             <span><CurrencyIcon kind="crystal" /> {tr('Crystal')} <b className="text-white">{ch.wallet.ore.crystal}</b></span>
             <span><CurrencyIcon kind="fragments" /> {tr('Fragments')} <b className="text-white">{ch.wallet.fragments}</b></span>
-            <button onClick={() => { soundEngine.playUIClick(); onClose(); }} className="text-slate-400 hover:text-white"><X size={18} /></button>
-          </div>
-        </div>
+      </div>
+    }>
 
         <div className="flex gap-2 mt-2 text-xs">
           {(['gear', 'craft'] as const).map((t) => (
@@ -210,7 +204,6 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
             })}
           </div>
         )}
-      </div>
-    </div>
+    </WindowFrame>
   );
 };

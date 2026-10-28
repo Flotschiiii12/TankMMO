@@ -1,3 +1,4 @@
+import { WindowFrame } from './wm/WindowFrame.tsx';
 /**
  * Treadfront - World Map Modal
  * Interactive tactical node-graph map of all 30 world zones.
@@ -166,32 +167,9 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
   const isLevelAdequate = playerLevel >= selectedMeta.levelRange[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4 animate-in fade-in duration-150">
-      <div className="relative w-full max-w-6xl h-[94vh] max-h-[820px] bg-slate-900 border border-slate-700/80 rounded-2xl flex flex-col overflow-hidden shadow-2xl">
-        {/* Header Bar */}
-        <div className="flex items-center justify-between px-4 py-3 bg-slate-950/90 border-b border-slate-800 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 rounded-lg bg-sky-500/20 border border-sky-500/40 text-sky-400">
-              <Compass className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-white tracking-wide uppercase">
-                  {tr('World Map & Portal Graph')}
-                </h2>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                  {tr('30 Zones')}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400">
-                {tr('Connected portal network. Standing in portal circle for 3s initiates transit.')}
-              </p>
-            </div>
-          </div>
-
+    <WindowFrame id="map" title="World Map & Fast Travel" width="min(1180px, 98vw)" height="min(800px, 95vh)" noPadding headerExtra={
           <div className="flex items-center gap-2">
-            {/* Region Filter Chips */}
-            <div className="hidden md:flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
+                        <div className="hidden md:flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
               {['ALL', T('Coastal'), T('Highland'), T('Steppe'), T('Neutral'), T('PvP'), T('Endgame')].map((r) => (
                 <button
                   key={r}
@@ -207,15 +185,8 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
               ))}
             </div>
 
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition"
-              title={tr('Close Map (Esc / M)')}
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
-        </div>
+    }>
 
         {/* Main Body */}
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -482,7 +453,6 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </WindowFrame>
   );
 };

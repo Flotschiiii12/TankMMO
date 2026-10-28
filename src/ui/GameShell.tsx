@@ -40,6 +40,10 @@ import { impactLevel, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../render/combatFx.
 import { GarageModal } from './GarageModal.tsx';
 import { InventoryModal } from './InventoryModal.tsx';
 import { dprCap, PerfMonitor } from './perfMonitor.ts';
+import { useWindowFlag } from './wm/useWindows.ts';
+import { useNavPips } from './useNavPips.ts';
+import { WindowKeys } from './wm/WindowKeys.tsx';
+import { HelpOverlay } from './wm/HelpOverlay.tsx';
 import { SettingsModal } from './SettingsModal.tsx';
 import { FeedbackModal } from './FeedbackModal.tsx';
 import { TutorialOverlay } from './TutorialOverlay.tsx';
@@ -90,9 +94,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
   // Game UI States
   const [gameState, setGameState] = useState<'TITLE' | 'PLAYING'>('TITLE');
-  const [garageOpen, setGarageOpen] = useState(false);
-  const [questOpen, setQuestOpen] = useState(false);
-  const [socialOpen, setSocialOpen] = useState(false);
+  const [garageOpen, setGarageOpen] = useWindowFlag('garage');
+  const [questOpen, setQuestOpen] = useWindowFlag('quests');
+  const [socialOpen, setSocialOpen] = useWindowFlag('social');
   const [notices, setNotices] = useState<string[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
   const lastEmoteTs = useRef(0);
@@ -104,8 +108,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [spectating, setSpectating] = useState(false);
   const mergerRef = useRef(new DamageNumberMerger());
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([]);
-  const [howToOpen, setHowToOpen] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [howToOpen, setHowToOpen] = useWindowFlag('howto');
+  const [feedbackOpen, setFeedbackOpen] = useWindowFlag('feedback');
   const [replayScene, setReplayScene] = useState<StoryScene | null>(null);
   const warRef = useRef<Array<{ id: string; x: number; y: number; radius: number; owner: string | null; progress: Record<string, number>; contested: boolean }>>([]);
   const warOwnersRef = useRef<Record<string, string | null>>({});
@@ -122,9 +126,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
     bannerTimer.current = setTimeout(() => setBanner(null), 4000);
   }, []);
-  const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [worldMapOpen, setWorldMapOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useWindowFlag('inventory');
+  const [settingsOpen, setSettingsOpen] = useWindowFlag('settings');
+  const [worldMapOpen, setWorldMapOpen] = useWindowFlag('map');
   const [tutorialOpen, setTutorialOpen] = useState(profile.tutorialStep < 4);
 
   const [showDebug, setShowDebug] = useState(profile.settings.showDebug);
@@ -663,31 +667,13 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     };
   }, [profile, saveProfile, showDebug]);
 
-  // Keyboard shortcuts listener for M (Map), I (Inventory), V (Garage), F3 (Debug)
+  // F3 debug panel; window shortcuts and Escape live in wm/WindowKeys
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) moveTargetRef.current = null;
       if (e.code === 'F3') {
         e.preventDefault();
         setShowDebug((prev) => !prev);
-      } else if (e.code === 'KeyM') {
-        e.preventDefault();
-        setWorldMapOpen((prev) => !prev);
-      } else if (e.code === 'KeyI') {
-        e.preventDefault();
-        setInventoryOpen((prev) => !prev);
-      } else if (e.code === 'KeyV') {
-        e.preventDefault();
-        setGarageOpen((prev) => !prev);
-      } else if (e.code === 'Escape') {
-        setWorldMapOpen(false);
-        setInventoryOpen(false);
-        setGarageOpen(false);
-        setSettingsOpen(false);
-        setQuestOpen(false);
-        setSocialOpen(false);
-        setFeedbackOpen(false);
-        setHowToOpen(false);
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -783,6 +769,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   };
 
   // Commands helper
+  const eventLinesNow = [...runningEventLines(online ? online.mapId : Number(profile.currentMapId) || 1), ...warLines];
+  const navPips = useNavPips(profile.character, online, inventoryOpen, eventLinesNow.length > 0);
+  // opening the garage by any route (menu, G key) completes the garage lesson of the guided start
+  useEffect(() => { if (garageOpen) questEvent({ type: 'tutorial', step: 'garage' }); }, [garageOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const profileRef = useRef(profile);
   profileRef.current = profile;
   const perfRef = useRef(new PerfMonitor());
@@ -969,7 +959,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             mapHeight={currentMapDef?.height || 4000}
             partyNames={partyNames}
             mapName={currentMapDef?.name || 'Green Valley'}
-            eventLines={[...runningEventLines(online ? online.mapId : Number(profile.currentMapId) || 1), ...warLines]}
+            eventLines={eventLinesNow}
             isSafeZone={inSafeZone}
             profile={profile}
             chatMessages={activeSnapshot?.chatHistory || []}
@@ -983,16 +973,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
                 settings: { ...profile.settings, soundEnabled: !next },
               });
             }}
-            onOpenGarage={() => { setGarageOpen(true); questEvent({ type: 'tutorial', step: 'garage' }); }}
-            onOpenQuests={() => setQuestOpen(true)}
-            onOpenSocial={online ? () => setSocialOpen(true) : undefined}
-            onOpenInventory={() => setInventoryOpen(true)}
-            onOpenWorldMap={() => setWorldMapOpen(true)}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onOpenTutorial={() => {
-              setTutorialOpen(true);
-              saveProfile({ ...profile, tutorialStep: 0 });
-            }}
+            hasSocial={!!online}
+            navPips={navPips}
           />
 
 
@@ -1050,6 +1032,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         return <DialogueModal scene={scene} onDone={(id) => { if (replayScene) setReplayScene(null); else void performAction({ kind: 'scene_seen', sceneId: id }); }} />;
       })()}
       <HowToPlay open={howToOpen} onClose={() => setHowToOpen(false)} done={TUTORIAL_STEPS.filter((s) => profile.character.stats[tutorialFlag(s)] === 1)} />
+      <WindowKeys enabled={gameState === 'PLAYING'} />
+      <HelpOverlay />
       <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} send={online ? (r) => online.social({ op: 'feedback', ...r }) : null} />
       <SettingsModal
         onHowToPlay={() => { setSettingsOpen(false); setHowToOpen(true); }}

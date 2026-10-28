@@ -1,3 +1,4 @@
+import { WindowFrame } from './wm/WindowFrame.tsx';
 import React, { useState } from 'react';
 import { tr, currentLang, setLang } from '../i18n.ts';
 import { UserProfile } from '../save/profile.ts';
@@ -28,24 +29,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-5 text-slate-200 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <SettingsIcon className="text-orange-500" size={20} />
-            <h3 className="font-semibold text-white text-base">{tr('Game Settings')}</h3>
-          </div>
-          <button
-            onClick={() => {
-              soundEngine.playUIClick();
-              onClose();
-            }}
-            className="text-slate-400 hover:text-white"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
+    <WindowFrame id="settings" title="Game Settings" width="min(520px, 96vw)">
         <div className="mt-4 space-y-4 text-xs">
           {/* Sound Mute Toggle */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800">
@@ -234,7 +218,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {tr('Close')}
           </button>
         </div>
-      </div>
-    </div>
+    </WindowFrame>
   );
 };

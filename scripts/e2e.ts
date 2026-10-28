@@ -52,7 +52,7 @@ async function main() {
     await page.getByRole('button', { name: 'Play', exact: true }).click();
     await page.getByRole('button', { name: /DEPLOY TO BATTLEFIELD/ }).click({ timeout: 20_000 });
     await page.locator('canvas').first().waitFor({ timeout: 15_000 });
-    await page.getByTitle(/Inventory & Loadout/).waitFor({ timeout: 15_000 }); // HUD is up
+    await page.getByRole('button', { name: /^Inventory & Loadout$/ }).waitFor({ timeout: 15_000 }); // HUD is up
 
     await page.keyboard.press('F3'); // debug panel shows the player position
     const readPos = async (): Promise<[number, number]> => {

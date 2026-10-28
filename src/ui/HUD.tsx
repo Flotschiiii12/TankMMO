@@ -1,4 +1,6 @@
 import { controlStrip } from './layoutStrip.ts';
+import { MainMenu, NavPips } from './MainMenu.tsx';
+import { PlayerCard } from './PlayerCard.tsx';
 import { useShortScreen } from './useShortScreen.ts';
 import React from 'react';
 import { tr, nm } from '../i18n.ts';
@@ -29,13 +31,10 @@ interface HUDProps {
   chatMessages: ChatMessage[];
   soundMuted: boolean;
   onToggleMute: () => void;
-  onOpenGarage: () => void;
-  onOpenQuests: () => void;
-  onOpenSocial?: () => void;
-  onOpenInventory: () => void;
-  onOpenWorldMap: () => void;
-  onOpenSettings: () => void;
-  onOpenTutorial: () => void;
+  /** notification pips of the main menu (new items, quests to turn in, invites, running events) */
+  navPips?: NavPips;
+  /** false offline: the social window needs the server */
+  hasSocial: boolean;
 }
 
 
@@ -51,14 +50,9 @@ export const HUD: React.FC<HUDProps> = ({
   chatMessages,
   soundMuted,
   onToggleMute,
-  onOpenGarage,
-  onOpenQuests,
-  onOpenSocial,
-  onOpenInventory,
-  onOpenWorldMap,
   eventLines,
-  onOpenSettings,
-  onOpenTutorial,
+  navPips,
+  hasSocial,
   tutorialChip,
   leftHanded,
 }) => {
@@ -70,42 +64,25 @@ export const HUD: React.FC<HUDProps> = ({
       <div className={`flex items-start justify-between w-full ${leftHanded ? 'flex-row-reverse' : ''}`}>
         {/* Top-Left Status: Level, Map, Currencies, Ammo */}
         <div data-hud="status" className="hud-scale origin-top-left flex flex-col gap-1 pointer-events-auto bg-slate-950/60 rounded-lg p-2 border border-slate-800/60 shadow-sm max-w-[280px]">
-          {/* Header Row: Level + Map Name + Safe Zone Status */}
+          <PlayerCard character={profile.character} name={profile.playerName} compact={short} />
           <div className="flex items-center gap-2 text-xs text-slate-300">
-            <span className="font-semibold text-orange-400">Lv. {profile.character.level}</span>
-            <span>·</span>
             <span className="font-medium text-slate-100 truncate">{mapName}</span>
-            {isSafeZone && (
-              <>
-                <span>·</span>
-                <span className="text-emerald-400 font-medium">{tr('Safe Zone')}</span>
-              </>
-            )}
+            {isSafeZone && (<><span>·</span><span className="text-emerald-400 font-medium">{tr('Safe Zone')}</span></>)}
           </div>
 
-          {/* Currencies: Scrap & Parts */}
-          <div className="flex items-center gap-2.5 text-xs text-slate-400">
-            <span className="tabular-nums">
-              <CurrencyIcon kind="scrap" size={13} /> {tr('Scrap')}: <span className="font-semibold text-slate-100">{profile.character.wallet.scrap.toLocaleString()}</span>
-            </span>
-            <span>·</span>
-            <span className="tabular-nums">
-              <CurrencyIcon kind="fragments" size={13} /> {tr('Frag')}: <span className="font-semibold text-slate-100">{profile.character.wallet.fragments.toLocaleString()}</span>
-            </span>
-          </div>
-
-          {/* Active Ammo Stack */}
+          {!short && (
           <div className="text-[11px] text-slate-300 tabular-nums">
             {tr('Ammo')}: <span className="font-semibold text-orange-400">{player?.selectedAmmo.replace('_', ' ')}</span> (
             {player ? (player.ammoInventory[player.selectedAmmo] < 0 ? '∞' : player.ammoInventory[player.selectedAmmo]) : '∞'})
           </div>
+          )}
 
           {eventLines?.map((l) => <div key={l} className="text-[11px] font-semibold text-amber-300 truncate" data-testid="event-line">⚑ {l}</div>)}
 
           {tutorialChip}
 
           {/* Quest tracker: the guided start has its own chip, short screens show one line */}
-          {Object.values(profile.character.quests.active).filter((aq) => !(tutorialChip && aq.id.startsWith('tut_'))).sort((a, b) => Number(b.id.startsWith('tut_')) - Number(a.id.startsWith('tut_')) || Number(b.ready) - Number(a.ready)).slice(0, short ? 1 : 3).map((aq) => {
+          {Object.values(profile.character.quests.active).filter((aq) => !(tutorialChip && aq.id.startsWith('tut_'))).sort((a, b) => Number(b.id.startsWith('tut_')) - Number(a.id.startsWith('tut_')) || Number(b.ready) - Number(a.ready)).slice(0, short ? (tutorialChip ? 0 : 1) : 3).map((aq) => {
             const def = QUEST_BY_ID.get(aq.id);
             if (!def) return null;
             const done = aq.progress.reduce((a, b) => a + b, 0);
@@ -133,106 +110,7 @@ export const HUD: React.FC<HUDProps> = ({
           />
 
           {/* Icon Button Column Below Radar: All buttons >= 44x44px */}
-          <div className="hud-menu-btns">
-            {/* Garage button (highlighted when in safe zone) */}
-            <button
-              onClick={() => {
-                soundEngine.playUIClick();
-                onOpenGarage();
-              }}
-              title={isSafeZone ? tr('Open Garage') : tr('Garage (Available in Safe Zone)')}
-              className={`hud-round w-11 h-11 rounded-full flex items-center justify-center transition-all ${
-                isSafeZone
-                  ? 'bg-orange-500 text-slate-950 shadow-md hover:bg-orange-400 active:scale-95'
-                  : 'bg-slate-900/90 border border-slate-700/80 text-slate-300 hover:text-white active:scale-95'
-              }`}
-            >
-              <GameIcon name="anvil" size={26} />
-            </button>
-
-            {onOpenSocial && (
-              <button
-                onClick={() => { soundEngine.playUIClick(); onOpenSocial(); }}
-                title={tr('Social (friends, party, clan)')}
-                className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-violet-400 flex items-center justify-center hover:text-white active:scale-95"
-              >
-                <GameIcon name="friends" size={26} />
-              </button>
-            )}
-
-            {/* Quests button */}
-            <button
-              onClick={() => {
-                soundEngine.playUIClick();
-                onOpenQuests();
-              }}
-              title={tr('Quests (J)')}
-              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-emerald-400 flex items-center justify-center hover:text-white active:scale-95"
-            >
-              <GameIcon name="quests" size={26} />
-            </button>
-
-            {/* Inventory button */}
-            <button
-              onClick={() => {
-                soundEngine.playUIClick();
-                onOpenInventory();
-              }}
-              title={tr('Inventory & Loadout (I)')}
-              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
-            >
-              <GameIcon name="inventory" size={26} />
-            </button>
-
-            {/* World Map button */}
-            <button
-              onClick={() => {
-                soundEngine.playUIClick();
-                onOpenWorldMap();
-              }}
-              title={tr('World Map & Fast Travel (M)')}
-              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-sky-400 flex items-center justify-center hover:text-white hover:border-sky-500 active:scale-95 shadow-sm"
-            >
-              <GameIcon name="map" size={26} />
-            </button>
-
-
-            {/* Tutorial Guide button */}
-            <button
-              onClick={() => {
-                soundEngine.playUIClick();
-                onOpenTutorial();
-              }}
-              title={tr('Combat Field Manual')}
-              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
-            >
-              <GameIcon name="tutorial" size={26} />
-            </button>
-
-            {/* Mute button */}
-            <button
-              onClick={() => {
-                soundEngine.playUIClick();
-                onToggleMute();
-              }}
-              title={soundMuted ? tr('Unmute Audio') : tr('Mute Audio')}
-              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
-            >
-              {soundMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-            </button>
-
-            {/* Settings button */}
-            <button
-              onClick={() => {
-                soundEngine.playUIClick();
-                onOpenSettings();
-              }}
-              title={tr('Settings & Diagnostics')}
-              className="hud-round w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center justify-center hover:text-white active:scale-95"
-            >
-              <GameIcon name="settings" size={26} />
-            </button>
-          </div>
+          <MainMenu pips={navPips} hasSocial={hasSocial} isSafeZone={isSafeZone} soundMuted={soundMuted} onToggleMute={onToggleMute} />
         </div>
       </div>
 

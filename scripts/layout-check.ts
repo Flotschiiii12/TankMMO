@@ -41,7 +41,7 @@ async function freePort(): Promise<number> {
 /** Runs inside the page. Returns plain data only (strings passed to evaluate to avoid tsx helper injection). */
 const MEASURE = (modal: boolean) => `(() => {
   const MODAL = ${modal};
-  const inModal = (el) => !!el.closest('.fixed.inset-0, [role=dialog], [data-modal]');
+  const inModal = (el) => !!el.closest('[role=dialog], [data-modal], .fixed.inset-0');
   const vw = window.innerWidth, vh = window.innerHeight;
   const describe = (el) => {
     const t = (el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('data-testid') || el.getAttribute('data-hud') || el.getAttribute('data-ui') || el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 32);
@@ -74,8 +74,8 @@ const MEASURE = (modal: boolean) => `(() => {
   const js = document.querySelector('[data-ui=joystick] > div'); if (js && visible(js)) out.joystick = rect(js);
   for (const b of document.querySelectorAll('[data-ui=fire] button')) if (visible(b)) out.fireButtons.push({ el: describe(b), ...rect(b) });
   for (const d of document.querySelectorAll('[role=dialog], [data-modal], .fixed.inset-0')) {
-    if (!MODAL || !visible(d) || d.querySelector('canvas')) continue;
-    const panel = d.firstElementChild && d.firstElementChild.getBoundingClientRect().width > 0 ? d.firstElementChild : d;
+    if (!MODAL || !visible(d) || d.querySelector('canvas') || d.getAttribute('aria-hidden') === 'true') continue;
+    const panel = d.matches('[role=dialog]') ? d.querySelector('.k-panel__body') || d : (d.firstElementChild && d.firstElementChild.getBoundingClientRect().width > 0 ? d.firstElementChild : d);
     const cs = getComputedStyle(panel);
     out.dialogs.push({ el: describe(d), ...rect(panel), scrollH: panel.scrollHeight, clientH: panel.clientHeight, overflowY: cs.overflowY, outerScroll: getComputedStyle(d).overflowY });
   }
@@ -119,7 +119,7 @@ async function check(page: Page, vp: Viewport, screen: string, opts: { modal?: b
 /** Escape must close whatever is open; a modal that stays is a violation (and would make the next screen measure the wrong thing). */
 async function closeModal(page: Page, vp: Viewport, screen: string) {
   await page.keyboard.press('Escape'); await page.waitForTimeout(200);
-  const open = (await page.evaluate("Array.from(document.querySelectorAll('.fixed.inset-0')).filter((e) => !e.querySelector('canvas') && e.getBoundingClientRect().width > 0 && getComputedStyle(e).zIndex !== '100').length")) as number;
+  const open = (await page.evaluate("Array.from(document.querySelectorAll('.fixed.inset-0, [role=dialog]')).filter((e) => e.getAttribute('aria-hidden') !== 'true' && !e.querySelector('canvas') && e.getBoundingClientRect().width > 0 && getComputedStyle(e).zIndex !== '100').length")) as number;
   if (open > 0) { violations.push({ viewport: vp.name, screen, rule: 'escape-closes', element: 'modal', detail: 'Escape did not close the window' }); await page.mouse.click(2, 2).catch(() => {}); }
 }
 
@@ -148,7 +148,7 @@ async function main() {
       await page.getByRole('button', { name: 'Play', exact: true }).click();
       await page.getByRole('button', { name: /DEPLOY TO BATTLEFIELD/ }).click({ timeout: 20_000 });
       await page.locator('canvas').first().waitFor({ timeout: 15_000 });
-      await page.getByTitle(/Inventory & Loadout/).waitFor({ timeout: 15_000 });
+      await page.getByRole('button', { name: /^Inventory & Loadout$/ }).waitFor({ timeout: 15_000 });
       await applyInsets();
       await page.waitForTimeout(1500);
       await check(page, vp, 'game');
@@ -158,17 +158,42 @@ async function main() {
       if (await chatBtn.count()) { await chatBtn.first().click(); await page.waitForTimeout(150); await check(page, vp, 'game-chat-open'); await page.keyboard.press('Escape'); }
 
       // modals
-      const modals: Array<[string, RegExp | string]> = [['inventory', /Inventory & Loadout/], ['quests', /Quests \(J\)/], ['social', /Social \(friends/], ['worldmap', /World Map & Fast Travel/], ['garage', /Garage/]];
+      const modals: Array<[string, RegExp | string]> = [['inventory', /^Inventory & Loadout$/], ['quests', /^Quests$/], ['social', /^Social$/], ['worldmap', /^World Map$/], ['garage', /^Garage/], ['howto', /^How to play$/]];
       for (const [name, title] of modals) {
-        const btn = page.getByTitle(title);
+        const btn = page.getByRole('button', { name: title });
         if (!(await btn.count())) continue;
         await btn.first().click({ force: true }).catch(() => {});
         await page.waitForTimeout(400);
         await check(page, vp, `modal-${name}`, { modal: true });
         await closeModal(page, vp, `modal-${name}`);
       }
+      // window manager: shortcuts toggle, stacking, Escape closes only the top window, help overlay, drag (desktop) / sheet (phone)
+      {
+        const wm = (msg: string) => violations.push({ viewport: vp.name, screen: 'windows', rule: 'window-manager', element: 'wm', detail: msg });
+        const openIds = async () => (await page.evaluate("Array.from(document.querySelectorAll('[data-window]')).map((e) => e.getAttribute('data-window')).join(',')")) as string;
+        await page.locator('canvas').first().click({ position: { x: Math.round(vp.width / 2), y: 40 }, force: true }).catch(() => {});
+        await page.keyboard.press('KeyI'); await page.keyboard.press('KeyJ'); await page.waitForTimeout(250);
+        if ((await openIds()) !== 'inventory,quests' && (await openIds()) !== 'quests,inventory') wm(`I and J should open two windows, found "${await openIds()}"`);
+        await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+        if ((await openIds()) !== 'inventory') wm(`Escape should close only the top window, found "${await openIds()}"`);
+        if (vp.touch) {
+          const box = (await page.evaluate("(() => { const r = document.querySelector('[data-window=inventory]').getBoundingClientRect(); return [r.width, r.height]; })()")) as number[];
+          if (box[0] < vp.width - 2 || box[1] < vp.height - 2) wm(`on a phone a window must be a full-screen sheet, it is ${Math.round(box[0])}x${Math.round(box[1])}`);
+        } else {
+          const head = page.locator('[data-window=inventory] header').first(); const hb = await head.boundingBox();
+          if (hb) { await page.mouse.move(hb.x + 60, hb.y + 12); await page.mouse.down(); await page.mouse.move(hb.x + 160, hb.y + 62, { steps: 5 }); await page.mouse.up(); }
+          const pos = (await page.evaluate("JSON.parse(localStorage.getItem('treadfront_win_pos') || '{}').inventory")) as { dx: number; dy: number } | undefined;
+          if (!pos || Math.abs(pos.dx - 100) > 4 || Math.abs(pos.dy - 50) > 4) wm(`dragging the header by (100,50) should be remembered, stored ${JSON.stringify(pos)}`);
+          await page.evaluate("localStorage.removeItem('treadfront_win_pos')");
+        }
+        await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+        if (await openIds()) wm(`everything should be closed, found "${await openIds()}"`);
+        await page.keyboard.press('Shift+Slash'); await page.waitForTimeout(250);
+        if ((await openIds()) !== 'shortcuts') wm(`? should open the shortcut help, found "${await openIds()}"`); else await check(page, vp, 'modal-shortcuts', { modal: true });
+        await closeModal(page, vp, 'modal-shortcuts');
+      }
       // settings via the HUD gear, if there is one
-      const gear = page.getByTitle(/Settings/);
+      const gear = page.getByRole('button', { name: /^Settings$/ });
       if (await gear.count()) {
         await gear.first().click({ force: true }).catch(() => {}); await page.waitForTimeout(300);
         await check(page, vp, 'modal-settings', { modal: true });
@@ -182,12 +207,12 @@ async function main() {
         await closeModal(page, vp, 'modal-settings');
       }
       // left-handed layout and performance mode (settings toggles): controls swap sides, the DPR cap drops to 1.5
-      if (vp.touch && (await page.getByTitle(/Settings/).count())) {
-        const toggle = async (label: string) => { await page.getByTitle(/Settings/).first().click({ force: true }); await page.waitForTimeout(200); await page.getByRole('button', { name: label }).first().evaluate((el) => (el as HTMLElement).click()).catch(() => {}); };
+      if (vp.touch && (await page.getByRole('button', { name: /^Settings$/ }).count())) {
+        const toggle = async (label: string) => { await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200); await page.getByRole('button', { name: label }).first().evaluate((el) => (el as HTMLElement).click()).catch(() => {}); };
         const canvasRatio = async () => (await page.evaluate("(() => { const c = document.querySelector('canvas'); return c.width / window.innerWidth; })()")) as number;
         const before = await canvasRatio();
         // the toggle rows are buttons named ON/OFF right after their title: click by the row text
-        await page.getByTitle(/Settings/).first().click({ force: true }); await page.waitForTimeout(200);
+        await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200);
         await page.locator('div:has(> div > span:text-is("Left-handed controls")) button').first().click();
         await page.locator('div:has(> div > span:text-is("Performance mode")) button').first().click();
         await closeModal(page, vp, 'modal-settings');

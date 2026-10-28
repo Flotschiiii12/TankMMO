@@ -6,15 +6,16 @@ import {
   getLevelDiffFactor,
   getLevelFromXP,
   getXPForLevel,
+  XP_CURVE_BASE,
+  XP_CURVE_EXPONENT,
 } from '../shared/rules/progression.ts';
 
 describe('Progression Rules & XP Curves (Milestone 2)', () => {
-  it('calculates XP required per level according to round(80 * n^2.1)', () => {
+  it('calculates XP required per level according to round(XP_CURVE_BASE * n^XP_CURVE_EXPONENT)', () => {
     expect(getXPForLevel(1)).toBe(0);
-    // Level 2: 80 * 2^2.1 = 80 * 4.287 = 343
-    expect(getXPForLevel(2)).toBe(Math.round(80 * Math.pow(2, 2.1)));
-    // Level 10: 80 * 10^2.1 = 80 * 125.89 = 10071
-    expect(getXPForLevel(10)).toBe(Math.round(80 * Math.pow(10, 2.1)));
+    expect(getXPForLevel(2)).toBe(Math.round(XP_CURVE_BASE * Math.pow(2, XP_CURVE_EXPONENT)));
+    expect(getXPForLevel(10)).toBe(Math.round(XP_CURVE_BASE * Math.pow(10, XP_CURVE_EXPONENT)));
+    for (let n = 3; n <= 100; n++) expect(getXPForLevel(n)).toBeGreaterThan(getXPForLevel(n - 1)); // strictly increasing
   });
 
   it('calculates level difference multiplier for kill XP', () => {

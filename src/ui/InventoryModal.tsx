@@ -170,7 +170,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ profile, isOpen,
                   <div className="flex flex-wrap gap-1.5">
                     {!equippedSlot && <button onClick={equipSel} className="px-2 py-1 rounded bg-emerald-600/80 text-white">{tr('Equip')}</button>}
                     {sel.upgrade < C.MAX_UPGRADE && (() => {
-                      const c1 = C.upgradeCost(sel.upgrade, false);
+                      const c1 = C.upgradeCost(sel.upgrade, false, selInfo.def.tier);
                       const chance = Math.round(UPGRADE_LEVEL_STATS[sel.upgrade + 1].successChance * 100);
                       return (
                         <>

@@ -135,3 +135,21 @@ $$
 - **Rarity Stat Modifiers**: Common (1.00x), Uncommon (1.15x, 1 affix), Rare (1.35x, 2 affixes), Epic (1.65x, 3 affixes), Legendary (2.10x, 3 affixes + unique trait).
 - **Upgrade Multipliers**: +0 (1.00x) to +15 (3.00x).
 - **Success Probabilities**: 100% through +9; Safe Mode available from +10 (prevents level degradation on failure).
+
+---
+
+## 9. Measured balance (combat simulator)
+
+Since 2026-10-28 the numbers above are tuned against the real simulation instead of by hand. The full tables are in `docs/BALANCE_REPORT.md` (regenerate with `npm run balance-sim`). The tools live in `scripts/`:
+
+| Tool | What it does | Writes |
+|------|--------------|--------|
+| `npm run balance-fit` | Fits `ENEMY_SCALE_ANCHORS` (hull and damage multiplier per level) so that a level-matched medium player in standard gear needs 9 s for a gunner truck and loses 5-10 % health. | prints the table for `shared/data/balance.ts` |
+| `npm run balance-normalize [-- --write]` | Gives every enemy archetype its role relative to the gunner truck (`ENEMY_ROLES`: scouts are fragile, ice tanks sturdy ...). | `shared/data/enemies.ts` |
+| `npm run balance-classes [-- --write]` | Round-robin PvP at equal tier; nudges hull/armor of each class (artillery: damage + hull) until every class wins 50 %. | `shared/data/vehicles.ts` (`CLASS_MULTIPLIERS`) |
+| `npm run balance-bosses [-- --only bosses\|gates] [--write]` | Fits mini/world boss and gate boss stats and the gate wave multipliers (`waveHull`, `waveDmg`) for a party of 4: bosses ~5 min with 45 % health left, gates ~9 min with ~50 % left. | `shared/data/enemies.ts`, `shared/data/dungeons.ts` |
+| `npm run balance-sim` | Produces `docs/BALANCE_REPORT.md`. | report |
+
+Order after any change to stats or rules: `balance-classes`, `balance-fit` (paste the table), `balance-normalize --write`, `balance-bosses --write`, `balance-sim`, `npm test`. `test/balance.test.ts` fails when time-to-kill, class spread or boss/gate times leave their bands.
+
+Rule changes made for balance: the machine gun is at least 3 % of the main gun's damage per shot (`MG_MAIN_DAMAGE_RATIO`; before, it was 43 % of a tier-1 vehicle's damage but 7 % at tier 10 and was eaten by flat armor); item rarity/upgrades raise speed bonuses at most 1.5x (`MAX_SPEED_ITEM_MULT`; shells miss fast targets, so mirror duels took 50 s at tier 9); player-vs-player damage is x0.7 (`PVP_DAMAGE_MULT`); bosses get a machine gun scaled to their main gun; elites have 5.5x hull and 1.1x damage.

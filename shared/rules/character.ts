@@ -3,6 +3,7 @@
  * CharacterState. Randomness comes from the SimRNG you pass in; nothing here touches time or the DOM.
  * All mutating functions return `{ ok: true, ... }` or `{ ok: false, error }` and leave the state untouched on failure.
  */
+import { MG_MAIN_DAMAGE_RATIO } from '../data/balance.ts';
 import { AFFIX_POOL, AFFIX_ROLL_BIAS } from '../data/affixes.ts';
 import {
   CRAFTING_RECIPES,
@@ -35,7 +36,12 @@ export const INVENTORY_EXPANSION_STEP = 10;
 export const MAX_REROLLS = 3;
 export const MAX_UPGRADE = 15;
 export const SAFE_MODE_COST_MULT = 2.5;
+/** Upgrade costs grow with the item's tier (tier 1 = the table in items.ts): the endgame sink that keeps top gear very grindy. */
+export const UPGRADE_TIER_SCRAP_GROWTH = 1.45;
+export const UPGRADE_TIER_MATERIAL_GROWTH = 1.25;
 export const FUSION_INPUT_COUNT = 3;
+/** Item rarity/upgrade multiplier cap for speed bonuses. */
+export const MAX_SPEED_ITEM_MULT = 1.5;
 export const MASTERY_MAX = 10;
 export const MASTERY_BONUS_PER_LEVEL = 0.01;
 
@@ -346,10 +352,12 @@ function payOre(w: Wallet, amount: number, prefer?: OreType): void {
   }
 }
 
-export function upgradeCost(level: number, safeMode: boolean): { scrap: number; ore: number; fragments: number } {
+export function upgradeCost(level: number, safeMode: boolean, itemTier = 1): { scrap: number; ore: number; fragments: number } {
   const next = UPGRADE_LEVEL_STATS[level + 1];
   const mult = safeMode ? SAFE_MODE_COST_MULT : 1;
-  return { scrap: Math.round(next.costScrap * mult), ore: Math.round(next.costOre * mult), fragments: Math.round(next.costFragments * mult) };
+  const t = Math.max(1, itemTier) - 1;
+  const scrapMult = mult * UPGRADE_TIER_SCRAP_GROWTH ** t, matMult = mult * UPGRADE_TIER_MATERIAL_GROWTH ** t;
+  return { scrap: Math.round(next.costScrap * scrapMult), ore: Math.round(next.costOre * matMult), fragments: Math.round(next.costFragments * matMult) };
 }
 
 /**
@@ -360,7 +368,7 @@ export function upgradeItem(ch: CharacterState, uid: string, rng: SimRNG, safeMo
   const item = findItem(ch, uid);
   if (!item) return fail('item_not_found');
   if (item.upgrade >= MAX_UPGRADE) return fail('max_upgrade');
-  const cost = upgradeCost(item.upgrade, safeMode);
+  const cost = upgradeCost(item.upgrade, safeMode, ITEM_BY_ID.get(item.defId)?.tier ?? 1);
   if (!canPay(ch.wallet, cost.scrap, cost.ore, cost.fragments)) return fail('not_enough_materials');
   ch.wallet.scrap -= cost.scrap;
   payOre(ch.wallet, cost.ore);
@@ -504,7 +512,7 @@ export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVeh
     if (def.slotType === 'drone') dmgAdd += (def.baseDPS ?? 0) * m * 0.25;
     hullBonus += (def.baseHullBonus ?? 0) * m;
     armorBonus += (def.baseArmorBonus ?? 0) * m;
-    speedBonus += (def.baseSpeedBonus ?? 0) * m;
+    speedBonus += (def.baseSpeedBonus ?? 0) * Math.min(m, MAX_SPEED_ITEM_MULT); // rarity/upgrades make guns and plating stronger, not the vehicle ever faster (shells miss fast targets)
     flat += (def.baseFlatReduction ?? 0) * m;
     const mod = def.slotType === 'module' ? MODULE_EFFECTS[def.id.replace('mod_', '')] : undefined;
     const affixes = mod ? [...item.affixes, { stat: mod.stat, value: mod.perTier * def.tier * m, nameKey: 'module' }] : item.affixes;
@@ -539,7 +547,8 @@ export function computeLoadoutStats(ch: CharacterState, vehicleId = ch.activeVeh
     mainDamage,
     mainReloadTime: Math.round(reload * 100) / 100,
     mainRange: Math.round(range * (1 + (tal['main_range'] ?? 0) + affRange)),
-    mgDamage: Math.round(18 + mgAdd),
+    // the machine gun keeps pace with the main gun: without a floor it is 43 % of a tier-1 vehicle's damage but only 7 % at tier 10 (and flat armor eats it)
+    mgDamage: Math.round(Math.max(18 + mgAdd, MG_MAIN_DAMAGE_RATIO * mainDamage)),
     mgRange,
     critChance: crit,
     critDamage: 1.5 + (tal['crit_damage'] ?? 0),

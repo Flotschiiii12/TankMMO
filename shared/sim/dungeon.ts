@@ -2,6 +2,7 @@
  * Gate dungeons: a private world per party with a wave director, a boss and a 15 minute timer.
  */
 import { DUNGEON_HULL_BY_PARTY, DUNGEON_PARTY_MAX, DUNGEON_PARTY_MIN, DungeonDef } from '../data/dungeons.ts';
+import { MG_MAIN_DAMAGE_RATIO } from '../data/balance.ts';
 import { SimEntity } from '../types.ts';
 import { spawnEnemy } from './pve.ts';
 import { createWorld, spawnVehicle, World } from './world.ts';
@@ -52,11 +53,11 @@ function playersAlive(world: World): number {
 function spawnWave(world: World, st: DungeonState): void {
   const wave = st.def.waves[st.wave];
   const total = wave.enemies.reduce((a, e) => a + e.count, 0);
-  const hullMult = DUNGEON_HULL_BY_PARTY[st.partySize];
+  const hullMult = DUNGEON_HULL_BY_PARTY[st.partySize] * (st.def.waveHull ?? 1);
   let i = 0;
   for (const group of wave.enemies) {
     for (let k = 0; k < group.count; k++) {
-      spawnEnemy(world, group.type, st.def.recommendedLevel, ringPos(world, i++, total), { hullMult });
+      spawnEnemy(world, group.type, st.def.recommendedLevel, ringPos(world, i++, total), { hullMult, dmgMult: st.def.waveDmg });
     }
   }
   world.events.push({ type: 'dungeon_wave', wave: st.wave + 1, total: st.def.waves.length, timeLeft: Math.round(st.timeLeft) });
@@ -77,6 +78,7 @@ function spawnDungeonBoss(world: World, st: DungeonState): SimEntity {
     clanTag: 'BOSS',
     isHostile: true,
   });
+  boss.mgDamage = Math.max(1, Math.round(boss.mainDamage * MG_MAIN_DAMAGE_RATIO));
   boss.spriteId = st.def.id;
   boss.selectedAmmo = 'EXPLOSIVE';
   boss.aiState = 'attack';

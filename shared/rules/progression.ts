@@ -9,11 +9,14 @@ export const MAX_GARAGE_SLOTS = 8;
 
 /**
  * Returns XP needed to reach next level from level (n - 1) to n.
- * Formula: round(80 * n^2.1)
+ * Formula: round(XP_CURVE_BASE * n^XP_CURVE_EXPONENT). The exponent was raised from 2.1 to 2.7 and the base fitted with
+ * `npm run econ-sim` so that level 30 takes ~20 h, level 60 ~120 h and level 100 ~500 h (docs/ECONOMY_REPORT.md).
  */
+export const XP_CURVE_BASE = 7.7;
+export const XP_CURVE_EXPONENT = 2.7;
 export function getXPForLevel(level: number): number {
   if (level <= 1) return 0;
-  return Math.round(80 * Math.pow(level, 2.1));
+  return Math.round(XP_CURVE_BASE * Math.pow(level, XP_CURVE_EXPONENT));
 }
 
 /**

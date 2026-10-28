@@ -5,6 +5,8 @@
 import type { SimEntity } from '../types.ts';
 import type { World } from './world.ts';
 
+/** Player-vs-player damage modifier: keeps duels at 20-40 s (see docs/BALANCE_REPORT.md); PvE is unaffected. */
+export const PVP_DAMAGE_MULT = 0.7;
 export const PVP_MIN_LEVEL = 15;
 export const PVP_LEVEL_WINDOW = 5;
 export const PORTAL_SAFE_RADIUS = 400;

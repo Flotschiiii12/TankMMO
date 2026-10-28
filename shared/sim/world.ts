@@ -10,7 +10,7 @@ import { SimRNG } from '../prng.ts';
 import { generateProceduralMap } from './mapGenerator.ts';
 import type { DungeonState } from './dungeon.ts';
 import { createWarPoints, stepWar, WarPoint } from './war.ts';
-import { canEngage, isPvpMap, PvpContext } from './pvp.ts';
+import { canEngage, isPvpMap, PvpContext, PVP_DAMAGE_MULT } from './pvp.ts';
 import { createPveState, isInertKind, populateWorld, PveState, stepPve } from './pve.ts';
 import {
   AMMO_CONFIGS,
@@ -656,7 +656,7 @@ function updateSecondaryWeapons(world: World): void {
     if (!target || isPosInSafeZone(world, target.pos) || target.invulnerableTime > 0) continue;
     ent.mgReloadRemaining = ent.mgReloadTime;
     const res = resolveDamage({
-      rawDamage: ent.mgDamage,
+      rawDamage: ent.kind === 'player' && target.kind === 'player' ? ent.mgDamage * PVP_DAMAGE_MULT : ent.mgDamage,
       attackerPos: ent.pos,
       targetPos: target.pos,
       targetChassisAngle: target.chassisAngle,
@@ -723,6 +723,7 @@ function applyHit(world: World, proj: SimEntity, primaryTarget: SimEntity, splas
     // Ammo multiplier
     const ammoMult = getAmmoDamageMultiplier(proj.selectedAmmo, victim.kind, victim.vehicleClass);
     let rawDamage = proj.mainDamage * ammoMult;
+    if (attacker?.kind === 'player' && victim.kind === 'player') rawDamage *= PVP_DAMAGE_MULT;
 
     // Splash distance falloff
     if (splashRadius > 0 && victim.id !== primaryTarget.id) {

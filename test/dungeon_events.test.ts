@@ -1,3 +1,4 @@
+import { ELITE_HULL_MULT } from '../shared/data/balance.ts';
 import { describe, expect, it } from 'vitest';
 import { DUNGEONS } from '../shared/data/dungeons.ts';
 import { getAllMaps } from '../shared/data/maps.ts';
@@ -79,7 +80,7 @@ describe('Elites, world boss rewards and events', () => {
     const w = createWorld({ map: maps[13], seed: 1, populate: false });
     const normal = spawnEnemy(w, 'gunner_truck', 20, { x: 100, y: 100 });
     const elite = spawnEnemy(w, 'gunner_truck', 20, { x: 100, y: 100 }, { elite: true });
-    expect(elite.maxHull).toBe(normal.maxHull * 3);
+    expect(Math.abs(elite.maxHull - normal.maxHull * ELITE_HULL_MULT)).toBeLessThanOrEqual(ELITE_HULL_MULT); // elite hull multiplier (rounding only)
     expect(elite.mainDamage).toBeGreaterThan(normal.mainDamage);
   });
 

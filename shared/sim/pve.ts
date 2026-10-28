@@ -4,6 +4,7 @@
  * Pure and deterministic: only world.rng and the tick delta are used.
  */
 import { PACE } from '../rules/movement.ts';
+import { ELITE_DAMAGE_MULT, ELITE_HULL_MULT, MG_MAIN_DAMAGE_RATIO, enemyScale } from '../data/balance.ts';
 import { ENEMY_ARCHETYPES, BOSS_CATALOG, EnemyArchetype } from '../data/enemies.ts';
 import {
   angleDiff,
@@ -119,21 +120,25 @@ export interface SpawnOptions {
   elite?: boolean;
   /** Extra hull multiplier (dungeon party scaling). */
   hullMult?: number;
+  /** Overrides the level-based stat scale (used by the balance fitter). */
+  scale?: { hull: number; dmg: number };
+  /** Extra damage multiplier (gate wave tuning). */
+  dmgMult?: number;
 }
 
 export function spawnEnemy(world: World, type: string, level: number, pos: Vec2, opts: SpawnOptions = {}): SimEntity {
   const arch = archetypeFor(type);
-  const mult = 1 + (level - 1) * 0.12;
-  const eliteHull = opts.elite ? 3 : 1;
-  const eliteDmg = opts.elite ? 1.5 : 1;
+  const scale = opts.scale ?? enemyScale(level);
+  const eliteHull = opts.elite ? ELITE_HULL_MULT : 1;
+  const eliteDmg = opts.elite ? ELITE_DAMAGE_MULT : 1;
   const hullMult = (opts.hullMult ?? 1) * eliteHull;
   const e = spawnVehicle(world, arch.kind, `${arch.displayName} [Lv.${level}]`, level, pos, {
-    maxHull: Math.round(arch.baseHull * mult * hullMult),
-    maxArmor: Math.round(arch.baseArmor * mult * hullMult),
+    maxHull: Math.round(arch.baseHull * scale.hull * hullMult),
+    maxArmor: Math.round(arch.baseArmor * scale.hull * hullMult),
     maxSpeed: Math.round(arch.maxSpeed * PACE.enemySpeed),
     turnRate: arch.turnRate,
     turretTurnRate: arch.turretTurnRate,
-    mainDamage: Math.round(arch.baseDamage * mult * eliteDmg),
+    mainDamage: Math.round(arch.baseDamage * scale.dmg * eliteDmg * (opts.dmgMult ?? 1)),
     mainReloadTime: arch.reloadTime,
     radius: Math.round(arch.radius * (opts.elite ? 1.2 : 1)),
     isHostile: true,
@@ -173,6 +178,7 @@ export function spawnBoss(world: World): SimEntity | undefined {
     clanTag: 'BOSS',
     isHostile: true,
   });
+  boss.mgDamage = Math.max(1, Math.round(boss.mainDamage * MG_MAIN_DAMAGE_RATIO)); // the default 18 would dominate long, tuned fights
   boss.selectedAmmo = 'EXPLOSIVE';
   boss.aiState = 'patrol';
   boss.homePos = { ...def.pos };

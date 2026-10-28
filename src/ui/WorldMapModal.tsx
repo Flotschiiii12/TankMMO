@@ -1,3 +1,4 @@
+import { ART, useArt, useArtFrame } from './kit/art.tsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { tr, T, nm } from '../i18n.ts';
 import { MAP_CONNECTIONS, MAP_METADATA_TABLE } from '../../shared/data/maps.ts';
@@ -48,6 +49,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({ isOpen, onClose, c
   const markers = useMemo(() => zoneMarkers(Math.floor(Date.now() / 1000)), [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const visited = useMemo(() => [...new Set([...visitedMaps, currentId])], [visitedMaps, currentId]);
   useEffect(() => { if (isOpen) { setSelected(currentId); const p = NODE_POSITIONS[currentId]; if (p && scroller.current) scroller.current.scrollTo({ left: Math.max(0, p.x - scroller.current.clientWidth / 2), top: Math.max(0, p.y - scroller.current.clientHeight / 2) }); } }, [isOpen, currentId]);
+  const mapFrame = useArtFrame(ART.mapFrame, 40); const parchment = useArt(ART.parchment); // hooks stay above the early return
   if (!isOpen) return null;
 
   const meta = MAP_METADATA_TABLE[selected] ?? MAP_METADATA_TABLE[1];
@@ -87,7 +89,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({ isOpen, onClose, c
   );
 
   const canvas = (
-    <div ref={scroller} className="relative overflow-auto rounded-lg h-full" style={{ background: 'radial-gradient(circle at 50% 40%, #0f1b2d, var(--c-bg-0))', border: '1px solid var(--c-line)' }} data-testid="world-canvas">
+    <div ref={scroller} className="relative overflow-auto rounded-lg h-full" {...mapFrame} style={{ background: parchment ? `url(${ART.parchment}) center / cover, var(--c-bg-0)` : 'radial-gradient(circle at 50% 40%, #0f1b2d, var(--c-bg-0))', border: '1px solid var(--c-line)', ...mapFrame.style }} data-testid="world-canvas">
       <div className="relative select-none" style={{ width: MAP_SIZE.w, height: MAP_SIZE.h + 30 }}>
         <svg className="absolute inset-0 pointer-events-none" width={MAP_SIZE.w} height={MAP_SIZE.h + 30} aria-hidden>
           <defs>{BLOBS.map((b) => <radialGradient key={b.t} id={`blob-${b.t}`}><stop offset="0%" stopColor={TERRITORY_COLOR[b.t]} stopOpacity="0.20" /><stop offset="100%" stopColor={TERRITORY_COLOR[b.t]} stopOpacity="0" /></radialGradient>)}</defs>

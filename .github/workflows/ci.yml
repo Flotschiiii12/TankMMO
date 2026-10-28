@@ -13,6 +13,10 @@ on:
         description: 'Also run the mobile layout check (Playwright, 4 viewports)'
         type: boolean
         default: false
+      uishots:
+        description: 'Also take the UI screenshots (Playwright) and upload them as an artifact'
+        type: boolean
+        default: false
 
 jobs:
   test:
@@ -27,6 +31,7 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - run: npx tsx scripts/perf-budget.ts
 
   e2e:
     # Opt-in: manual run with the "e2e" box ticked, or a PR labelled "e2e".
@@ -57,3 +62,32 @@ jobs:
       - run: npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm run layout-check
+
+  ui-shots:
+    # Opt-in: manual run with the "uishots" box ticked, or a PR labelled "ui-shots". Uploads the screenshots; compares with
+    # docs/screenshots/ui-baseline when that folder exists (create it with: npm run ui-shots -- --quick --mask-canvas --format jpeg --out docs/screenshots/ui-baseline).
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.uishots) || contains(github.event.pull_request.labels.*.name, 'ui-shots') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Screenshots (quick matrix) and diff against the baseline if there is one
+        run: |
+          if [ -d docs/screenshots/ui-baseline ]; then
+            npm run ui-shots -- --quick --mask-canvas --format jpeg --diff docs/screenshots/ui-baseline
+          else
+            npm run ui-shots -- --quick --format jpeg --out ui-shots-out
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-shots
+          path: |
+            ui-shots-out
+            docs/screenshots/ui-diff

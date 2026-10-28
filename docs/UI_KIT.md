@@ -24,3 +24,12 @@ Panel (header/footer/art slot), Button (primary, secondary, danger, ghost, icon;
 
 ## Pure logic with tests (`test/ui_kit.test.ts`)
 `rarityStyle`, `formatDelta`, `tooltipPosition`, `virtualRange`, `gridColumns`, `ringDash`, `compactNumber`.
+
+## Painted art slots
+Every slot falls back to CSS until `public/assets/ui/<file>.png` exists **and** is listed in `public/assets/manifest.json`. Prompts, sizes and the slot table are in `docs/bildprompts-ui.md`. Mechanics (`kit/art.tsx`): `useArt(path)` (boolean), `ArtSlot` (image or CSS children), `useArtFrame(path, slice)` (9-slice `border-image` attributes, spread on an element). Wired: Panel (`panel_frame`), WindowFrame float mode (`window_frame`), primary Button (4 states), Tabs (`tab_active` / `tab_idle`), Hotbar (`hotbar_frame`), ItemCard (5 rarity frames), Hangar preview (`hangar_bg`), title (`title_<faction>`), loading (`loading_1..6`), world map (`map_frame`, `parchment`), accent Badge (`badge_ribbon`), announce banner (`banner_ribbon`), Logo (`logo`).
+Rule when adding a slot: call the hook **above** any early `return null` (a hook after it crashes with React error 310 the first time the window opens; layout-check reports page errors).
+
+## Visual QA and budgets
+- `npm run ui-shots` screenshots every screen (title, loading, recovery, ready, HUD, all windows, every settings tab) per language, viewport and faction theme into `docs/screenshots/ui/<lang>/<viewport>/<faction>_<screen>.png` (`--quick`, `--langs`, `--factions`, `--viewports`, `--screens`, `--format jpeg`). `--mask-canvas --diff <baseline>` compares against a baseline folder and exits 1 above `--threshold` percent changed pixels. The CI job `ui-shots` is opt-in (workflow input or PR label).
+- `test/ui_a11y.test.ts`: WCAG contrast of the tokens for the default and all three faction themes. `layout-check` walks every window with the keyboard (accessible names, focus ring, focus trap on phones).
+- `npm run budget`: gzip limits for the entry bundle (330 KB), all JS (360 KB) and CSS (24 KB); `npm run e2e` also checks first render (title screen under 5 s in software-rendered Chromium, first contentful paint under 3 s).

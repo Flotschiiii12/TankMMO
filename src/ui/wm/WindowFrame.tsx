@@ -1,3 +1,4 @@
+import { ART, useArtFrame } from '../kit/art.tsx';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { tr } from '../../i18n.ts';
 import { GameIcon } from '../GameIcon.tsx';
@@ -18,6 +19,7 @@ export const WindowFrame: React.FC<{ id: WindowId; title?: string; icon?: string
   const stack = useWindowStack(); const mode = useWindowMode();
   const open = stack.includes(id); const order = stack.indexOf(id); const isTop = order === stack.length - 1;
   const def = WINDOW_BY_ID.get(id);
+  const frameArt = useArtFrame(ART.windowFrame, 36); // a hook: must stay above the early return below
   const ref = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState<Offset>(() => loadOffsets()[id] ?? { dx: 0, dy: 0 });
   const drag = useRef<{ x: number; y: number; o: Offset } | null>(null);
@@ -46,7 +48,7 @@ export const WindowFrame: React.FC<{ id: WindowId; title?: string; icon?: string
     <>
       {sheet && <div className="fixed inset-0" style={{ zIndex: z as unknown as number, background: 'rgba(4,7,12,0.94)' }} aria-hidden />}
       <div ref={ref} role="dialog" aria-label={label} aria-modal={sheet || undefined} tabIndex={-1} data-window={id} data-top={isTop || undefined} onPointerDown={() => windows.raise(id)}
-        className={`k-root ${sheet ? '' : 'k-panel'} ${className}`} style={{ ...frameStyle, outline: 'none', ...(sheet ? { display: 'flex', flexDirection: 'column' } : {}) }}>
+        className={`k-root ${sheet ? '' : 'k-panel'} ${className}`} {...(sheet ? {} : { 'data-art-frame': frameArt['data-art-frame'] })} style={{ ...frameStyle, outline: 'none', ...(sheet ? { display: 'flex', flexDirection: 'column' } : { ...frameArt.style }) }}>
         <header className="k-panel__head" style={{ cursor: sheet ? 'default' : 'grab', touchAction: 'none', background: sheet ? 'var(--c-bg-1)' : undefined, flex: 'none' }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           {(icon ?? def?.icon) && <GameIcon name={icon ?? def!.icon} size={24} />}
           <h3 className="k-panel__title">{label}</h3>

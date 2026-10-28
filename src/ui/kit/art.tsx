@@ -15,6 +15,13 @@ export const ART = {
   mapFrame: '/assets/ui/map_frame.png',
   parchment: '/assets/ui/parchment.png',
   logo: '/assets/ui/logo.png',
+  /** four states of the primary button (idle uses buttonPrimary), a tab strip item and decorations */
+  buttonHover: '/assets/ui/btn_primary_hover.png',
+  buttonDown: '/assets/ui/btn_primary_down.png',
+  buttonOff: '/assets/ui/btn_primary_off.png',
+  tabIdle: '/assets/ui/tab_idle.png',
+  badgeRibbon: '/assets/ui/badge_ribbon.png',
+  bannerRibbon: '/assets/ui/banner_ribbon.png',
 } as const;
 
 /** True once manifest.json lists `path`. Re-renders when the manifest arrives, so a missing file never causes a request. */
@@ -34,3 +41,12 @@ export const ArtSlot: React.FC<{ src: string; className?: string; style?: React.
   if (!ok) return <>{children ?? null}</>;
   return <img src={src} alt={alt} draggable={false} className={className} style={style} onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
 };
+
+/**
+ * 9-slice frame from a painted image: returns the attributes to spread on the element. Nothing (so the CSS border stays) until the
+ * file is listed in manifest.json. `slice` is the corner size in source pixels, drawn at the same size in CSS px.
+ */
+export function useArtFrame(path: string, slice = 32): { 'data-art-frame'?: 'yes'; style?: React.CSSProperties } {
+  const ok = useArt(path);
+  return ok ? { 'data-art-frame': 'yes', style: { '--art-img': `url(${path})`, '--art-slice': slice } as React.CSSProperties } : {};
+}

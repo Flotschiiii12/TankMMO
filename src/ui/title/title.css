@@ -17,6 +17,8 @@
 .tt-logo--sm .tt-logo__word { font-size: 20px; }
 .tt-logo__tag { margin: 0; font-size: 12px; color: var(--c-text-2); max-width: 36ch; }
 .tt-logo__art { max-height: 96px; width: auto; }
+.tt-logo__mark { flex: none; }
+@media (max-height: 480px) { .tt-logo--lg .tt-logo__mark { width: 40px; height: 40px; } }
 
 .tt-factions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .tt-faction { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; min-height: 76px; border-radius: 10px; border: 1px solid var(--c-line); background: var(--c-bg-2); color: var(--c-text-2); font-size: 11px; text-align: center; cursor: pointer; transition: transform var(--m-fast) var(--ease-out), border-color var(--m-fast); }
@@ -65,4 +67,20 @@
 @media (prefers-reduced-motion: reduce) {
   .tt-fade--on, .tt-loading__tip { animation: none; }
   .tt-zone { animation: tt-zone-still 3200ms linear both; }
+}
+
+/* short landscape phones (844x390, 667x375): everything of the title screen should be reachable without much scrolling */
+@media (max-height: 480px) {
+  .tt-screen > .tt-wrap { gap: 10px; }
+  .tt-col { gap: 8px; }
+  .tt-card { padding: 10px; gap: 6px; }
+  .tt-card h2 { font-size: 13px; }
+  .tt-logo--lg { flex-direction: row; gap: 10px; text-align: left; }
+  .tt-logo--lg .tt-logo__word { font-size: 26px; }
+  .tt-logo__tag { display: none; }
+  .tt-faction { min-height: 62px; padding: 4px 2px; }
+  .tt-factiontext { min-height: 0; font-size: 11px; }
+  .tt-news__list { max-height: 30vh; }
+  .tt-card .tt-muted { display: none; }
+  .tt-check { min-height: 36px; }
 }

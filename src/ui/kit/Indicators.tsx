@@ -1,9 +1,11 @@
+import { ART, useArtFrame } from './art.tsx';
 import React from 'react';
 import { ringDash } from './logic.ts';
 
-export const Badge: React.FC<{ tone?: 'neutral' | 'accent' | 'good' | 'bad' | 'warn'; children: React.ReactNode; title?: string }> = ({ tone = 'neutral', children, title }) => (
-  <span className={`k-badge ${tone === 'neutral' ? '' : `k-badge--${tone}`}`} title={title}>{children}</span>
-);
+export const Badge: React.FC<{ tone?: 'neutral' | 'accent' | 'good' | 'bad' | 'warn'; children: React.ReactNode; title?: string }> = ({ tone = 'neutral', children, title }) => {
+  const ribbon = useArtFrame(ART.badgeRibbon, 12); // painted ribbon behind accent badges once the image exists
+  return <span className={`k-badge ${tone === 'neutral' ? '' : `k-badge--${tone}`}`} title={title} {...(tone === 'accent' ? ribbon : {})}>{children}</span>;
+};
 
 /** Notification dot or number on top of any child. `count` 0 / false hides it. */
 export const PipHost: React.FC<{ count?: number | boolean; children: React.ReactNode; label?: string }> = ({ count, children, label }) => (

@@ -10,6 +10,8 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 const fail = (msg: string): never => { throw new Error(`E2E FAILED: ${msg}`); };
+/** Time from navigation to the visible title screen in software-rendered headless Chromium; generous on purpose, it catches regressions, not tuning. */
+const FIRST_RENDER_BUDGET_MS = Number(process.env.FIRST_RENDER_BUDGET_MS || 5000);
 
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -47,7 +49,14 @@ async function main() {
     page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errors.push(`console: ${m.text()}`); });
 
+    const tNav = Date.now();
     await page.goto(base);
+    await page.getByTestId('title-screen').waitFor({ timeout: 15_000 });
+    const firstRenderMs = Date.now() - tNav;
+    const fcp = (await page.evaluate(() => Math.round(performance.getEntriesByType('paint').find((p) => p.name === 'first-contentful-paint')?.startTime ?? -1))) as number;
+    console.log(`first render: title screen after ${firstRenderMs} ms, first contentful paint ${fcp} ms (budget ${FIRST_RENDER_BUDGET_MS} ms / 3000 ms)`);
+    if (firstRenderMs > FIRST_RENDER_BUDGET_MS) fail(`title screen took ${firstRenderMs} ms to render (budget ${FIRST_RENDER_BUDGET_MS} ms)`);
+    if (fcp > 3000) fail(`first contentful paint took ${fcp} ms (budget 3000 ms)`);
     await page.getByLabel('I am at least 13 years old.').check({ timeout: 15_000 }).catch(async () => { await page.locator('input[type=checkbox]').first().check(); });
     await page.getByRole('button', { name: 'Play', exact: true }).click();
     await page.getByRole('button', { name: /DEPLOY TO BATTLEFIELD/ }).click({ timeout: 20_000 });

@@ -18,6 +18,9 @@ export function getLang(): Lang {
 export function setLang(l: Lang): void { try { localStorage.setItem(KEY, l); } catch { /* ignore */ } window.location.reload(); }
 
 const DE: Record<string, string> = {
+  'Signing in…': 'Melde an …',
+  'Loading the battlefield…': 'Lade das Schlachtfeld …',
+  'Ready': 'Bereit',
   'Level up!': 'Level aufgestiegen!',
   'You are now level {n}': 'Du bist jetzt Level {n}',
   'Season rank up!': 'Saison-Rang gestiegen!',

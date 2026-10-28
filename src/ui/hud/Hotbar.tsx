@@ -1,3 +1,4 @@
+import { ART, useArtFrame } from '../kit/art.tsx';
 import React from 'react';
 import { tr } from '../../i18n.ts';
 import { soundEngine } from '../../audio/soundEngine.ts';
@@ -25,10 +26,11 @@ const AMMO_LABEL: Record<string, string> = { STANDARD: 'Standard', ARMOR_PIERCIN
  */
 export const Hotbar: React.FC<{ player: SimEntity | null; onCommand: (c: SimCommand) => void; onLockNearest: () => void }> = ({ player, onCommand, onLockNearest }) => {
   useKeybinds();
+  const frame = useArtFrame(ART.hotbarFrame, 24);
   const autoFire = !!player?.autoFire; const hasTarget = player?.targetId !== undefined;
   const ammo = AMMO_ORDER.filter((a) => a === 'STANDARD' || (player?.ammoInventory[a] ?? 0) !== 0);
   return (
-    <div className="hud-surface flex items-center gap-1.5 p-1.5 pointer-events-auto" data-hud="hotbar" data-testid="hotbar">
+    <div className="hud-surface flex items-center gap-1.5 p-1.5 pointer-events-auto" {...frame} data-hud="hotbar" data-testid="hotbar">
       {ABILITIES.map((a) => {
         const cd = player?.abilityCooldowns[a.id] || 0;
         return (

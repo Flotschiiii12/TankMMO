@@ -141,3 +141,13 @@
 .k-field:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 1px; }
 .k-field[aria-invalid="true"] { border-color: var(--c-bad); }
 @media (pointer: coarse) { .k-field { min-height: var(--hit); } }
+
+/* painted art slots (docs/bildprompts-ui.md): only active once the image is listed in assets/manifest.json */
+[data-art-frame="yes"] { border: calc(var(--art-slice) * 1px) solid transparent; border-image: var(--art-img) var(--art-slice) fill / calc(var(--art-slice) * 1px) stretch; background: none; box-shadow: none; }
+.k-btn[data-art="yes"] { background-image: var(--art-idle); background-size: 100% 100%; background-color: transparent; border-color: transparent; }
+.k-btn[data-art="yes"]:hover:not(:disabled) { background-image: var(--art-hover, var(--art-idle)); }
+.k-btn[data-art="yes"]:active:not(:disabled) { background-image: var(--art-down, var(--art-idle)); }
+.k-btn[data-art="yes"]:disabled { background-image: var(--art-off, var(--art-idle)); }
+.k-tab[data-art="yes"] { background-size: 100% 100%; background-image: var(--art-idle); }
+.k-tab[data-art="yes"][aria-selected="true"] { background-image: var(--art-active); }
+.k-bgart { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; z-index: 0; }

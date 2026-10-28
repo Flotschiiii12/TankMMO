@@ -50,7 +50,9 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   // Keyboard listener for desktop WASD / Arrows
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      const t = e.target as HTMLElement | null;
+      if (t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.tagName === 'SELECT') return;
+      if (t?.closest?.('[role=dialog]')) return; // keys belong to the window while focus is inside one (Tab, Space and Enter must work there)
 
       keysDown.current.add(e.code);
       const act = actionForCode(keybinds.get(), e.code);

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FactionCrest } from './GameIcon.tsx';
 import { Button } from './kit/Button.tsx';
 import { applyFactionTheme } from './kit/logic.ts';
+import { ART, ArtSlot } from './kit/art.tsx';
 import { Logo } from './title/Logo.tsx';
 import { LoadingScreen } from './title/LoadingScreen.tsx';
 import { NewsPanel } from './title/NewsPanel.tsx';
@@ -117,7 +118,7 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
     );
   }
   return (
-    <div className={box} data-testid="title-screen"><div className="tt-wrap">
+    <div className={box} data-testid="title-screen"><ArtSlot src={ART.titleBg(faction)} className="k-bgart" /><div className="tt-wrap" style={{ position: 'relative' }}>
       <div className="tt-col">
         <Logo tagline={tr('An online tank MMO. Your progress lives on the server.')} />
         <NewsPanel items={info.news} />

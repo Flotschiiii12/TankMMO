@@ -62,6 +62,7 @@ import { TutorialOverlay } from './TutorialOverlay.tsx';
 import { DebugPanel } from './DebugPanel.tsx';
 import { TitleScreen } from './TitleScreen.tsx';
 import { ZoneTransition } from './title/ZoneTransition.tsx';
+import { applyFactionTheme } from './kit/logic.ts';
 import { AnnounceHost, announcements } from './motion/AnnounceHost.tsx';
 import { diffAnnouncements, type ProgressSnapshot } from './motion/announce.ts';
 import { isRevealRarity } from './motion/motion.ts';
@@ -339,6 +340,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     if (rendererRef.current) { rendererRef.current.reducedEffects = lowFx; rendererRef.current.plainGround = !!profile.settings.performanceMode; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
   }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.uiScale, profile.settings.colorBlind]);
+  useEffect(() => { applyFactionTheme(profile.character.faction); }, [profile.character.faction]);
   const ambientMapId = online ? online.mapId : Number(profile.currentMapId) || 1;
   useEffect(() => { soundEngine.setAmbient(gameState === 'PLAYING' ? MAP_METADATA_TABLE[ambientMapId]?.biome : undefined); }, [ambientMapId, gameState]);
   useEffect(() => { document.documentElement.classList.toggle('reduced-motion', !!profile.settings.reduceMotion); }, [profile.settings.reduceMotion]);

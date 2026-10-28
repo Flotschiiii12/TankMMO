@@ -1,3 +1,4 @@
+import { ART, ArtSlot } from '../kit/art.tsx';
 import React, { useEffect, useRef } from 'react';
 import { spawnVehicle, createWorld } from '../../../shared/sim/world.ts';
 import type { DroneSpec } from '../../../shared/types.ts';
@@ -36,5 +37,10 @@ export const HangarPreview: React.FC<{ vehicle: VehicleStats; level: number; dro
     return () => { cancelAnimationFrame(raf); document.removeEventListener('visibilitychange', visible); };
   }, [vehicle, level, drones, reduceMotion]);
   const glow = skin ? SKIN_GLOW[skin] ?? 'var(--accent)' : undefined;
-  return <canvas ref={ref} width={360} height={240} className={`w-full h-full object-contain pointer-events-none ${className}`} style={glow ? { filter: `drop-shadow(0 0 14px ${glow})` } : undefined} aria-hidden />;
+  return (
+    <div className="relative w-full h-full">
+      <ArtSlot src={ART.hangarBg} className="k-bgart" />
+      <canvas ref={ref} width={360} height={240} className={`relative w-full h-full object-contain pointer-events-none ${className}`} style={glow ? { filter: `drop-shadow(0 0 14px ${glow})` } : undefined} aria-hidden />
+    </div>
+  );
 };

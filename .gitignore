@@ -17,3 +17,4 @@ backups/
 /android/local.properties
 /ios/App/Pods/
 /ios/App/build/
+docs/screenshots/ui-diff/

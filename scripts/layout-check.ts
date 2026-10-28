@@ -33,6 +33,7 @@ const screensDir = args.includes('--screens') ? args[args.indexOf('--screens') +
 
 interface Violation { viewport: string; screen: string; rule: string; element: string; detail: string }
 const violations: Violation[] = [];
+if (process.env.LAYOUT_DEBUG) { const push = violations.push.bind(violations); violations.push = (...v: Violation[]) => { for (const x of v) console.log("V", JSON.stringify(x)); return push(...v); }; } // LAYOUT_DEBUG=1 prints each violation as it happens (useful when the run crashes before the summary)
 
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const p = (s.address() as any).port; s.close(() => resolve(p)); }); s.on('error', reject); });
@@ -123,6 +124,45 @@ async function closeModal(page: Page, vp: Viewport, screen: string) {
   if (open > 0) { violations.push({ viewport: vp.name, screen, rule: 'escape-closes', element: 'modal', detail: 'Escape did not close the window' }); await page.mouse.click(2, 2).catch(() => {}); }
 }
 
+
+/**
+ * Accessibility walk of one open window: every control has an accessible name, Tab visits controls with a visible focus ring,
+ * and on phones (full-screen sheets with a focus trap) focus never leaves the window. Escape closes it afterwards.
+ */
+async function a11yWalk(page: Page, vp: Viewport, screen: string) {
+  const bad = (rule: string, element: string, detail: string) => violations.push({ viewport: vp.name, screen, rule, element, detail });
+  const unnamed = (await page.evaluate(`(() => {
+    const root = document.querySelector('[role=dialog][data-top]') || document.querySelector('[role=dialog]'); if (!root) return ['no dialog'];
+    const out = [];
+    const name = (el) => (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || el.getAttribute('title') || el.textContent || '').trim() || (el.id && document.querySelector('label[for="' + el.id + '"]')) || el.closest('label') || (el.getAttribute('placeholder') || '');
+    for (const el of root.querySelectorAll('button, a[href], input, select, textarea, [role=tab], [role=switch], [role=radio], [role=button]')) {
+      const r = el.getBoundingClientRect(); if (r.width === 0 || r.height === 0 || getComputedStyle(el).visibility === 'hidden') continue;
+      if (!name(el)) out.push((el.tagName + '.' + String(el.className).split(' ')[0]).slice(0, 60));
+    }
+    return out; })()`)) as string[];
+  for (const u of unnamed) bad('a11y-name', u, 'interactive element without an accessible name (aria-label, text, title or label)');
+  if (!(await page.evaluate("!!document.querySelector('[role=dialog][aria-label], [role=dialog][aria-labelledby]')"))) bad('a11y-dialog-label', 'dialog', 'the window has no aria-label');
+  const stops = new Set<string>(); let leaked = 0; let noRing = 0;
+  for (let i = 0; i < 50; i++) {
+    await page.keyboard.press('Tab');
+    const r = (await page.evaluate(`(() => {
+      const a = document.activeElement; const dlg = document.querySelector('[role=dialog][data-top]') || document.querySelector('[role=dialog]');
+      if (!a || a === document.body) return { id: 'body', inside: false, ring: true };
+      const cs = getComputedStyle(a); const outline = cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0; const shadow = cs.boxShadow && cs.boxShadow !== 'none';
+      const border = a.matches(':focus-visible') ? (outline || shadow || a.tagName === 'INPUT' || a.tagName === 'SELECT') : true;
+      return { id: a.tagName + (a.getAttribute('aria-label') || a.textContent || '').trim().slice(0, 24) + Math.round(a.getBoundingClientRect().x) + ',' + Math.round(a.getBoundingClientRect().y), inside: !!dlg && dlg.contains(a), ring: border };
+    })()`)) as { id: string; inside: boolean; ring: boolean };
+    if (stops.has(r.id) && r.id !== 'body') break; // wrapped around
+    stops.add(r.id);
+    if (vp.touch && !r.inside) leaked++;
+    if (!r.ring) noRing++;
+  }
+  if (stops.size < 2) bad('a11y-keyboard', 'dialog', `Tab reached only ${stops.size} stop(s): the window cannot be used with a keyboard (${[...stops].join(' / ')})`);
+  if (leaked > 1) bad('a11y-focus-trap', 'dialog', `focus left the full-screen window ${leaked} times while tabbing`);
+  if (noRing > 0) bad('a11y-focus-ring', 'dialog', `${noRing} focus stop(s) without a visible focus ring`);
+  await closeModal(page, vp, screen);
+}
+
 /** HTML5 drag and drop with real mouse movement (a few intermediate moves are needed before Chromium starts the drag). */
 async function drag(page: Page, from: ReturnType<Page['locator']>, to: ReturnType<Page['locator']>) {
   const a = (await from.boundingBox())!; const b = (await to.boundingBox())!;
@@ -146,6 +186,7 @@ async function main() {
     for (const vp of VIEWPORTS.filter((v) => !process.env.LAYOUT_ONLY || v.name.includes(process.env.LAYOUT_ONLY))) { // LAYOUT_ONLY=desktop runs a single viewport while debugging
       const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.touch ? 2 : 1, isMobile: vp.touch, hasTouch: vp.touch });
       const page = await ctx.newPage();
+      page.on('pageerror', (e) => violations.push({ viewport: vp.name, screen: 'any', rule: 'page-error', element: 'page', detail: e.message.slice(0, 200) })); // e.g. React hook-order errors that only show once a window opens
       await page.addInitScript(() => { try { localStorage.setItem('treadfront_lang', 'en'); } catch { /* ignore */ } });
       const inset = vp.insets;
       const applyInsets = () => page.addStyleTag({ content: `:root{--safe-top:${inset.top}px !important;--safe-right:${inset.right}px !important;--safe-bottom:${inset.bottom}px !important;--safe-left:${inset.left}px !important}` });
@@ -204,10 +245,10 @@ async function main() {
         await page.keyboard.press('Escape'); await page.waitForTimeout(150);
         if ((await openIds()) !== 'inventory') wm(`Escape should close only the top window, found "${await openIds()}"`);
         if (vp.touch) {
-          const box = (await page.evaluate("(() => { const r = document.querySelector('[data-window=inventory]').getBoundingClientRect(); return [r.width, r.height]; })()")) as number[];
+          const box = (await page.evaluate("(() => { const e = document.querySelector('[data-window=inventory]'); if (!e) return [0, 0]; const r = e.getBoundingClientRect(); return [r.width, r.height]; })()")) as number[];
           if (box[0] < vp.width - 2 || box[1] < vp.height - 2) wm(`on a phone a window must be a full-screen sheet, it is ${Math.round(box[0])}x${Math.round(box[1])}`);
         } else {
-          const head = page.locator('[data-window=inventory] header').first(); const hb = await head.boundingBox();
+          const head = page.locator('[data-window=inventory] header').first(); const hb = await head.boundingBox({ timeout: 3000 }).catch(() => null);
           if (hb) { await page.mouse.move(hb.x + 60, hb.y + 12); await page.mouse.down(); await page.mouse.move(hb.x + 160, hb.y + 62, { steps: 5 }); await page.mouse.up(); }
           const pos = (await page.evaluate("JSON.parse(localStorage.getItem('treadfront_win_pos') || '{}').inventory")) as { dx: number; dy: number } | undefined;
           if (!pos || Math.abs(pos.dx - 100) > 4 || Math.abs(pos.dy - 50) > 4) wm(`dragging the header by (100,50) should be remembered, stored ${JSON.stringify(pos)}`);
@@ -218,6 +259,12 @@ async function main() {
         await page.keyboard.press('Shift+Slash'); await page.waitForTimeout(250);
         if ((await openIds()) !== 'shortcuts') wm(`? should open the shortcut help, found "${await openIds()}"`); else await check(page, vp, 'modal-shortcuts', { modal: true });
         await closeModal(page, vp, 'modal-shortcuts');
+      }
+      // accessibility: keyboard walk through every window
+      for (const [name, key] of [['garage', 'KeyG'], ['inventory', 'KeyI'], ['quests', 'KeyJ'], ['social', 'KeyC'], ['map', 'KeyM'], ['market', 'KeyK'], ['career', 'KeyX'], ['chat', 'KeyY'], ['settings', 'KeyO']] as const) {
+        await page.keyboard.press(key); await page.waitForTimeout(450);
+        if (!(await page.locator('[role=dialog]').count())) { violations.push({ viewport: vp.name, screen: `a11y-${name}`, rule: 'a11y-open', element: name, detail: `${key} did not open the window` }); continue; }
+        await a11yWalk(page, vp, `a11y-${name}`);
       }
       // settings via the HUD gear, if there is one
       const gear = page.getByRole('button', { name: /^Settings$/ });

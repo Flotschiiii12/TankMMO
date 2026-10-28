@@ -25,6 +25,8 @@
     "e2e": "vite build && tsx scripts/e2e.ts",
     "layout-check": "vite build && tsx scripts/layout-check.ts",
     "gallery-shots": "vite build && tsx scripts/gallery-shots.ts",
+    "ui-shots": "vite build && tsx scripts/ui-shots.ts",
+    "budget": "vite build && tsx scripts/perf-budget.ts",
     "fuzz": "tsx scripts/fuzz.ts",
     "balance-fit": "tsx scripts/balance-fit.ts",
     "balance-sim": "tsx scripts/balance-sim.ts",

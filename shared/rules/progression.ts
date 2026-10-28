@@ -56,7 +56,7 @@ export function getLevelDiffFactor(playerLevel: number, enemyLevel: number): num
  * Calculates kill XP awarded for defeating an enemy of a given level.
  */
 /** Global pace knob: kill XP is scaled by this (tuned with econ-sim so level 60 takes weeks, not days). */
-export const KILL_XP_RATE = 0.2;
+export const KILL_XP_RATE = 0.35;
 
 export function calculateKillXP(playerLevel: number, enemyLevel: number, isElite = false, isBoss = false): number {
   const baseXP = (45 + enemyLevel * 18) * KILL_XP_RATE;

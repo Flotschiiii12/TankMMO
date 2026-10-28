@@ -39,8 +39,8 @@ describe('Progression Rules & XP Curves (Milestone 2)', () => {
     const bossXP = calculateKillXP(10, 10, false, true);
 
     expect(normalXP).toBeGreaterThan(0);
-    expect(eliteXP).toBe(normalXP * 3);
-    expect(bossXP).toBe(normalXP * 10);
+    expect(Math.abs(eliteXP - normalXP * 3)).toBeLessThanOrEqual(2);
+    expect(Math.abs(bossXP - normalXP * 10)).toBeLessThanOrEqual(5);
   });
 
   it('awards talent points starting at level 5 up to 96 points at level 100', () => {

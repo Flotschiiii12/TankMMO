@@ -16,6 +16,20 @@
   }
 }
 
+/* Notches / rounded corners on phones (native apps and browsers with viewport-fit=cover): keep UI out of the unsafe margins. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+#root {
+  box-sizing: border-box;
+}
+.safe-pad {
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }

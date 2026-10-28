@@ -9,3 +9,11 @@ coverage/
 /data/
 .env
 backups/
+
+# Capacitor build output (generated native projects may be committed; these are not)
+/android/app/build/
+/android/.gradle/
+/android/build/
+/android/local.properties
+/ios/App/Pods/
+/ios/App/build/

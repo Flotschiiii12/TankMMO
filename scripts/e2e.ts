@@ -1,6 +1,7 @@
 /**
  * End-to-end smoke test: real server (temp DB, LOAD_TEST=1) + built client + headless Chromium.
  * Run with `npm run e2e` (needs `npx playwright install chromium` once). Takes ~20 s.
+ * Set `E2E_GRAPHICS_QUALITY=high|medium|low|off` to force a graphics preset during the frame-time sample.
  */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
@@ -12,6 +13,7 @@ import { chromium } from 'playwright';
 const fail = (msg: string): never => { throw new Error(`E2E FAILED: ${msg}`); };
 /** Time from navigation to the visible title screen in software-rendered headless Chromium; generous on purpose, it catches regressions, not tuning. */
 const FIRST_RENDER_BUDGET_MS = Number(process.env.FIRST_RENDER_BUDGET_MS || 5000);
+const QUALITY_LABELS: Record<string, string> = { high: 'High', medium: 'Medium', low: 'Low', off: 'Off' };
 
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -62,6 +64,17 @@ async function main() {
     await page.getByRole('button', { name: /DEPLOY TO BATTLEFIELD/ }).click({ timeout: 20_000 });
     await page.locator('canvas').first().waitFor({ timeout: 15_000 });
     await page.getByRole('button', { name: /^Inventory & Loadout$/ }).waitFor({ timeout: 15_000 }); // HUD is up
+
+    const requestedQuality = process.env.E2E_GRAPHICS_QUALITY;
+    if (requestedQuality) {
+      const label = QUALITY_LABELS[requestedQuality];
+      if (!label) fail(`unsupported E2E_GRAPHICS_QUALITY "${requestedQuality}"`);
+      await page.keyboard.press('KeyO');
+      await page.getByRole('radiogroup', { name: 'Graphics quality' }).getByRole('radio', { name: label, exact: true }).click();
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+      console.log(`graphics quality: ${requestedQuality}`);
+    }
 
     await page.keyboard.press('F3'); // debug panel shows the player position
     const readPos = async (): Promise<[number, number]> => {

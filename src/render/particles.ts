@@ -63,7 +63,7 @@ export interface TreadMark {
 export class ParticleSystem {
   private pool: Particle[] = [];
   private treadMarks: TreadMark[] = [];
-  private maxParticles = PARTICLE_CAP;
+  private particleCap = PARTICLE_CAP;
   private live = 0;
   private reducedMode = false;
   private reducedMotion = false;
@@ -73,7 +73,7 @@ export class ParticleSystem {
 
   constructor() {
     // Pre-allocate pool
-    for (let i = 0; i < this.maxParticles; i++) {
+    for (let i = 0; i < PARTICLE_CAP; i++) {
       this.pool.push({
         active: false,
         type: 'dust',
@@ -94,8 +94,12 @@ export class ParticleSystem {
 
   /** Low quality: far fewer particles (damage numbers are still shown, they are information). */
   public setReduced(reduced: boolean): void {
-    this.reducedMode = reduced;
-    this.maxTreads = reduced ? REDUCED_TREAD_CAP : TREAD_CAP;
+    this.setCaps(reduced ? REDUCED_PARTICLE_CAP : PARTICLE_CAP, reduced ? REDUCED_TREAD_CAP : TREAD_CAP, reduced);
+  }
+  public setCaps(particleCap: number, treadCap: number, reducedMode: boolean): void {
+    this.particleCap = Math.max(0, Math.min(this.pool.length, Math.floor(particleCap)));
+    this.maxTreads = Math.max(0, Math.floor(treadCap));
+    this.reducedMode = reducedMode;
     while (this.treadMarks.length > this.maxTreads) this.treadMarks.shift();
     for (const particle of this.pool) {
       if (this.live <= this.cap) break;
@@ -114,7 +118,7 @@ export class ParticleSystem {
   }
   public setReducedMotion(reduced: boolean): void { this.reducedMotion = reduced; }
   public get activeCount(): number { return this.live; }
-  public get cap(): number { return this.reducedMode ? REDUCED_PARTICLE_CAP : this.maxParticles; }
+  public get cap(): number { return this.particleCap; }
   public get treadMarkCount(): number { return this.treadMarks.length; }
 
   private alloc(essential = false): Particle | null {
@@ -164,7 +168,7 @@ export class ParticleSystem {
   }
 
   public addTreadMark(pos: Vec2, angle: number, width = 28) {
-    if (this.reducedMotion || !this.enabled) return;
+    if (this.reducedMotion || !this.enabled || this.maxTreads === 0) return;
     const minSpacing = Math.max(12, width * 0.55);
     if (this.lastTreadMarkPos && Math.hypot(pos.x - this.lastTreadMarkPos.x, pos.y - this.lastTreadMarkPos.y) < minSpacing) return;
     if (this.treadMarks.length >= this.maxTreads) {

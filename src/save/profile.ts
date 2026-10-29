@@ -25,13 +25,16 @@ export interface UserProfile {
     showDebug: boolean;
     zoom?: number; // 0.5 to 1.2
     colorBlind?: boolean; // radar/markers use a colour-blind safe palette
-    reducedEffects?: boolean; // no particles, tracks or banners animation
+    graphicsQuality?: 'high' | 'medium' | 'low' | 'off'; // automatic first-run choice or manual selection
+    qualityAutoDone?: boolean;
+    qualityManual?: boolean;
+    reducedEffects?: boolean; // legacy saves map this to Low quality
     uiScale?: number; // 0.8 - 1.4 HUD text/button scale
     hudOpacity?: number; // 0.3 - 1, surface opacity of HUD panels
     minimalHud?: boolean; // only bars, target and controls
     touchControls?: 'auto' | 'on' | 'off'; // joystick + thumb cluster (auto = coarse pointer)
     leftHanded?: boolean; // joystick on the right, fire cluster on the left
-    performanceMode?: boolean; // DPR cap 1.5, fewer particles, plain ground
+    performanceMode?: boolean; // legacy saves map this to Low quality
     musicVolume?: number; // 0-1, adaptive music bus (default low)
     effectsVolume?: number; // 0-1, weapons, hits, engine, ambience
     interfaceVolume?: number; // 0-1, UI sounds and fanfares
@@ -45,7 +48,7 @@ export interface UserProfile {
     cameraMotion?: number; // 0-1 look-ahead and combat zoom strength
     hapticsEnabled?: boolean;
     touchButtonScale?: number; // 0.85-1.2
-    perfAutoDone?: boolean; // the automatic switch to performance mode has already happened once (never nag again)
+    perfAutoDone?: boolean; // legacy automatic performance switch marker
   };
 }
 

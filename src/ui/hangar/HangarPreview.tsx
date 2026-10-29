@@ -48,7 +48,7 @@ export const HangarPreview: React.FC<{ vehicle: VehicleStats; level: number; dro
   return (
     <div className={`tt-hangar-preview relative w-full h-full${effects ? ' tt-hangar-preview--effects' : ''}`}>
       <ArtSlot src={ART.hangarBg} className="k-bgart" />
-      <canvas ref={ref} width={360} height={240} className={`relative w-full h-full object-contain pointer-events-none ${className}`} style={glow ? { filter: `drop-shadow(0 0 14px ${glow})` } : undefined} aria-hidden />
+      <canvas ref={ref} width={360} height={240} className={`relative w-full h-full object-contain pointer-events-none ${className}`} style={glow && effects ? { filter: `drop-shadow(0 0 14px ${glow})` } : undefined} aria-hidden />
       {effects && !reduceMotion && <div className="tt-hangar-particles" aria-hidden><i /><i /><i /><i /></div>}
     </div>
   );

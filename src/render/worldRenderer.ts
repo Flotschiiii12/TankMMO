@@ -298,10 +298,11 @@ export class WorldRenderer {
   }
 
   readonly drones = new DroneRenderer();
-  /** Accessibility "Reduced effects": no smoke trails, flames or drone beams. */
+  /** Quality preset: reduced shadows, lights, trails, flames and drone beams at Low/Off. */
   reducedEffects = false;
-  /** performance mode: no per-chunk detail beyond the chunk image, no grid lines */
+  /** Low/Off quality: no per-chunk detail beyond the chunk image or grid lines. */
   plainGround = false;
+  motionScale = 1;
   /** colour-blind palette: hostile = amber, friendly = blue (never red / green) */
   colorBlind = false;
   /** HUD scale setting (0.8 - 1.4): name plate text follows it */
@@ -445,9 +446,9 @@ export class WorldRenderer {
         const recoil = this.recoilKicks.get(ent.id);
         const recoilAge = recoil ? now - recoil.startedAt : 1;
         const recoilKick = recoilAge >= 0.16 ? 0 : Math.exp(-recoilAge * 22);
-        const visibleRecoil = this.reducedEffects ? recoilKick * 0.35 : recoilKick;
+        const visibleRecoil = recoilKick * (motionReduced ? 0 : this.motionScale);
         if (recoil && recoilAge >= 0.16) this.recoilKicks.delete(ent.id);
-        const motionStrength = motionReduced ? 0 : this.reducedEffects ? 0.35 : 1;
+        const motionStrength = motionReduced ? 0 : this.motionScale;
         const motion = ent.isWreck ? undefined : this.getVehicleMotion(ent, now, time, motionStrength);
         drawVehicle(
           ctx,

@@ -87,6 +87,10 @@
 :root.reduced-motion .tt-screen > .tt-wrap, :root.reduced-motion .tt-loading__main, :root.reduced-motion .tt-hangar-preview--effects::before { animation: none; }
 :root.reduced-motion .tt-hangar-particles { display: none; }
 :root.reduced-motion .tt-screen__scene { transition: none; }
+:root.low-graphics .tt-screen__scene, :root.low-graphics .tt-hangar-particles { display: none; }
+:root.low-graphics .tt-hangar-preview--effects::before { animation: none; }
+:root.low-graphics .tt-screen > .tt-wrap, :root.low-graphics .tt-zone { animation: none; }
+:root.low-graphics .tt-fade--on { animation: none; }
 :root.reduced-motion .tt-zone { animation: tt-zone-still 3200ms linear both; }
 @keyframes tt-zone-still { 0% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {

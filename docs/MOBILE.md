@@ -50,6 +50,18 @@ VITE_SERVER_URL=https://treadfront.213-199-44-82.sslip.io npm run mobile:sync
 - Push notifications, in-app purchases and store receipts are not wired (`FLAGS.premiumCurrencyEnabled` is off).
 - Audio on iOS starts only after a first tap (the title screen's button does that).
 
+## Graphics quality and performance measurements
+The graphics setting has four levels: **High**, **Medium**, **Low**, and **Off**. On a first run, the client samples 45 valid frames and selects a starting level from the average and p95 frame time. If the smoothed frame time remains above 22 ms for 5 seconds, the runtime monitor can lower an automatically selected level once. A manual selection is respected. The F3 debug overlay includes the FPS counter.
+
+Measurements on 2026-10-29, using software-rendered headless Chromium (not a phone):
+
+| Setting | E2E average | E2E p95 | Frames | Bundle budget |
+|---|---:|---:|---:|---|
+| High | 44.0 ms | 100.0 ms | 70 | Pass |
+| Low | 76.5 ms | 250.0 ms | 49 | Pass |
+
+These short E2E samples are noisy; Low was slower in this run, so they do not demonstrate a performance improvement or represent mobile hardware. `npm run budget` passed for both settings with identical static bundles: 277.7 KB gzipped entry JS, 283.4 KB total JS, and 14.7 KB CSS (limits: 330 KB, 360 KB, and 24 KB). The build size is independent of the runtime graphics setting. DE/EN settings screenshots were checked at 844x390, and `npm run layout-check` reported no violations.
+
 ## Layout check (cloud run 3)
-`npm run layout-check` (needs `dist/`, builds it first) opens the real UI in Playwright mobile emulation at 844x390, 740x360, 667x375 (with notch / home-bar insets) and 1280x720 and fails with a list of violations: HUD blocks overlapping the joystick or fire buttons or each other, touch targets under 44x44 px, text under 11 px, elements inside the safe-area insets, windows that do not fit or cannot scroll, Escape not closing a window, horizontal page scroll, zoom slider / pinch zoom not saving, left-handed swap and the performance-mode DPR cap. `--screens docs/screenshots` saves a picture of every screen, `--report-only` never fails. In CI it is the opt-in `layout` job (tick it on a manual run or label a PR `layout`).
-Settings: *Left-handed controls* swaps joystick and fire cluster (and mirrors the top bar); *Performance mode* caps the canvas resolution at 1.5x, uses the reduced particle cap and plain ground, and switches itself on once if frames stay above 22 ms for 5 s (with a banner).
+`npm run layout-check` (needs `dist/`, builds it first) opens the real UI in Playwright mobile emulation at 844x390, 740x360, 667x375 (with notch / home-bar insets) and 1280x720 and fails with a list of violations: HUD blocks overlapping the joystick or fire buttons or each other, touch targets under 44x44 px, text under 11 px, elements inside the safe-area insets, windows that do not fit or cannot scroll, Escape not closing a window, horizontal page scroll, zoom slider / pinch zoom not saving, left-handed swap and graphics-quality DPR caps. `--screens docs/screenshots` saves a picture of every screen, `--report-only` never fails. In CI it is the opt-in `layout` job (tick it on a manual run or label a PR `layout`).
+Settings: *Left-handed controls* swaps joystick and fire cluster (and mirrors the top bar); *Graphics* offers High / Medium / Low / Off, with a one-time startup probe for new profiles and a runtime downgrade if performance remains low.

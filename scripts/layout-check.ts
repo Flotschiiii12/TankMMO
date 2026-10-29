@@ -364,18 +364,16 @@ async function main() {
         await check(page, vp, 'modal-chat', { modal: true });
         await closeModal(page, vp, 'modal-chat');
       }
-      // left-handed layout and performance mode (settings toggles): controls swap sides, the DPR cap drops to 1.5
+      // left-handed layout and graphics quality: controls swap sides, the DPR cap drops from 2 to the Low preset
       if (vp.touch && (await page.getByRole('button', { name: /^Settings$/ }).count())) {
         const toggle = async (label: string) => { await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200); await page.getByRole('button', { name: label }).first().evaluate((el) => (el as HTMLElement).click()).catch(() => {}); };
         const canvasRatio = async () => (await page.evaluate("(() => { const c = document.querySelector('canvas'); return c.width / window.innerWidth; })()")) as number;
-        // the automatic performance mode may have switched itself on already (slow machine, frames > 22 ms): start from OFF so this check is deterministic
         await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200);
-        if ((await page.locator('[data-setting=performanceMode]').first().getAttribute('aria-checked')) === 'true') await page.locator('[data-setting=performanceMode]').first().click();
+        await page.getByRole('radiogroup', { name: 'Graphics quality' }).getByRole('radio', { name: 'High', exact: true }).click();
         await closeModal(page, vp, 'modal-settings'); await page.waitForTimeout(400);
         const before = await canvasRatio();
-        // the toggle rows are buttons named ON/OFF right after their title: click by the row text
         await page.getByRole('button', { name: /^Settings$/ }).first().click({ force: true }); await page.waitForTimeout(200);
-        await page.locator('[data-setting=performanceMode]').first().click();
+        await page.getByRole('radiogroup', { name: 'Graphics quality' }).getByRole('radio', { name: 'Low', exact: true }).click();
         await page.getByRole('tab', { name: 'Controls' }).click(); await page.waitForTimeout(150);
         await page.locator('[data-setting=leftHanded]').first().click();
         await closeModal(page, vp, 'modal-settings');
@@ -384,7 +382,7 @@ async function main() {
         const sides = (await page.evaluate("(() => { const j = document.querySelector('[data-ui=joystick] > div').getBoundingClientRect(); const f = document.querySelector('[data-ui=fire]').getBoundingClientRect(); return [j.left, f.left]; })()")) as number[];
         if (!(sides[0] > sides[1])) violations.push({ viewport: vp.name, screen: 'game-left-handed-performance', rule: 'left-handed', element: 'joystick', detail: `joystick (x=${Math.round(sides[0])}) is not right of the fire cluster (x=${Math.round(sides[1])})` });
         const after = await canvasRatio();
-        if (!(after <= 1.51 && before > 1.9)) violations.push({ viewport: vp.name, screen: 'game', rule: 'performance-mode', element: 'canvas', detail: `canvas/CSS pixel ratio ${before.toFixed(2)} -> ${after.toFixed(2)}, expected 2 -> 1.5` });
+        if (!(after <= 1.36 && before > 1.9)) violations.push({ viewport: vp.name, screen: 'game', rule: 'graphics-quality', element: 'canvas', detail: `canvas/CSS pixel ratio ${before.toFixed(2)} -> ${after.toFixed(2)}, expected High 2 -> Low 1.35` });
         void toggle;
       }
       // pinch zoom on the canvas (two pointers moving apart changes the stored zoom)

@@ -1,3 +1,5 @@
+import { graphicsQualityFor, type GraphicsQualitySettings } from '../perfMonitor.ts';
+
 /** Motion helpers (pure). Components never keep per-frame state in React; they write to the DOM or use CSS animations. */
 export const easeOutCubic = (t: number): number => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 
@@ -17,11 +19,16 @@ export function countUpDuration(from: number, to: number): number {
 export function prefersReducedMotion(): boolean {
   if (typeof document === 'undefined') return false;
   if (document.documentElement.classList.contains('reduced-motion')) return true;
+  return systemPrefersReducedMotion();
+}
+
+export function systemPrefersReducedMotion(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export function shouldPlayRewardEffects(settings: { reducedEffects?: boolean; performanceMode?: boolean; reduceMotion?: boolean }, systemReducedMotion = false): boolean {
-  return !settings.reducedEffects && !settings.performanceMode && !settings.reduceMotion && !systemReducedMotion;
+export function shouldPlayRewardEffects(settings: GraphicsQualitySettings & { reduceMotion?: boolean }, systemReducedMotion = false): boolean {
+  const quality = graphicsQualityFor(settings);
+  return (quality === 'high' || quality === 'medium') && !settings.reduceMotion && !systemReducedMotion;
 }
 
 export function bossSlowMotionTime(now: number, startedAt: number): number {

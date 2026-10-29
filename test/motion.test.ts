@@ -33,8 +33,11 @@ describe('motion maths', () => {
       previous = current;
     }
   });
-  it('only enables reward effects at full quality and without reduced motion', () => {
+  it('enables reward effects only at High or Medium quality and without reduced motion', () => {
     expect(shouldPlayRewardEffects({})).toBe(true);
+    expect(shouldPlayRewardEffects({ graphicsQuality: 'medium' })).toBe(true);
+    expect(shouldPlayRewardEffects({ graphicsQuality: 'low' })).toBe(false);
+    expect(shouldPlayRewardEffects({ graphicsQuality: 'off' })).toBe(false);
     expect(shouldPlayRewardEffects({ reducedEffects: true })).toBe(false);
     expect(shouldPlayRewardEffects({ performanceMode: true })).toBe(false);
     expect(shouldPlayRewardEffects({ reduceMotion: true })).toBe(false);

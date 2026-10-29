@@ -11,6 +11,7 @@ import { Row, Slider, Toggle } from './settings/parts.tsx';
 import { KeysTab } from './settings/KeysTab.tsx';
 import { AccountTab } from './settings/AccountTab.tsx';
 import { AboutTab } from './settings/AboutTab.tsx';
+import { graphicsQualityFor, type GraphicsQuality } from './perfMonitor.ts';
 
 interface SettingsModalProps {
   profile: UserProfile;
@@ -41,14 +42,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, o
       <Tabs label={tr('Settings')} value={tab} onChange={(id) => setTab(id as Tab)} tabs={TABS.map((t) => ({ id: t.id, label: tr(t.label) }))} />
       {tab === 'graphics' && (
         <div className="st-body" data-testid="tab-graphics">
+          <Row title={tr('Graphics quality')} hint={tr('High: full effects. Medium: balanced detail. Low: reduced effects. Off: essentials only.')}>
+            <SegmentedControl
+              label={tr('Graphics quality')}
+              value={graphicsQualityFor(s)}
+              onChange={(v) => set({ graphicsQuality: v as GraphicsQuality, qualityAutoDone: true, qualityManual: true, perfAutoDone: true, performanceMode: false, reducedEffects: false })}
+              options={[{ id: 'high', label: tr('High') }, { id: 'medium', label: tr('Medium') }, { id: 'low', label: tr('Low') }, { id: 'off', label: tr('Off') }]}
+            />
+          </Row>
           <Row title={tr('Battlefield Camera Zoom')} hint={tr('0.5x is wide, 1.2x is close. Pinch or scroll in the game also works.')}>
             <Slider setting="zoom" label={tr('Battlefield Camera Zoom')} min={0.5} max={1.2} step={0.05} value={s.zoom || 0.85} onChange={(zoom) => set({ zoom })} format={(v) => `${v.toFixed(2)}x`} />
           </Row>
           <Row title={tr('Camera effects')} hint={tr('Look-ahead while driving and gentle zoom in combat. Reduce this for a steadier view.')}>
             <Slider setting="cameraMotion" label={tr('Camera effects')} min={0} max={1} step={0.1} value={s.cameraMotion ?? 1} onChange={(cameraMotion) => set({ cameraMotion })} format={pct} />
-          </Row>
-          <Row title={tr('Performance mode')} hint={tr('Lower resolution (max 1.5x), fewer effects, plain ground. Turns on by itself when the game runs slowly')}>
-            <Toggle setting="performanceMode" label={tr('Performance mode')} on={!!s.performanceMode} onChange={(v) => set({ performanceMode: v, perfAutoDone: true })} />
           </Row>
           <Row title={tr('Screen shake')} hint={tr('Camera shake on your shots and strong hits. Off by default.')}>
             <Toggle setting="cameraShake" label={tr('Screen shake')} on={!!s.cameraShake} onChange={(v) => set({ cameraShake: v })} />
@@ -56,17 +62,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, o
           <Row title={tr('Shake strength')}>
             <Slider setting="cameraShakeStrength" label={tr('Shake strength')} min={0} max={1} step={0.1} value={s.cameraShakeStrength ?? 0.5} onChange={(cameraShakeStrength) => set({ cameraShakeStrength })} format={pct} />
           </Row>
-          <Row title={tr('Reduced effects')} hint={tr('No particles or tread marks (less motion, better on slow phones)')}>
-            <Toggle setting="reducedEffects" label={tr('Reduced effects')} on={!!s.reducedEffects} onChange={(v) => set({ reducedEffects: v })} />
-          </Row>
           <Row title={tr('Reward screen flash')} hint={tr('Brief color flash on level-ups, rare loot and major victories.')}>
             <Toggle setting="rewardFlash" label={tr('Reward screen flash')} on={s.rewardFlash !== false} onChange={(v) => set({ rewardFlash: v })} />
           </Row>
           <Row title={tr('Boss slow motion')} hint={tr('Briefly slows visual presentation after a boss reward; the simulation keeps running normally.')}>
             <Toggle setting="bossSlowMotion" label={tr('Boss slow motion')} on={s.bossSlowMotion !== false} onChange={(v) => set({ bossSlowMotion: v })} />
           </Row>
-          <Row title={tr('Developer Diagnostics Overlay (F3)')} hint={tr('Displays real-time FPS, tick time, and entity counts')}>
-            <Toggle setting="showDebug" label={tr('Developer Diagnostics Overlay (F3)')} on={!!s.showDebug} onChange={(v) => set({ showDebug: v })} />
+          <Row title={tr('FPS and diagnostics (F3)')} hint={tr('Displays real-time FPS, tick time, and entity counts')}>
+            <Toggle setting="showDebug" label={tr('FPS and diagnostics (F3)')} on={!!s.showDebug} onChange={(v) => set({ showDebug: v })} />
           </Row>
         </div>
       )}
@@ -138,9 +141,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, o
           </Row>
           <Row title={tr('HUD scale')} hint={tr('Larger buttons and text on the HUD')}>
             <Slider setting="uiScale-a11y" label={tr('HUD scale')} min={0.8} max={1.4} step={0.1} value={s.uiScale || 1} onChange={(uiScale) => set({ uiScale })} format={pct} />
-          </Row>
-          <Row title={tr('Reduced effects')} hint={tr('No particles or tread marks (less motion, better on slow phones)')}>
-            <Toggle setting="reducedEffects-a11y" label={tr('Reduced effects')} on={!!s.reducedEffects} onChange={(v) => set({ reducedEffects: v })} />
           </Row>
         </div>
       )}

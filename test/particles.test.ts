@@ -35,6 +35,21 @@ describe('particle system caps', () => {
     expect(quiet.activeCount).toBe(1);
   });
 
+  it('applies intermediate and off-quality particle and tread budgets', () => {
+    const ps = new ParticleSystem();
+    ps.setCaps(300, 150, false);
+    expect(ps.cap).toBe(300);
+    for (let i = 0; i < 200; i++) ps.addTreadMark({ x: i * 20, y: 0 }, 0);
+    expect(ps.treadMarkCount).toBe(150);
+    ps.setCaps(60, 0, true);
+    expect(ps.cap).toBe(60);
+    expect(ps.treadMarkCount).toBe(0);
+    ps.addTreadMark(P, 0);
+    expect(ps.treadMarkCount).toBe(0);
+    flood(ps, 100);
+    expect(ps.activeCount).toBeLessThanOrEqual(60);
+  });
+
   it('adds impact feedback and rate-limits wreck smoke within the particle cap', () => {
     const ps = new ParticleSystem();
     ps.emitImpact(P, 6, '#f97316', 36, true);

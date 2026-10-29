@@ -20,6 +20,7 @@ import { Tooltip } from '../kit/Tooltip.tsx';
 import { VirtualGrid } from '../kit/Virtual.tsx';
 import { useWindowMode } from '../wm/useWindows.ts';
 import { prefersReducedMotion } from '../motion/motion.ts';
+import { graphicsQualityFor } from '../perfMonitor.ts';
 import { HangarPreview } from './HangarPreview.tsx';
 import { VehicleCarousel, lockReasons, unlocksLine } from './VehicleCarousel.tsx';
 import { Loadout, PRESET_SLOTS, Plan, bestLoadout, canEquip, currentLoadout, currentPreview, emptyLoadout, equippedElsewhere, itemScore, loadPresets, planLoadout, previewEquip, savePreset } from './hangarLogic.ts';
@@ -53,7 +54,9 @@ const iconFor = (it: C.ItemInstance) => { const d = ITEM_BY_ID.get(it.defId)!; r
  */
 export const HangarView: React.FC<{ profile: UserProfile; onAction: Run; onMessage: (m: string) => void; view?: HangarSubView; onView?: (v: HangarSubView) => void }> = ({ profile, onAction, onMessage, view: viewProp, onView }) => {
   const ch = profile.character; const mode = useWindowMode();
-  const reducedMotion = !!profile.settings.reducedEffects || !!profile.settings.performanceMode || !!profile.settings.reduceMotion || prefersReducedMotion();
+  const graphicsQuality = graphicsQualityFor(profile.settings);
+  const reducedMotion = !!profile.settings.reduceMotion || prefersReducedMotion() || graphicsQuality === 'low' || graphicsQuality === 'off';
+  const previewEffects = !reducedMotion && (graphicsQuality === 'high' || graphicsQuality === 'medium');
   const [selectedId, setSelectedId] = useState(ch.activeVehicle);
   const vehicle = VEHICLE_TIERS.find((v) => v.id === selectedId) ?? VEHICLE_TIERS[0];
   const meta = VEHICLE_CATALOG.find((v) => v.id === vehicle.id)!;
@@ -144,7 +147,7 @@ export const HangarView: React.FC<{ profile: UserProfile; onAction: Run; onMessa
       {mode === 'sheet' ? (
         <div className="grid gap-2 items-start" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.15fr)' }}>
           <div className="rounded-xl overflow-hidden h-28" style={{ background: 'radial-gradient(circle at 50% 45%, var(--c-bg-3), var(--c-bg-0))', border: '1px solid var(--c-line)' }} data-testid="hangar-stage">
-            <HangarPreview vehicle={vehicle} level={ch.level} drones={owned ? stats?.drones : undefined} skin={active ? ch.activeSkin : undefined} reduceMotion={reducedMotion} effects={!reducedMotion} />
+            <HangarPreview vehicle={vehicle} level={ch.level} drones={owned ? stats?.drones : undefined} skin={active ? ch.activeSkin : undefined} reduceMotion={reducedMotion} effects={previewEffects} />
           </div>
           <div className="flex flex-wrap gap-2 justify-start">{slots.map(slotCard)}</div>
         </div>
@@ -153,7 +156,7 @@ export const HangarView: React.FC<{ profile: UserProfile; onAction: Run; onMessa
         <div className="col-span-3 flex justify-center gap-2 flex-wrap">{group(['main', 'secondary'])}</div>
         <div className="flex flex-col gap-2">{group(['armor', 'engine'])}</div>
         <div className="relative rounded-xl overflow-hidden h-[9.5rem] md:h-48" style={{ background: 'radial-gradient(circle at 50% 45%, var(--c-bg-3), var(--c-bg-0))', border: '1px solid var(--c-line)' }} data-testid="hangar-stage">
-          <HangarPreview vehicle={vehicle} level={ch.level} drones={owned ? stats?.drones : undefined} skin={active ? ch.activeSkin : undefined} reduceMotion={reducedMotion} effects={!reducedMotion} />
+          <HangarPreview vehicle={vehicle} level={ch.level} drones={owned ? stats?.drones : undefined} skin={active ? ch.activeSkin : undefined} reduceMotion={reducedMotion} effects={previewEffects} />
         </div>
         <div className="flex flex-col gap-2">{group(['module'])}</div>
         <div className="col-span-3 flex justify-center gap-2 flex-wrap">{group(['drone'])}</div>

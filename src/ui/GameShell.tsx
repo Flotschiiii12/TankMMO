@@ -51,7 +51,7 @@ import { DamageNumberMerger, killFeedEntry, type KillFeedEntry } from './combatL
 import { impactLevel, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../render/combatFx.ts';
 import { GarageModal } from './GarageModal.tsx';
 import { InventoryModal } from './InventoryModal.tsx';
-import { dprCap, PerfMonitor } from './perfMonitor.ts';
+import { dprCap, graphicsQualityFor, GRAPHICS_PRESETS, needsInitialQualityProbe, PerfMonitor, StartupQualityProbe } from './perfMonitor.ts';
 import { useWindowFlag } from './wm/useWindows.ts';
 import { useNavPips } from './useNavPips.ts';
 import { WindowKeys } from './wm/WindowKeys.tsx';
@@ -65,7 +65,7 @@ import { ZoneTransition } from './title/ZoneTransition.tsx';
 import { applyFactionTheme, rarityStyle } from './kit/logic.ts';
 import { AnnounceHost, announcements } from './motion/AnnounceHost.tsx';
 import { diffAnnouncements, type ProgressSnapshot } from './motion/announce.ts';
-import { bossSlowMotionTime, isRevealRarity, prefersReducedMotion, shouldPlayRewardEffects } from './motion/motion.ts';
+import { bossSlowMotionTime, isRevealRarity, prefersReducedMotion, shouldPlayRewardEffects, systemPrefersReducedMotion } from './motion/motion.ts';
 import { MAP_METADATA_TABLE } from '../../shared/data/maps.ts';
 import { PortraitWarning } from './PortraitWarning.tsx';
 import { WorldMapModal } from './WorldMapModal.tsx';
@@ -109,6 +109,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   // Persistence
   const profileStoreRef = useRef(new LocalStorageProfileStore());
   const [profile, setProfile] = useState<UserProfile>(() => profileStoreRef.current.load());
+  const startupQualityProbeRef = useRef<StartupQualityProbe | null>(needsInitialQualityProbe(profile.settings) ? new StartupQualityProbe() : null);
   const [rewardFlash, setRewardFlash] = useState<{ id: number; color: string } | null>(null);
   const rewardFlashIdRef = useRef(0);
   const rewardEffectsEnabled = shouldPlayRewardEffects(profile.settings, prefersReducedMotion());
@@ -340,23 +341,27 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
   // Accessibility: reduced effects and UI scale follow the settings
   useEffect(() => {
-    const motionReduced = !!profile.settings.reduceMotion || prefersReducedMotion();
-    const lowFx = !!profile.settings.reducedEffects || !!profile.settings.performanceMode || motionReduced;
-    particlesRef.current.enabled = !profile.settings.reducedEffects && !motionReduced; // performance mode keeps the effects but caps them
-    particlesRef.current.setReduced(lowFx);
+    const quality = graphicsQualityFor(profile.settings);
+    const preset = GRAPHICS_PRESETS[quality];
+    const userMotionReduced = !!profile.settings.reduceMotion || systemPrefersReducedMotion();
+    const motionReduced = userMotionReduced || quality === 'off';
+    const lowFx = preset.reducedEffects || userMotionReduced;
+    const shakeQuality = userMotionReduced ? 0 : preset.shakeScale;
+    particlesRef.current.enabled = preset.particlesEnabled && !userMotionReduced;
+    particlesRef.current.setCaps(preset.particleCap, preset.treadCap, quality === 'low' || quality === 'off');
     particlesRef.current.setReducedMotion(motionReduced);
-    if (rendererRef.current) { rendererRef.current.reducedEffects = lowFx; rendererRef.current.plainGround = !!profile.settings.performanceMode; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
-    const shakeQuality = lowFx ? 0.3 : 1;
+    if (rendererRef.current) { rendererRef.current.reducedEffects = lowFx; rendererRef.current.plainGround = preset.plainGround; rendererRef.current.motionScale = preset.motionScale; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
     cameraRef.current.setShakeSettings(!!profile.settings.cameraShake && !motionReduced, (profile.settings.cameraShakeStrength ?? 0.5) * shakeQuality);
-    cameraRef.current.setMotionStrength(motionReduced ? 0 : (profile.settings.cameraMotion ?? 1) * (lowFx ? 0.35 : 1));
+    cameraRef.current.setMotionStrength(motionReduced ? 0 : (profile.settings.cameraMotion ?? 1) * preset.motionScale);
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
     document.documentElement.classList.toggle('reduced-effects', lowFx);
-  }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.reduceMotion, profile.settings.cameraShake, profile.settings.cameraShakeStrength, profile.settings.cameraMotion, profile.settings.uiScale, profile.settings.colorBlind]);
+    document.documentElement.classList.toggle('reduced-motion', !!profile.settings.reduceMotion || quality === 'off');
+    document.documentElement.classList.toggle('low-graphics', quality === 'low' || quality === 'off');
+  }, [profile.settings.graphicsQuality, profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.reduceMotion, profile.settings.cameraShake, profile.settings.cameraShakeStrength, profile.settings.cameraMotion, profile.settings.uiScale, profile.settings.colorBlind]);
   useEffect(() => { applyFactionTheme(profile.character.faction); }, [profile.character.faction]);
   const ambientMapId = online ? online.mapId : Number(profile.currentMapId) || 1;
   useEffect(() => { soundEngine.setAmbient(gameState === 'PLAYING' ? MAP_METADATA_TABLE[ambientMapId]?.biome : undefined); }, [ambientMapId, gameState]);
-  useEffect(() => { document.documentElement.classList.toggle('reduced-motion', !!profile.settings.reduceMotion); }, [profile.settings.reduceMotion]);
-  useEffect(() => { window.dispatchEvent(new Event('resize')); }, [profile.settings.performanceMode]); // re-applies the DPR cap
+  useEffect(() => { window.dispatchEvent(new Event('resize')); }, [profile.settings.graphicsQuality, profile.settings.performanceMode]); // re-applies the DPR cap
 
   // Rotate daily/weekly quests on start and when the level changes (more quests become eligible)
   useEffect(() => {
@@ -592,7 +597,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     let currentFps = 60;
 
     const handleResize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, dprCap(profileRef.current.settings.performanceMode));
+      const dpr = Math.min(window.devicePixelRatio || 1, dprCap(graphicsQualityFor(profileRef.current.settings)));
       const w = window.innerWidth;
       const h = window.innerHeight;
       canvas.width = w * dpr;
@@ -606,8 +611,19 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     window.addEventListener('resize', handleResize);
 
     const loop = (currentTime: number) => {
-      if (perfRef.current.frame(currentTime - lastTime)) perfActionRef.current();
-      const dt = Math.min((currentTime - lastTime) / 1000, 0.05);
+      const frameMs = currentTime - lastTime;
+      if (perfRef.current.frame(frameMs)) perfActionRef.current();
+      const selectedQuality = startupQualityProbeRef.current?.frame(frameMs) ?? null;
+      if (selectedQuality) {
+        startupQualityProbeRef.current = null;
+        const current = profileRef.current;
+        if (needsInitialQualityProbe(current.settings)) {
+          saveProfile({ ...current, settings: { ...current.settings, graphicsQuality: selectedQuality, qualityAutoDone: true } });
+        }
+      } else if (startupQualityProbeRef.current && !needsInitialQualityProbe(profileRef.current.settings)) {
+        startupQualityProbeRef.current = null;
+      }
+      const dt = Math.min(frameMs / 1000, 0.05);
       lastTime = currentTime;
       const slowStartedAt = bossSlowStartedAtRef.current;
       const presentationTime = slowStartedAt === null ? currentTime : bossSlowMotionTime(currentTime, slowStartedAt);
@@ -901,13 +917,15 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const profileRef = useRef(profile);
   profileRef.current = profile;
   const perfRef = useRef(new PerfMonitor());
-  /** Frames stayed above 22 ms for 5 s: switch to performance mode once (never again after the player decided) and say so. */
+  /** Frames stayed above 22 ms for 5 s: lower quality once unless the player chose a quality manually. */
   const perfActionRef = useRef<() => void>(() => {});
   perfActionRef.current = () => {
     const p = profileRef.current;
-    if (p.settings.performanceMode || p.settings.perfAutoDone) return;
-    saveProfile({ ...p, settings: { ...p.settings, performanceMode: true, perfAutoDone: true } });
-    showBanner(tr('Performance mode turned on because the game was running slowly. You can change it in Settings.'));
+    if (p.settings.qualityManual || p.settings.perfAutoDone) return;
+    const quality = graphicsQualityFor(p.settings);
+    if (quality === 'low' || quality === 'off') return;
+    saveProfile({ ...p, settings: { ...p.settings, graphicsQuality: 'low', qualityAutoDone: true, perfAutoDone: true } });
+    showBanner(tr('Graphics quality was lowered because the game was running slowly. You can change it in Settings.'));
   };
 
   /** Workshop/garage/quest actions: sent to the server when online, executed with the same shared rules when offline. */

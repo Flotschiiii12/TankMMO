@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dprCap, PerfMonitor } from '../src/ui/perfMonitor.ts';
+import { chooseInitialGraphicsQuality, dprCap, graphicsQualityFor, GRAPHICS_PRESETS, needsInitialQualityProbe, PerfMonitor, STARTUP_QUALITY_SAMPLE_COUNT, StartupQualityProbe } from '../src/ui/perfMonitor.ts';
 
 describe('performance mode trigger', () => {
   const run = (m: PerfMonitor, ms: number, seconds: number) => { let fired = 0; for (let t = 0; t < seconds * 1000; t += ms) if (m.frame(ms)) fired++; return fired; };
@@ -19,5 +19,31 @@ describe('performance mode trigger', () => {
     expect(m.frame(5000)).toBe(false); expect(m.frame(NaN)).toBe(false); expect(m.frame(-3)).toBe(false);
     expect(run(new PerfMonitor(), 40, 4.9)).toBe(0);
   });
-  it('the DPR cap drops from 2 to 1.5', () => { expect(dprCap(false)).toBe(2); expect(dprCap(undefined)).toBe(2); expect(dprCap(true)).toBe(1.5); });
+  it('uses the right DPR, particle and movement budgets for all four quality levels', () => {
+    expect(dprCap('high')).toBe(2); expect(dprCap('medium')).toBe(1.75); expect(dprCap('low')).toBe(1.35); expect(dprCap('off')).toBe(1);
+    expect(GRAPHICS_PRESETS.high.particleCap).toBeGreaterThan(GRAPHICS_PRESETS.medium.particleCap);
+    expect(GRAPHICS_PRESETS.medium.particleCap).toBeGreaterThan(GRAPHICS_PRESETS.low.particleCap);
+    expect(GRAPHICS_PRESETS.off.particlesEnabled).toBe(false);
+    expect(GRAPHICS_PRESETS.off.motionScale).toBe(0);
+  });
+  it('migrates legacy settings and only probes profiles without an explicit quality choice', () => {
+    expect(graphicsQualityFor({})).toBe('high');
+    expect(graphicsQualityFor({ performanceMode: true })).toBe('low');
+    expect(graphicsQualityFor({ reducedEffects: true })).toBe('low');
+    expect(graphicsQualityFor({ graphicsQuality: 'medium', performanceMode: true })).toBe('medium');
+    expect(needsInitialQualityProbe({})).toBe(true);
+    expect(needsInitialQualityProbe({ perfAutoDone: true })).toBe(false);
+    expect(needsInitialQualityProbe({ graphicsQuality: 'high' })).toBe(false);
+  });
+  it('selects startup quality from a short sample and ignores suspended-tab pauses', () => {
+    expect(chooseInitialGraphicsQuality(Array(STARTUP_QUALITY_SAMPLE_COUNT).fill(16.7))).toBe('high');
+    expect(chooseInitialGraphicsQuality(Array(STARTUP_QUALITY_SAMPLE_COUNT).fill(24))).toBe('medium');
+    expect(chooseInitialGraphicsQuality(Array(STARTUP_QUALITY_SAMPLE_COUNT).fill(35))).toBe('low');
+    expect(chooseInitialGraphicsQuality(Array(STARTUP_QUALITY_SAMPLE_COUNT).fill(80))).toBe('off');
+    const probe = new StartupQualityProbe();
+    expect(probe.frame(1000)).toBeNull();
+    for (let i = 0; i < STARTUP_QUALITY_SAMPLE_COUNT - 1; i++) expect(probe.frame(16.7)).toBeNull();
+    expect(probe.frame(16.7)).toBe('high');
+    expect(probe.frame(16.7)).toBeNull();
+  });
 });

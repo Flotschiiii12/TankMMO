@@ -11,10 +11,11 @@ import { soundEngine } from '../audio/soundEngine.ts';
 import { tr, T, currentLang, setLang } from '../i18n.ts';
 import { createGuest, clearCredential, detectServer, getCredential, recoverAccount, serverBase, setCredential } from '../net/connect.ts';
 import { OnlineGameClient } from '../net/onlineClient.ts';
-import { createDefaultProfile } from '../save/profile.ts';
+import { createDefaultProfile, LocalStorageProfileStore } from '../save/profile.ts';
 import { getVehicleById, STARTER_VEHICLE_ID } from '../data/vehicles.ts';
 import { HangarPreview } from './hangar/HangarPreview.tsx';
 import { prefersReducedMotion } from './motion/motion.ts';
+import { graphicsQualityFor, type GraphicsQuality } from './perfMonitor.ts';
 
 type Phase = 'probing' | 'welcome' | 'recover' | 'connecting' | 'error' | 'offline';
 
@@ -38,7 +39,14 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
   const [lost, setLost] = useState('');
   const started = useRef(false);
   const info = useServerInfo();
-  const reducedMotion = prefersReducedMotion();
+  const [savedSettings] = useState(() => new LocalStorageProfileStore().load().settings);
+  const graphicsQuality: GraphicsQuality = graphicsQualityFor(savedSettings);
+  const reducedMotion = !!savedSettings.reduceMotion || prefersReducedMotion() || graphicsQuality === 'low' || graphicsQuality === 'off';
+  useEffect(() => {
+    document.documentElement.classList.toggle('low-graphics', graphicsQuality === 'low' || graphicsQuality === 'off');
+    document.documentElement.classList.toggle('reduced-effects', graphicsQuality === 'low' || graphicsQuality === 'off');
+    document.documentElement.classList.toggle('reduced-motion', !!savedSettings.reduceMotion || graphicsQuality === 'off');
+  }, [graphicsQuality, savedSettings.reduceMotion]);
   useEffect(() => { if (!client) applyFactionTheme(faction); }, [faction, client]);
 
   const connect = useCallback(async (credential: string) => {
@@ -129,7 +137,7 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
       <div className="tt-col">
         <Logo tagline={tr('An online tank MMO. Your progress lives on the server.')} />
         <div className="tt-hero" data-testid="title-hero" aria-hidden>
-          <HangarPreview vehicle={getVehicleById(STARTER_VEHICLE_ID)} level={1} reduceMotion={reducedMotion} effects={!reducedMotion} />
+          <HangarPreview vehicle={getVehicleById(STARTER_VEHICLE_ID)} level={1} reduceMotion={reducedMotion} effects={!reducedMotion && (graphicsQuality === 'high' || graphicsQuality === 'medium')} />
         </div>
         <NewsPanel items={info.news} />
       </div>

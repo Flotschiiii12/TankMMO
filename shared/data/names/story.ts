@@ -24,6 +24,6 @@ export function buildStoryNames(): Table {
   out['story.speaker.dunmore'] = { en: 'Dunmore', de: 'Dunmore' };
   out['story.speaker.ael'] = { en: 'Sister Ael', de: 'Schwester Ael' };
   out['story.speaker.rook'] = { en: 'Rook', de: 'Rook' };
-  out['story.speaker.narrator'] = { en: '', de: '' };
+  out['story.speaker.narrator'] = { en: 'Narrator', de: 'Erzähler' };
   return out;
 }

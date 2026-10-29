@@ -15,7 +15,7 @@ export const SPEAKERS: Record<string, { name: string; icon: string }> = {
   ael: { name: 'Sister Ael', icon: 'repair' },
   rook: { name: 'Rook', icon: 'gate_key' },
   you: { name: 'You', icon: 'garage' },
-  narrator: { name: '', icon: 'daynight' },
+  narrator: { name: 'Narrator', icon: 'daynight' },
 };
 
 export const STORY_TEXT: Record<number, ChapterText> = {

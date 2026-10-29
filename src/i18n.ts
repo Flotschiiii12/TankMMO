@@ -492,6 +492,7 @@ const DE: Record<string, string> = {
   'Safe Zone': 'Sichere Zone', 'Chat (Enter)': 'Chat (Enter)', 'Message… (/w Name text)': 'Nachricht … (/w Name Text)',
   'Open Garage': 'Garage öffnen', 'Quests (J)': 'Aufträge (J)', 'Social (friends, party, clan)': 'Soziales (Freunde, Gruppe, Clan)', 'Inventory & Loadout (I)': 'Inventar & Ausrüstung (I)',
   'World Map & Fast Travel (M)': 'Weltkarte & Schnellreise (M)',
+  'World Map & Fast Travel': 'Weltkarte & Schnellreise',
   // inventory / workshop
   'Loadout & Workshop': 'Ausrüstung & Werkstatt', 'Gear': 'Ausrüstung', 'Craft': 'Herstellen', 'Equip': 'Anlegen', 'Unequip': 'Ablegen', 'Dismantle': 'Zerlegen', 'Safe mode': 'Sicherer Modus',
   'Select an item.': 'Wähle einen Gegenstand.', 'Nothing here yet. Enemies drop gear.': 'Noch nichts hier. Gegner lassen Ausrüstung fallen.', 'Scrap': 'Schrott', 'Iron': 'Eisen', 'Copper': 'Kupfer',
@@ -899,18 +900,22 @@ const DE: Record<string, string> = {
   'PvP Borderlands': 'PvP-Grenzland',
   // --- UI pass 2 ---
   'You are too far apart to trade': 'Ihr seid zu weit voneinander entfernt, um zu handeln',
+  'Talk to {name}': '{name} ansprechen',
 };
 
 const lang = getLang();
+/** English labels are the source strings; keep an explicit table so both locales have complete coverage. */
+export const EN_TABLE: Readonly<Record<string, string>> = Object.freeze(Object.fromEntries(Object.keys(DE).map((key) => [key, key])));
+/** The German table, exposed for the key-coverage test. */
+export const DE_TABLE: Readonly<Record<string, string>> = DE;
+
 /** Translate an English UI string. */
 export function tr(s: string, vars?: Record<string, string | number>): string {
-  const out = lang === 'de' ? DE[s] ?? s : s;
+  const out = (lang === 'de' ? DE_TABLE[s] : EN_TABLE[s]) ?? s;
   return vars ? out.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : out;
 }
 /** Marks a literal for translation without translating it now (tables whose values are passed through tr() later). */
 export const T = (s: string): string => s;
-/** The German table, exposed for the key-coverage test. */
-export const DE_TABLE: Readonly<Record<string, string>> = DE;
 export const currentLang = lang;
 
 

@@ -13,7 +13,7 @@ import { Tooltip } from '../kit/Tooltip.tsx';
 import { VirtualGrid } from '../kit/Virtual.tsx';
 import { RARITIES, rarityStyle } from '../kit/logic.ts';
 import { useWindowMode } from '../wm/useWindows.ts';
-import { CurrencyIcon } from '../GameIcon.tsx';
+import { CurrencyIcon, RarityGem } from '../GameIcon.tsx';
 import { ItemDetail, iconFor } from './ItemDetail.tsx';
 import { SortKey, dismantleReview, filterItems, sortItems, suggestDismantle } from './itemsLogic.ts';
 
@@ -42,7 +42,7 @@ export const GearTab: React.FC<{ ch: C.CharacterState; selected: string | null; 
       </div>
       <div className="overflow-x-auto"><SegmentedControl label={tr('Slot')} value={slot} onChange={setSlot} options={SLOTS.map((s) => ({ id: s, label: s === 'all' ? tr('All') : tr(s) }))} /></div>
       <div className="flex gap-1.5 flex-wrap" role="group" aria-label={tr('Rarity')}>
-        {RARITIES.map((r) => <button key={r} type="button" aria-pressed={rar.has(r)} onClick={() => toggleRar(r)} className="k-btn" style={{ padding: '0 10px', ['--b-line' as string]: rar.has(r) ? `var(${rarityStyle(r).cssVar})` : undefined, color: `var(${rarityStyle(r).cssVar})` }}>{tr(r)}</button>)}
+        {RARITIES.map((r) => <button key={r} type="button" aria-pressed={rar.has(r)} onClick={() => toggleRar(r)} className="k-btn" style={{ padding: '0 10px', ['--b-line' as string]: rar.has(r) ? `var(${rarityStyle(r).cssVar})` : undefined, color: `var(${rarityStyle(r).cssVar})` }}><RarityGem rarity={r.toLowerCase()} size={14} />{tr(r)}</button>)}
       </div>
       <div className="flex items-center gap-2">
         <div className="flex-1"><ProgressBar kind={ch.inventory.length >= cap ? 'bad' : 'accent'} value={ch.inventory.length} max={cap} label={`${ch.inventory.length} / ${cap}`} ariaLabel={tr('Inventory space')} /></div>

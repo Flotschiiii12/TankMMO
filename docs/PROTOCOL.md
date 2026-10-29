@@ -1,6 +1,6 @@
 # Treadfront — Network Protocol Specification
 
-**Protocol Version**: `1.0.0`
+**Protocol Version**: `1.2.0`
 **Transport**: WebSocket (`ws://` / `wss://`) + JSON / binary payload frame
 **Rates**:
 - Client Input Rate: Up to 30 Hz (batched commands with monotonic sequence number `seq`)
@@ -15,18 +15,18 @@
    ```json
    {
      "type": "c_join",
-     "protocolVersion": "1.0.0",
+     "protocolVersion": "1.2.0",
      "accountId": "usr_991823",
      "secret": "h4sh3ds3cr3t",
      "selectedVehicleId": "veh_starter_scout"
    }
    ```
-3. If `protocolVersion` does not match server requirement, server replies with `s_error` (`code: "ERR_VERSION_MISMATCH"`, `critical: true`) and closes connection.
+3. If `protocolVersion` is below the server's minimum (`1.2.0`), the server replies with `s_error` (`code: "update_required"`, `critical: true`) and closes the connection.
 4. On success, server replies with `s_welcome`:
    ```json
    {
      "type": "s_welcome",
-     "protocolVersion": "1.0.0",
+     "protocolVersion": "1.2.0",
      "assignedEntityId": 1042,
      "mapId": "green_valley",
      "serverTick": 18230
@@ -60,7 +60,7 @@ Supported `SimCommand` types:
 ```typescript
 interface ClientChatPacket {
   type: 'c_chat';
-  channel: 'G' | 'M' | 'F' | 'C' | 'P';
+  channel: 'G' | 'M' | 'F' | 'C' | 'A' | 'P' | 'W' | 'T';
   text: string;
   targetRecipient?: string;
 }

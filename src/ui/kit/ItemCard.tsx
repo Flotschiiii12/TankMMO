@@ -22,7 +22,7 @@ export const ItemCard = React.forwardRef<HTMLButtonElement, ItemCardProps>(({ ra
       {empty ? (slot ? <SlotIcon slot={slot} size={22} /> : null) : <>{icon}{!icon && <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>}</>}
       {!empty && upgrade > 0 && <span className="k-item__lvl">+{upgrade}</span>}
       {!empty && tier !== undefined && <span className="k-item__tag">T{tier}</span>}
-      {!empty && <span style={{ position: 'absolute', bottom: 2, right: 3 }}><RarityGem rarity={rarity.toLowerCase()} size={12} /></span>}
+      {!empty && <span style={{ position: 'absolute', bottom: 2, right: 3, zIndex: 1 }}><RarityGem rarity={rarity.toLowerCase()} size={14} /></span>}
     </button>
   );
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ParticleSystem, PARTICLE_CAP, REDUCED_PARTICLE_CAP, REDUCED_TREAD_CAP, dustColorForBiome } from '../src/render/particles.ts';
+import { damageNumberSize, ParticleSystem, PARTICLE_CAP, REDUCED_PARTICLE_CAP, REDUCED_TREAD_CAP, dustColorForBiome } from '../src/render/particles.ts';
 import { ammoLook, familyLook, impactLevel, lobHeight, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../src/render/combatFx.ts';
 
 const P = { x: 100, y: 100 };
@@ -77,6 +77,11 @@ describe('particle system caps', () => {
 });
 
 describe('combat look tables', () => {
+  it('scales damage numbers by damage and gives critical hits stronger emphasis', () => {
+    expect(damageNumberSize(1000)).toBeGreaterThan(damageNumberSize(10));
+    expect(damageNumberSize(100, true)).toBeGreaterThan(damageNumberSize(100));
+  });
+
   it('every ammo type and weapon family has a look, unknown ones fall back', () => {
     for (const a of ['STANDARD', 'REINFORCED', 'ARMOR_PIERCING', 'SHAPED_CHARGE', 'EXPLOSIVE']) expect(ammoLook(a).color).toMatch(/^#/);
     expect(new Set(['STANDARD', 'REINFORCED', 'ARMOR_PIERCING', 'SHAPED_CHARGE', 'EXPLOSIVE'].map((a) => ammoLook(a).color)).size).toBe(5);

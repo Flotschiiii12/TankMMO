@@ -14,6 +14,9 @@ export class Camera {
   private shakeDecay = 8.0;
   private shakeOffsetX = 0;
   private shakeOffsetY = 0;
+  private shakeElapsed = 0;
+  private shakeEnabled = false;
+  private shakeStrength = 0.5;
 
   public resize(width: number, height: number) {
     this.viewportWidth = width;
@@ -47,9 +50,19 @@ export class Camera {
     this.targetPos = target;
   }
 
+  public setShakeSettings(enabled: boolean, strength = 0.5) {
+    this.shakeEnabled = enabled;
+    this.shakeStrength = clamp(strength, 0, 1);
+    if (!enabled || this.shakeStrength === 0) {
+      this.shakeIntensity = 0;
+      this.shakeOffsetX = 0;
+      this.shakeOffsetY = 0;
+    }
+  }
+
   public addShake(amount: number) {
-    // Screen shake is disabled for good (it made the whole view wobble).
-    void amount;
+    if (!this.shakeEnabled || amount <= 0) return;
+    this.shakeIntensity = clamp(this.shakeIntensity + amount * this.shakeStrength, 0, 16);
   }
 
   public update(dt: number, mapWidth = 4000, mapHeight = 4000) {
@@ -61,15 +74,17 @@ export class Camera {
     // Smooth lerp zoom
     this.zoom = lerp(this.zoom, this.targetZoom, 8.0 * dt);
 
-    // Screen shake update
+    // Screen shake uses smooth deterministic motion and is opt-in in settings.
     if (this.shakeIntensity > 0.05) {
-      this.shakeOffsetX = (Math.random() - 0.5) * this.shakeIntensity * 2;
-      this.shakeOffsetY = (Math.random() - 0.5) * this.shakeIntensity * 2;
+      this.shakeElapsed += dt;
+      this.shakeOffsetX = Math.sin(this.shakeElapsed * 47) * this.shakeIntensity;
+      this.shakeOffsetY = Math.sin(this.shakeElapsed * 39 + 1.7) * this.shakeIntensity * 0.7;
       this.shakeIntensity = Math.max(0, this.shakeIntensity - this.shakeDecay * dt);
     } else {
       this.shakeIntensity = 0;
       this.shakeOffsetX = 0;
       this.shakeOffsetY = 0;
+      this.shakeElapsed = 0;
     }
 
     // Clamp camera within map bounds so edges don't show empty void

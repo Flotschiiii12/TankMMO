@@ -38,6 +38,8 @@ export interface UserProfile {
     musicEnabled?: boolean;
     ambientEnabled?: boolean;
     reduceMotion?: boolean; // no window/banner animations (also follows prefers-reduced-motion)
+    cameraShake?: boolean; // opt-in combat camera feedback
+    cameraShakeStrength?: number; // 0-1
     perfAutoDone?: boolean; // the automatic switch to performance mode has already happened once (never nag again)
   };
 }

@@ -9,19 +9,19 @@ export const BAR_DISTANCE = 1100;
 
 export interface PlateLod { name: boolean; bars: boolean }
 /** Level of detail of an enemy / player plate: no clutter for far, untouched vehicles. */
-export function plateLod(ent: Pick<SimEntity, 'hull' | 'maxHull' | 'armor' | 'maxArmor' | 'kind' | 'isElite'>, distance: number, isTarget: boolean): PlateLod {
+export function plateLod(ent: Pick<SimEntity, 'hull' | 'maxHull' | 'armor' | 'maxArmor' | 'kind' | 'isElite' | 'isHostile'>, distance: number, isTarget: boolean): PlateLod {
   const damaged = ent.hull < ent.maxHull - 0.5 || (ent.maxArmor > 0 && ent.armor < ent.maxArmor - 0.5);
   const important = isTarget || ent.kind === 'boss' || !!ent.isElite;
   return {
     name: important || distance <= NAME_DISTANCE,
-    bars: (isTarget || damaged || ent.kind === 'boss') && (important || distance <= BAR_DISTANCE),
+    bars: (isTarget || damaged || ent.kind === 'boss' || ent.isHostile) && (important || distance <= BAR_DISTANCE),
   };
 }
 
 // ------------------------------------------------------------------------------------------------ damage numbers
 
 export interface PendingNumber { x: number; y: number; amount: number; hits: number; crit: boolean; rear: boolean; armor: boolean; start: number }
-export interface MergedNumber { pos: Vec2; text: string; crit: boolean; rear: boolean; armor: boolean }
+export interface MergedNumber { pos: Vec2; text: string; amount: number; crit: boolean; rear: boolean; armor: boolean }
 export const MERGE_WINDOW_MS = 200;
 
 /** Hits on the same target within the window become one floating number ("-340 x3"), so a rapid-fire gun does not paint a wall of text. */
@@ -38,7 +38,7 @@ export class DamageNumberMerger {
     for (const [id, p] of this.pending) {
       if (!force && now - p.start < MERGE_WINDOW_MS) continue;
       this.pending.delete(id);
-      out.push({ pos: { x: p.x, y: p.y }, text: `-${Math.round(p.amount)}${p.hits > 1 ? ` x${p.hits}` : ''}`, crit: p.crit, rear: p.rear, armor: p.armor });
+      out.push({ pos: { x: p.x, y: p.y }, text: `-${Math.round(p.amount)}${p.hits > 1 ? ` x${p.hits}` : ''}`, amount: p.amount, crit: p.crit, rear: p.rear, armor: p.armor });
     }
     return out;
   }

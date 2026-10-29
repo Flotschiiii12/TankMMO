@@ -340,8 +340,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     particlesRef.current.setReduced(lowFx);
     particlesRef.current.setReducedMotion(motionReduced);
     if (rendererRef.current) { rendererRef.current.reducedEffects = lowFx; rendererRef.current.plainGround = !!profile.settings.performanceMode; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
+    const shakeQuality = lowFx ? 0.3 : 1;
+    cameraRef.current.setShakeSettings(!!profile.settings.cameraShake && !motionReduced, (profile.settings.cameraShakeStrength ?? 0.5) * shakeQuality);
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
-  }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.reduceMotion, profile.settings.uiScale, profile.settings.colorBlind]);
+  }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.reduceMotion, profile.settings.cameraShake, profile.settings.cameraShakeStrength, profile.settings.uiScale, profile.settings.colorBlind]);
   useEffect(() => { applyFactionTheme(profile.character.faction); }, [profile.character.faction]);
   const ambientMapId = online ? online.mapId : Number(profile.currentMapId) || 1;
   useEffect(() => { soundEngine.setAmbient(gameState === 'PLAYING' ? MAP_METADATA_TABLE[ambientMapId]?.biome : undefined); }, [ambientMapId, gameState]);
@@ -423,6 +425,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           }
           soundEngine.playImpact(event.armorDamage > 0, distanceVolume(distToPlayer(event.pos)));
           if (event.attackerId === clientRef.current?.playerId || event.targetId === clientRef.current?.playerId) lastCombatAt.current = performance.now();
+          if (event.attackerId === clientRef.current?.playerId) camera.addShake(event.isCrit ? 4 : 2);
           if (event.finalDamage > 0) mergerRef.current.add(event.targetId, event.pos, event.finalDamage, { crit: event.isCrit || event.isRearHit, armor: event.armorDamage > 0 }, performance.now());
           if (clientRef.current && event.targetId === clientRef.current.playerId) {
             camera.addShake(event.finalDamage > 400 ? 14 : 6);
@@ -644,7 +647,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             }
           }
 
-          for (const n of mergerRef.current.flush(performance.now())) particles.emitDamageText(n.pos, n.text, n.armor ? '#38bdf8' : '#ef4444', n.crit);
+          for (const n of mergerRef.current.flush(performance.now())) particles.emitDamageText(n.pos, n.text, n.armor ? '#38bdf8' : '#ef4444', n.crit, n.amount);
           camera.update(dt, 5000, 5000);
           particles.update(dt);
 

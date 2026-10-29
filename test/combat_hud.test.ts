@@ -5,10 +5,10 @@ import type { SimEntity } from '../shared/types.ts';
 const ent = (o: Partial<SimEntity>): SimEntity => ({ id: 1, kind: 'scout_buggy', name: 'E', level: 5, pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 }, hull: 100, maxHull: 100, armor: 50, maxArmor: 50, isHostile: true, statusEffects: [], radius: 20, ...o } as SimEntity);
 
 describe('name plate level of detail', () => {
-  it('untouched far enemies show nothing, near ones the name, damaged ones the bars, targets and bosses always', () => {
+  it('shows health bars for nearby enemies, damaged vehicles, targets and bosses without distant clutter', () => {
     const e = ent({});
     expect(plateLod(e, 2000, false)).toEqual({ name: false, bars: false });
-    expect(plateLod(e, NAME_DISTANCE - 1, false)).toEqual({ name: true, bars: false });
+    expect(plateLod(e, NAME_DISTANCE - 1, false)).toEqual({ name: true, bars: true });
     const hurt = ent({ hull: 60 });
     expect(plateLod(hurt, 900, false)).toEqual({ name: false, bars: true });
     expect(plateLod(hurt, 2500, false)).toEqual({ name: false, bars: false });
@@ -25,8 +25,8 @@ describe('damage number merging', () => {
     expect(m.flush(100)).toEqual([]); // window not over
     const out = m.flush(MERGE_WINDOW_MS + 100);
     expect(out).toHaveLength(2);
-    expect(out.find((n) => n.text.startsWith('-150'))).toMatchObject({ text: '-150 x2', crit: true, armor: false, pos: { x: 2, y: 2 } });
-    expect(out.find((n) => n.text === '-30')).toMatchObject({ armor: true });
+    expect(out.find((n) => n.text.startsWith('-150'))).toMatchObject({ text: '-150 x2', amount: 150, crit: true, armor: false, pos: { x: 2, y: 2 } });
+    expect(out.find((n) => n.text === '-30')).toMatchObject({ armor: true, amount: 30 });
     expect(m.size).toBe(0);
     m.add(7, { x: 0, y: 0 }, 10, {}, 1000);
     expect(m.flush(1000, true)).toHaveLength(1); // forced flush (e.g. on death)

@@ -1,4 +1,4 @@
-import { Vec2 } from '../sim/types.ts';
+import { clamp, Vec2 } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { spriteRegistry } from './assets.ts';
 import { drawRadialLight } from './lightSprites.ts';
@@ -27,6 +27,11 @@ const DUST_COLORS: Record<string, string> = {
 
 export function dustColorForBiome(biome?: string): string {
   return DUST_COLORS[biome ?? 'valley'];
+}
+
+export function damageNumberSize(amount: number, isCrit = false): number {
+  const scale = clamp(0.8 + Math.log10(Math.max(1, amount) / 10) * 0.14, 0.7, 1.5);
+  return (isCrit ? 19 : 13) * scale;
 }
 
 export interface Particle {
@@ -390,7 +395,7 @@ export class ParticleSystem {
     this.emitSmokePuff({ x: pos.x, y: pos.y - 8 }, this.reducedMode ? 7 : 12, this.reducedMode ? 0.65 : 1.2);
   }
 
-  public emitDamageText(pos: Vec2, text: string, color = '#ef4444', isCrit = false) {
+  public emitDamageText(pos: Vec2, text: string, color = '#ef4444', isCrit = false, damageAmount = 0) {
     const p = this.alloc(true);
     if (!p) return;
     p.type = 'damage_text';
@@ -398,7 +403,7 @@ export class ParticleSystem {
     p.y = pos.y - 15;
     p.vx = this.reducedMotion ? 0 : (Math.random() - 0.5) * 35;
     p.vy = this.reducedMotion ? 0 : isCrit ? -75 : -55; // Floats upwards faster on crits
-    p.size = isCrit ? 19 : 13;
+    p.size = damageNumberSize(damageAmount, isCrit);
     p.maxSize = p.size;
     p.life = isCrit ? 0.95 : 0.75;
     p.maxLife = p.life;

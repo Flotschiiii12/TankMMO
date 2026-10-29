@@ -47,6 +47,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, o
           <Row title={tr('Performance mode')} hint={tr('Lower resolution (max 1.5x), fewer effects, plain ground. Turns on by itself when the game runs slowly')}>
             <Toggle setting="performanceMode" label={tr('Performance mode')} on={!!s.performanceMode} onChange={(v) => set({ performanceMode: v, perfAutoDone: true })} />
           </Row>
+          <Row title={tr('Screen shake')} hint={tr('Camera shake on your shots and strong hits. Off by default.')}>
+            <Toggle setting="cameraShake" label={tr('Screen shake')} on={!!s.cameraShake} onChange={(v) => set({ cameraShake: v })} />
+          </Row>
+          <Row title={tr('Shake strength')}>
+            <Slider setting="cameraShakeStrength" label={tr('Shake strength')} min={0} max={1} step={0.1} value={s.cameraShakeStrength ?? 0.5} onChange={(cameraShakeStrength) => set({ cameraShakeStrength })} format={pct} />
+          </Row>
           <Row title={tr('Reduced effects')} hint={tr('No particles or tread marks (less motion, better on slow phones)')}>
             <Toggle setting="reducedEffects" label={tr('Reduced effects')} on={!!s.reducedEffects} onChange={(v) => set({ reducedEffects: v })} />
           </Row>
@@ -112,7 +118,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, o
           <Row title={tr('Colour-blind mode')} hint={tr('Radar uses amber instead of red for enemies')}>
             <Toggle setting="colorBlind" label={tr('Colour-blind mode')} on={!!s.colorBlind} onChange={(v) => set({ colorBlind: v })} />
           </Row>
-          <Row title={tr('Reduce motion')} hint={tr('Turns off window and banner animations. Also follows your system setting.')}>
+          <Row title={tr('Reduce motion')} hint={tr('Turns off window, banner and combat motion. Also follows your system setting.')}>
             <Toggle setting="reduceMotion" label={tr('Reduce motion')} on={!!s.reduceMotion} onChange={(v) => set({ reduceMotion: v })} />
           </Row>
           <Row title={tr('HUD scale')} hint={tr('Larger buttons and text on the HUD')}>

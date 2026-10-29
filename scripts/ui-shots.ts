@@ -18,6 +18,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
+import { PROTOCOL_VERSION } from '../shared/protocol.ts';
 
 const arg = (name: string, def = ''): string => { const i = process.argv.indexOf(`--${name}`); return i >= 0 ? (process.argv[i + 1] ?? '') : def; };
 const flag = (name: string): boolean => process.argv.includes(`--${name}`);
@@ -102,6 +103,30 @@ async function gameShots(browser: Browser, base: string, vp: { name: string; wid
   await page.locator('canvas').first().waitFor({ state: 'attached', timeout: 15_000 });
   await page.waitForTimeout(1800);
   await shot(page, lang, vp.name, faction, 'hud');
+  if (want('disconnected')) {
+    await page.evaluate(({ socketUrl, credential, protocolVersion }) => new Promise<void>((resolve, reject) => {
+      const [accountId, secret] = credential.split('.');
+      const socket = new WebSocket(socketUrl);
+      const timeout = window.setTimeout(() => { socket.close(); reject(new Error('duplicate login timed out')); }, 5000);
+      socket.onopen = () => socket.send(JSON.stringify({ type: 'c_join', protocolVersion, accountId, secret }));
+      socket.onmessage = (event) => {
+        if ((JSON.parse(String(event.data)) as { type?: string }).type !== 's_welcome') return;
+        window.setTimeout(() => {
+          window.clearTimeout(timeout);
+          socket.close();
+          resolve();
+        }, 250);
+      };
+      socket.onerror = () => {
+        window.clearTimeout(timeout);
+        reject(new Error('duplicate login failed'));
+      };
+    }), { socketUrl: `${base.replace(/^http/, 'ws')}/ws`, credential: g.credential as string, protocolVersion: PROTOCOL_VERSION });
+    await ctx.setOffline(true);
+    await page.getByTestId('reconnect-status').waitFor({ timeout: 20_000 });
+    await page.waitForTimeout(250);
+    await shot(page, lang, vp.name, faction, 'disconnected');
+  }
   for (const w of WINDOWS) {
     if (!want(w.screen) && !(w.screen === 'inventory' && want('workshop'))) continue;
     if (w.shift) await page.keyboard.press('Shift+Slash'); else await page.keyboard.press(w.key);

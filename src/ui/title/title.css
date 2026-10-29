@@ -115,5 +115,6 @@
   .tt-factiontext { min-height: 0; font-size: 11px; }
   .tt-news__list { max-height: 30vh; }
   .tt-card .tt-muted { display: none; }
+  .tt-card .tt-critical-message { display: block; }
   .tt-check { min-height: 36px; }
 }

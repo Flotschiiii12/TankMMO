@@ -12,6 +12,8 @@ import type { GameClient } from './client.ts';
 
 const INPUT_FLUSH_MS = 50;
 const PREDICT_DT = 1 / 30;
+const CONNECT_TIMEOUT_MS = 12_000;
+const PONG_TIMEOUT_MS = 15_000;
 
 export type OnlineStatus = 'connecting' | 'online' | 'closed';
 
@@ -50,6 +52,8 @@ export class OnlineGameClient implements GameClient {
   private actionWaiters = new Map<number, (r: { ok: boolean; error?: string }) => void>();
   private lastTick = 0;
   private serverTime = 0;
+  private lastPongAt = 0;
+  private intentionallyClosed = false;
   private stateTimes: number[] = [];
   private driveX = 0;
   private driveY = 0;
@@ -70,23 +74,45 @@ export class OnlineGameClient implements GameClient {
       const url = this.serverUrl.replace(/^http/, 'ws') + '/ws';
       this.ws = new WebSocket(url);
       let joined = false;
-      this.mapReady = () => { if (!joined && this.character && this.playerId) { joined = true; this.status = 'online'; resolve(); } };
+      let settled = false;
+      const connectTimeout = setTimeout(() => fail(new Error('connection_timeout'), true), CONNECT_TIMEOUT_MS);
+      const fail = (error: Error, closeSocket = false) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(connectTimeout);
+        reject(error);
+        if (closeSocket) this.ws.close();
+      };
+      this.mapReady = () => {
+        if (!settled && !joined && this.character && this.playerId) {
+          joined = true;
+          settled = true;
+          this.status = 'online';
+          clearTimeout(connectTimeout);
+          resolve();
+        }
+      };
       this.ws.onopen = () => {
+        if (settled) return;
         const [accountId, secret] = this.credential.split('.');
         this.ws.send(JSON.stringify({ type: 'c_join', protocolVersion: PROTOCOL_VERSION, accountId, secret }));
         this.flushTimer = setInterval(() => this.flushInput(), INPUT_FLUSH_MS);
-        this.pingTimer = setInterval(() => this.send({ type: 'c_ping', timestamp: Date.now() }), 2000);
+        this.lastPongAt = Date.now();
+        this.pingTimer = setInterval(() => {
+          if (Date.now() - this.lastPongAt > PONG_TIMEOUT_MS) { this.ws.close(4000, 'heartbeat_timeout'); return; }
+          this.send({ type: 'c_ping', timestamp: Date.now() });
+        }, 2000);
       };
       this.ws.onmessage = (ev) => this.onMessage(JSON.parse(ev.data as string) as ServerMessage);
-      this.ws.onerror = () => { if (!joined) reject(new Error('connection_failed')); };
+      this.ws.onerror = () => { if (!joined) fail(new Error('connection_failed'), true); };
       this.ws.onclose = (ev) => {
         this.status = 'closed';
         this.closeCode = ev.code;
         this.closeReason = ev.reason;
-        if (this.flushTimer) clearInterval(this.flushTimer);
-        if (this.pingTimer) clearInterval(this.pingTimer);
-        if (!joined) reject(new Error(ev.reason || `closed_${ev.code}`));
-        for (const h of this.closeHandlers) h();
+        if (this.flushTimer) { clearInterval(this.flushTimer); this.flushTimer = undefined; }
+        if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = undefined; }
+        if (!joined) fail(new Error(ev.reason || `closed_${ev.code}`));
+        if (!this.intentionallyClosed) for (const h of this.closeHandlers) h();
       };
     });
   }
@@ -147,7 +173,7 @@ export class OnlineGameClient implements GameClient {
         break;
       }
       case 's_social_event': for (const h of this.socialHandlers) h(m.kind, m.data); break;
-      case 's_pong': this.pingMs = Date.now() - m.originalTimestamp; break;
+      case 's_pong': this.lastPongAt = Date.now(); this.pingMs = Date.now() - m.originalTimestamp; break;
       case 's_error': this.closeReason = m.code; for (const h of this.errorHandlers) h(m.code); break;
     }
   }
@@ -278,7 +304,12 @@ export class OnlineGameClient implements GameClient {
   fastTravelToMap(): void {}
   updateProfile(): void {}
 
-  disconnect(): void { if (this.flushTimer) clearInterval(this.flushTimer); if (this.pingTimer) clearInterval(this.pingTimer); this.ws?.close(); }
+  disconnect(): void {
+    this.intentionallyClosed = true;
+    if (this.flushTimer) clearInterval(this.flushTimer);
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.ws?.close();
+  }
 
   getTickStats() {
     const n = this.stateTimes.length;

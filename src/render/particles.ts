@@ -1,7 +1,8 @@
-import { clamp, Vec2 } from '../sim/types.ts';
+import { clamp, Vec2, type AmmoType } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { spriteRegistry } from './assets.ts';
 import { drawRadialLight } from './lightSprites.ts';
+import { familyMuzzleStyle, getProjectileStyle } from './projectileStyles.ts';
 
 /** Hard cap of simultaneous particles; low quality lowers it to REDUCED_PARTICLE_CAP. */
 export const PARTICLE_CAP = 600;
@@ -224,6 +225,23 @@ export class ParticleSystem {
     if (leaveCrater) this.emitCrater(pos, pressureRadius * 0.45);
   }
 
+  /** Ammo-specific visual impact. The pool allocator enforces the active quality cap for every emission. */
+  public emitAmmoImpact(pos: Vec2, ammoType: AmmoType): void {
+    const impact = getProjectileStyle('cannon', ammoType).impact;
+    this.emitRing(pos, impact.pressureRadius, impact.color);
+    this.emitHitSparks(pos, impact.sparkCount, impact.color);
+    if (ammoType === 'EXPLOSIVE') {
+      this.emitRing(pos, impact.pressureRadius * 0.72, '#fca5a5');
+      this.emitCrater(pos, impact.pressureRadius * 0.38);
+    } else if (ammoType === 'ARMOR_PIERCING') {
+      this.emitRing(pos, impact.pressureRadius * 0.6, '#bae6fd');
+    } else if (ammoType === 'SHAPED_CHARGE') {
+      this.emitFlame(pos, 0);
+    } else if (ammoType === 'REINFORCED') {
+      this.emitRing(pos, impact.pressureRadius * 0.55, '#ffedd5');
+    }
+  }
+
   /** One grey smoke puff (rocket trail, backblast). */
   public emitSmokePuff(pos: Vec2, size = 7, life = 0.5) {
     const p = this.alloc();
@@ -243,33 +261,33 @@ export class ParticleSystem {
     }
   }
 
-  public emitMuzzleFlash(pos: Vec2, angle: number, family?: string) {
+  public emitMuzzleFlash(pos: Vec2, angle: number, family?: string, ammoType: AmmoType = 'STANDARD') {
+    const style = getProjectileStyle(family, ammoType);
+    const muzzle = familyMuzzleStyle(family);
     if (family === 'flamethrower') { this.emitFlame(pos, angle); return; }
-    if (family === 'railgun') this.emitRing(pos, 34, '#67e8f9');
+    if (family === 'railgun') this.emitRing(pos, 34, muzzle.color);
     if (family === 'rocket') { const back = { x: pos.x - Math.cos(angle) * 30, y: pos.y - Math.sin(angle) * 30 }; this.emitSmokePuff(back, 11, 0.6); this.emitSmokePuff(back, 9, 0.5); }
     if (family === 'mortar') this.emitSmokePuff(pos, 12, 0.7);
-    this.emitMuzzleSparks(pos, angle, this.reducedMode ? 1 : 4);
-    // Muzzle blast flare with random pick from fx_13-fx_17
+    this.emitMuzzleSparks(pos, angle, this.reducedMode ? 1 : 4, muzzle.color);
     const p = this.alloc();
     if (p) {
-      const flashNum = 13 + Math.floor(Math.random() * 5); // fx_13 to fx_17
       p.type = 'muzzle';
       p.x = pos.x;
       p.y = pos.y;
       p.vx = Math.cos(angle) * 70;
       p.vy = Math.sin(angle) * 70;
-      p.size = 18;
-      p.maxSize = 34;
+      p.size = muzzle.size * (this.reducedMode ? 0.65 : 0.55);
+      p.maxSize = muzzle.size;
       p.life = 0.08; // Short life, high kinetic pop
       p.maxLife = 0.08;
-      p.color = '#fbbf24';
+      p.color = muzzle.color;
       p.alpha = 1.0;
       p.angle = angle;
-      p.spriteId = `fx_${flashNum}`;
+      p.spriteId = muzzle.spriteId ?? undefined;
     }
 
     // A couple smoke puffs
-    for (let i = 0; i < (this.reducedMode ? 1 : 3); i++) {
+    for (let i = 0; i < (style.trail.smoke && !this.reducedMode ? 3 : this.reducedMode ? 0 : 1); i++) {
       const sp = this.alloc();
       if (!sp) break;
       const smokeAngle = angle + (Math.random() - 0.5) * 0.6;
@@ -282,14 +300,14 @@ export class ParticleSystem {
       sp.maxSize = 22;
       sp.life = 0.35 + Math.random() * 0.2;
       sp.maxLife = sp.life;
-      sp.color = '#71717a';
+      sp.color = style.glow;
       sp.alpha = 0.6;
       sp.angle = Math.random() * Math.PI * 2;
-      sp.spriteId = Math.random() > 0.5 ? 'fx_24' : 'fx_25';
+      sp.spriteId = 'fx_24';
     }
   }
 
-  private emitMuzzleSparks(pos: Vec2, angle: number, count: number): void {
+  private emitMuzzleSparks(pos: Vec2, angle: number, count: number, color: string): void {
     for (let i = 0; i < count; i++) {
       const p = this.alloc();
       if (!p) break;
@@ -304,7 +322,7 @@ export class ParticleSystem {
       p.maxSize = p.size;
       p.life = 0.12 + Math.random() * 0.1;
       p.maxLife = p.life;
-      p.color = i % 2 === 0 ? '#fde047' : '#fb923c';
+      p.color = color;
       p.alpha = 1;
       p.angle = sparkAngle;
       p.spriteId = undefined;

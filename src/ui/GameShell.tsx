@@ -395,7 +395,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           const isPlayer = !!clientRef.current && event.shooterId === clientRef.current.playerId;
           if (!event.isSecondary) {
             const family = clientRef.current?.getEntity(event.shooterId)?.weaponFamily;
-            particles.emitMuzzleFlash(event.pos, event.angle, family);
+            particles.emitMuzzleFlash(event.pos, event.angle, family, event.ammoType);
             rendererRef.current?.kickRecoil(event.shooterId, event.angle, performance.now() / 1000);
             soundEngine.playWeapon(weaponSoundFor(family), isPlayer, isPlayer ? 1 : distanceVolume(distToPlayer(event.pos)));
           }
@@ -441,6 +441,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
               16 + level * 12,
               level >= 2,
             );
+            particles.emitAmmoImpact(event.pos, event.ammoType);
             if (RING_BY_LEVEL[level]) particles.emitRing(event.pos, RING_BY_LEVEL[level], event.isCrit ? '#fde047' : '#f97316');
             if (event.isCrit) particles.emitRing(event.pos, 30, '#fde047');
             if (event.armorDamage > 0 && victim && victim.armor <= 1 && victim.maxArmor > 0) { particles.emitRing(event.pos, 44, '#38bdf8'); particles.emitDamageText(event.pos, tr('ARMOR BREAK'), '#38bdf8', true); }

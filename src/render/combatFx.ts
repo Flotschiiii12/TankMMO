@@ -4,28 +4,30 @@
  */
 import type { SimEntity } from '../../shared/types.ts';
 import type { Camera } from './camera.ts';
+import { familyProjectileScale, getProjectileStyle, type ProjectileShape } from './projectileStyles.ts';
 
 export interface AmmoLook { color: string; core: string; trail: number; width: number }
-export const AMMO_LOOK: Record<string, AmmoLook> = {
-  STANDARD: { color: '#fde047', core: '#fffbeb', trail: 22, width: 3 },
-  REINFORCED: { color: '#fdba74', core: '#fff7ed', trail: 24, width: 5 },
-  ARMOR_PIERCING: { color: '#38bdf8', core: '#f0f9ff', trail: 46, width: 2 },
-  SHAPED_CHARGE: { color: '#fb923c', core: '#fef3c7', trail: 30, width: 3.5 },
-  EXPLOSIVE: { color: '#ef4444', core: '#fecaca', trail: 26, width: 4.5 },
-};
+const AMMO_TYPES = ['STANDARD', 'REINFORCED', 'ARMOR_PIERCING', 'SHAPED_CHARGE', 'EXPLOSIVE'] as const;
+export const AMMO_LOOK: Record<string, AmmoLook> = Object.fromEntries(AMMO_TYPES.map((ammo) => {
+  const style = getProjectileStyle('cannon', ammo);
+  return [ammo, { color: style.glow, core: style.core, trail: style.trail.length, width: style.width }];
+}));
 
 export interface FamilyLook { scale: number; smoke: boolean; beam: boolean; arc: boolean; flame: boolean }
-export const FAMILY_LOOK: Record<string, FamilyLook> = {
-  cannon: { scale: 1, smoke: false, beam: false, arc: false, flame: false },
-  rapid_fire: { scale: 0.7, smoke: false, beam: false, arc: false, flame: false },
-  rocket: { scale: 1.25, smoke: true, beam: false, arc: false, flame: false },
-  mortar: { scale: 1.2, smoke: false, beam: false, arc: true, flame: false },
-  railgun: { scale: 0.8, smoke: false, beam: true, arc: false, flame: false },
-  flamethrower: { scale: 1.5, smoke: false, beam: false, arc: false, flame: true },
-};
-const DEFAULT_FAMILY: FamilyLook = FAMILY_LOOK.cannon;
+const FAMILY_NAMES = ['cannon', 'rapid_fire', 'rocket', 'mortar', 'railgun', 'flamethrower'] as const;
+export const FAMILY_LOOK: Record<string, FamilyLook> = Object.fromEntries(FAMILY_NAMES.map((family) => {
+  const style = getProjectileStyle(family);
+  return [family, {
+    scale: familyProjectileScale(family),
+    smoke: style.trail.smoke,
+    beam: style.trail.lightLine,
+    arc: style.rotation === 'tumble',
+    flame: style.trail.flame,
+  }];
+}));
+const DEFAULT_FAMILY: FamilyLook = FAMILY_LOOK.cannon!;
 export const familyLook = (family?: string): FamilyLook => (family && FAMILY_LOOK[family]) || DEFAULT_FAMILY;
-export const ammoLook = (ammo?: string): AmmoLook => (ammo && AMMO_LOOK[ammo]) || AMMO_LOOK.STANDARD;
+export const ammoLook = (ammo?: string): AmmoLook => (ammo && AMMO_LOOK[ammo]) || AMMO_LOOK.STANDARD!;
 
 /** Impact strength 0..3 from the share of the target's health that one hit removed (small hits stay subtle). */
 export function impactLevel(finalDamage: number, targetMaxHealth: number): 0 | 1 | 2 | 3 {
@@ -38,32 +40,127 @@ export const RING_BY_LEVEL = [0, 0, 36, 60] as const;
 /** Height of the mortar's visual lob (0..1..0) over its flight. */
 export const lobHeight = (travelled: number, total: number): number => { const k = Math.max(0, Math.min(1, travelled / Math.max(1, total))); return Math.sin(k * Math.PI); };
 
-export interface ShellDrawOptions { family?: string; now: number; reduced: boolean; smoke?: (x: number, y: number) => void }
+export interface ShellDrawOptions { family?: string; now: number; reduced: boolean; simplified?: boolean; smoke?: (x: number, y: number) => void }
 
 /** Draws the glow, trail and family detail BEHIND/AROUND a shell; the sprite itself is drawn by the caller. */
 export function drawShellTrail(ctx: CanvasRenderingContext2D, camera: Camera, proj: SimEntity, o: ShellDrawOptions): void {
-  const a = ammoLook(proj.selectedAmmo); const f = familyLook(o.family);
+  const style = getProjectileStyle(o.family, proj.selectedAmmo);
+  const f = familyLook(o.family);
   const s = camera.worldToScreen(proj.pos); const z = camera.zoom;
   const ang = Math.atan2(proj.vel.y, proj.vel.x);
-  const len = a.trail * f.scale * z;
+  const len = style.trail.length * z;
   const lob = f.arc ? lobHeight((proj as any).distanceTraveled ?? 0, (proj as any).maxDistance ?? 1) : 0;
   const lift = lob * 14 * z;
-  ctx.save();
-  ctx.translate(s.x, s.y - lift);
-  ctx.rotate(ang);
-  // trail: a fading streak behind the shell
-  const g = ctx.createLinearGradient(-len, 0, 0, 0);
-  g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, a.color);
-  ctx.fillStyle = g; ctx.fillRect(-len, -a.width * f.scale * z * 0.5, len, a.width * f.scale * z);
-  if (f.beam) { ctx.fillStyle = 'rgba(103,232,249,0.55)'; ctx.fillRect(-len * 3.2, -1.2 * z, len * 3.2, 2.4 * z); }
-  if (f.flame) { ctx.fillStyle = 'rgba(251,146,60,0.55)'; ctx.beginPath(); ctx.ellipse(-4 * z, 0, 14 * z, 7 * z, 0, 0, Math.PI * 2); ctx.fill(); }
-  // bright core
-  ctx.fillStyle = a.core; ctx.beginPath(); ctx.arc(0, 0, 2.2 * f.scale * z, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  if (f.arc) { // ground shadow shrinks while the shell is "high"
-    ctx.fillStyle = `rgba(0,0,0,${0.28 * (1 - lob * 0.5)})`; ctx.beginPath(); ctx.ellipse(s.x, s.y + 4 * z, (5 - lob * 2) * z, 2.2 * z, 0, 0, Math.PI * 2); ctx.fill();
+  if (!o.reduced && !o.simplified && len > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.translate(s.x, s.y - lift);
+    ctx.rotate(ang);
+    const g = ctx.createLinearGradient(-len, 0, 0, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, style.glow);
+    ctx.fillStyle = g;
+    ctx.globalAlpha = 0.68;
+    ctx.fillRect(-len, -style.width * z * 0.32, len, style.width * z * 0.64);
+    if (style.trail.lightLine) {
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = style.glow;
+      ctx.fillRect(-len * 3.2, -Math.max(1, z), len * 3.2, Math.max(2, 2 * z));
+    }
+    if (style.trail.flame) {
+      ctx.globalAlpha = 0.62;
+      ctx.fillStyle = style.glow;
+      ctx.beginPath();
+      ctx.ellipse(-4 * z, 0, 14 * z, 5 * z, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (style.trail.sparks) {
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = style.core;
+      ctx.lineWidth = Math.max(1, z);
+      ctx.beginPath();
+      ctx.moveTo(-len * 0.45, 0);
+      ctx.lineTo(-len * 0.22, -2 * z);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
-  if (f.smoke && !o.reduced && o.smoke && Math.sin(o.now * 40 + proj.id) > 0.2) o.smoke(proj.pos.x - Math.cos(ang) * 14, proj.pos.y - Math.sin(ang) * 14);
+  if (f.smoke && !o.reduced && !o.simplified && o.smoke && Math.sin(o.now * 40 + proj.id) > 0.2) {
+    o.smoke(proj.pos.x - Math.cos(ang) * 14, proj.pos.y - Math.sin(ang) * 14);
+  }
+  if (f.arc) {
+    ctx.fillStyle = `rgba(0,0,0,${0.28 * (1 - lob * 0.5)})`;
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y + 4 * z, (5 - lob * 2) * z, 2.2 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** Ammo glyphs use distinct silhouettes as well as color, including when a listed sprite is drawn beneath them. */
+export function drawProjectileGlyph(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, style: ReturnType<typeof getProjectileStyle>, zoom: number, now: number): void {
+  const turn = style.rotation === 'tumble' ? Math.sin(now * 10) * 0.3 : style.rotation === 'spin' ? now * 8 : 0;
+  const z = zoom;
+  const halfL = Math.max(3, style.length * z * 0.5);
+  const halfW = Math.max(2, style.width * z * 0.5);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.translate(x, y);
+  ctx.rotate(angle + turn);
+  ctx.fillStyle = style.glow;
+  ctx.strokeStyle = style.core;
+  ctx.lineWidth = Math.max(1, z);
+  ctx.beginPath();
+  drawAmmoSilhouette(ctx, style.shape, halfL, halfW);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = style.core;
+  ctx.beginPath();
+  ctx.arc(halfL * 0.22, 0, Math.max(1, halfW * 0.32), 0, Math.PI * 2);
+  ctx.fill();
+  if (style.shape === 'block') {
+    ctx.beginPath();
+    ctx.moveTo(-halfL * 0.35, -halfW * 0.45);
+    ctx.lineTo(halfL * 0.3, halfW * 0.45);
+    ctx.moveTo(-halfL * 0.35, halfW * 0.45);
+    ctx.lineTo(halfL * 0.3, -halfW * 0.45);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawAmmoSilhouette(ctx: CanvasRenderingContext2D, shape: ProjectileShape, halfL: number, halfW: number): void {
+  switch (shape) {
+    case 'round':
+      ctx.ellipse(0, 0, halfL * 0.72, halfW, 0, 0, Math.PI * 2);
+      break;
+    case 'block':
+      ctx.rect(-halfL * 0.75, -halfW, halfL * 1.5, halfW * 2);
+      break;
+    case 'dart':
+      ctx.moveTo(halfL, 0);
+      ctx.lineTo(-halfL * 0.65, -halfW * 0.45);
+      ctx.lineTo(-halfL * 0.4, 0);
+      ctx.lineTo(-halfL * 0.65, halfW * 0.45);
+      ctx.closePath();
+      break;
+    case 'cone':
+      ctx.moveTo(halfL, 0);
+      ctx.lineTo(-halfL * 0.7, -halfW);
+      ctx.lineTo(-halfL * 0.42, 0);
+      ctx.lineTo(-halfL * 0.7, halfW);
+      ctx.closePath();
+      break;
+    case 'burst':
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4;
+        const r = i % 2 === 0 ? halfL : halfL * 0.52;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r * Math.max(0.35, halfW / halfL);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      break;
+  }
 }
 
 const AURA_TYPES = ['burning', 'slowed', 'stunned', 'marked', 'smoked', 'boosted', 'repairing', 'invulnerable', 'fortified'] as const;

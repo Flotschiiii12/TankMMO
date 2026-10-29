@@ -1,6 +1,7 @@
 import { localizeEntityName } from '../i18n.ts';
 import { DroneRenderer } from './droneDraw.ts';
-import { drawAuras, drawShellTrail } from './combatFx.ts';
+import { drawAuras, drawProjectileGlyph, drawShellTrail } from './combatFx.ts';
+import { getProjectileStyle } from './projectileStyles.ts';
 import { plateLod, selectThreats } from '../ui/combatLogic.ts';
 import { clamp, MapDef, SimEntity, Vec2, dist } from '../sim/types.ts';
 import { Camera } from './camera.ts';
@@ -493,7 +494,7 @@ export class WorldRenderer {
     this.drones.drawFx(ctx, this.camera, clock);
 
     // 12. Render Projectiles (with shell trails)
-    this.renderProjectiles(ctx, entities);
+    this.renderProjectiles(ctx, entities, localPlayer);
 
     // 13. Render Particles & Floating Damage Numbers
     this.particles.renderParticles(ctx, this.camera, !this.reducedEffects && !motionReduced);
@@ -919,68 +920,63 @@ export class WorldRenderer {
     }
   }
 
-  private renderProjectiles(ctx: CanvasRenderingContext2D, entities: SimEntity[]) {
+  private renderProjectiles(ctx: CanvasRenderingContext2D, entities: SimEntity[], localPlayer: SimEntity | null) {
     const zoom = this.camera.zoom;
     this.byId.clear();
     for (const e of entities) if (e.kind !== 'projectile') this.byId.set(e.id, e);
 
-    for (const proj of entities) {
-      if (proj.kind !== 'projectile') continue;
-      const s = this.camera.worldToScreen(proj.pos);
-
-      if (
-        s.x < -30 ||
-        s.x > this.camera.viewportWidth + 30 ||
-        s.y < -30 ||
-        s.y > this.camera.viewportHeight + 30
-      ) {
-        continue;
-      }
-
-      const shooter = (proj as any).sourceEntityId !== undefined ? this.byId.get((proj as any).sourceEntityId) : undefined;
-      drawShellTrail(ctx, this.camera, proj, { family: shooter?.weaponFamily, now: performance.now() / 1000, reduced: this.reducedEffects, smoke: (x, y) => this.particles.emitSmokePuff({ x, y }, 6, 0.45) });
-      const isTracer = proj.name === 'MG Tracer' || (proj.radius && proj.radius <= 2);
-      const spritePath = spriteRegistry.getFxPath(isTracer ? 'fx_19' : 'fx_18');
-      const pImg = spriteRegistry.getImage(spritePath);
-
+    const visible: Array<{ projectile: SimEntity; screen: Vec2; shooter?: SimEntity }> = [];
+    for (const projectile of entities) {
+      if (projectile.kind !== 'projectile') continue;
+      const screen = this.camera.worldToScreen(projectile.pos);
+      if (screen.x < -30 || screen.x > this.camera.viewportWidth + 30 || screen.y < -30 || screen.y > this.camera.viewportHeight + 30) continue;
+      const shooter = projectile.sourceEntityId !== undefined ? this.byId.get(projectile.sourceEntityId) : undefined;
+      visible.push({ projectile, screen, shooter });
+    }
+    const simplifyTrails = this.reducedEffects || visible.length > 24;
+    for (const { projectile: proj, screen: s, shooter } of visible) {
+      const family = shooter?.weaponFamily;
+      const style = getProjectileStyle(family, proj.selectedAmmo);
+      const angle = Math.atan2(proj.vel.y, proj.vel.x);
+      drawShellTrail(ctx, this.camera, proj, {
+        family,
+        now: performance.now() / 1000,
+        reduced: this.reducedEffects,
+        simplified: simplifyTrails,
+        smoke: (x, y) => this.particles.emitSmokePuff({ x, y }, 6, 0.45),
+      });
+      const pImg = style.spriteId ? spriteRegistry.getImage(spriteRegistry.getFxPath(style.spriteId)) : null;
       if (pImg) {
         ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 0.72;
         ctx.translate(s.x, s.y);
-        ctx.rotate(proj.chassisAngle);
-        const pw = (isTracer ? 18 : 24) * zoom;
-        const ph = (isTracer ? 7 : 12) * zoom;
+        const rotation = style.rotation === 'tumble' ? Math.sin(performance.now() / 100) * 0.3 : style.rotation === 'spin' ? performance.now() / 100 : 0;
+        ctx.rotate(angle + rotation);
+        const pw = style.length * zoom;
+        const ph = style.width * zoom;
         ctx.drawImage(pImg, -pw / 2, -ph / 2, pw, ph);
         ctx.restore();
-        continue;
       }
 
-      // Vector fallback
-      ctx.save();
-      ctx.translate(s.x, s.y);
-      ctx.rotate(proj.chassisAngle);
-
-      // Trailing glow
-      if (proj.selectedAmmo === 'ARMOR_PIERCING') {
-        ctx.fillStyle = '#38bdf8';
-      } else if ((proj.selectedAmmo === 'EXPLOSIVE' || proj.selectedAmmo === 'SHAPED_CHARGE')) {
-        ctx.fillStyle = '#f97316';
-      } else {
-        ctx.fillStyle = '#fde047';
+      drawProjectileGlyph(ctx, s.x, s.y, angle, style, zoom, performance.now() / 1000);
+      const hostile = !!shooter && (shooter.isHostile || (
+        shooter.kind === 'player' && localPlayer?.kind === 'player' &&
+        (shooter.team !== undefined && localPlayer.team !== undefined
+          ? shooter.team !== localPlayer.team
+          : shooter.faction !== localPlayer.faction)
+      ));
+      if (hostile) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 0.82;
+        ctx.strokeStyle = '#fb7185';
+        ctx.lineWidth = Math.max(1, zoom * 1.1);
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y, Math.max(4, style.length * zoom * 0.72), Math.max(3, style.width * zoom * 0.9), angle, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
       }
-
-      const l = 12 * zoom;
-      const w = 3.5 * zoom;
-      ctx.fillRect(-l / 2, -w / 2, l, w);
-
-      // Trailing shell spark line
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(-l, 0);
-      ctx.lineTo(0, 0);
-      ctx.stroke();
-
-      ctx.restore();
     }
   }
 

@@ -42,7 +42,7 @@ import { pendingScene, seasonTier } from '../../shared/rules/quests.ts';
 import type { StoryScene } from '../../shared/data/story.ts';
 import { HintToast, HowToPlay, TutorialChip } from './Guidance.tsx';
 import { markShown, newHintMemory, nextHint, type HintState } from '../../shared/rules/hints.ts';
-import { tutorialStatus, tutorialFlag, questMarkers } from '../../shared/rules/quests.ts';
+import { questAvailable, tutorialStatus, tutorialFlag, questMarkers } from '../../shared/rules/quests.ts';
 import { TUTORIAL_STEPS } from '../../shared/data/quests.ts';
 import { WAR_MAPS } from '../../shared/sim/war.ts';
 import { activeEvents, eventAppliesToMap, worldBossSlot, WORLD_BOSS_PERIOD_SECONDS } from '../../shared/sim/events.ts';
@@ -327,10 +327,12 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       const ch = profileRef.current.character;
       const ammo = profileRef.current.ammoInventory as Record<string, number>;
       const special = Object.entries(ammo).filter(([k]) => k !== 'STANDARD').reduce((a, [, v]) => a + Math.max(0, v), 0);
+      const firstStoryQuest = QUEST_BY_ID.get('story_c1_q1');
       const s: HintState = {
         level: ch.level, mapId: Number(clientRef.current?.['mapId'] ?? 1), inSafeZone: isInClientSafeZone(def, me.pos), hullRatio: me.maxHull > 0 ? me.hull / me.maxHull : 1,
         inventoryFull: ch.inventory.length >= C.inventoryCapacity(ch), specialAmmo: special, specialAmmoJustRanOut: lastSpecialAmmo.current > 0 && special === 0,
         unspentTalentPoints: C.talentPointsAvailable(ch), tutorialDone: tutorialStatus(ch).step === undefined,
+        firstStoryAvailable: !!firstStoryQuest && !ch.quests.active[firstStoryQuest.id] && questAvailable(ch, firstStoryQuest),
       };
       lastSpecialAmmo.current = special;
       const h = nextHint(s, hintMemRef.current, Date.now() / 1000);

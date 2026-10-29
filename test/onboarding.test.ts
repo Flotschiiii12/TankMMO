@@ -67,13 +67,20 @@ describe('guided start state machine', () => {
 
   it('every step has a hint text and a German translation', () => {
     for (const s of TUTORIAL_STEPS) { expect(TUTORIAL_HINT_KEYS[s], s).toBeTruthy(); expect(DE_TABLE[TUTORIAL_HINT_KEYS[s]], TUTORIAL_HINT_KEYS[s]).toBeTruthy(); }
+    expect(TUTORIAL_HINT_KEYS.equip).toContain('HUD menu');
+    expect(TUTORIAL_HINT_KEYS.gate).toContain('Social menu');
     for (const h of HINTS) expect(DE_TABLE[h.textKey], h.textKey).toBeTruthy();
     expect(TUTORIAL_QUESTS).toHaveLength(TUTORIAL_STEPS.length);
   });
 });
 
 describe('contextual hints', () => {
-  const base: HintState = { level: 3, mapId: 1, inSafeZone: false, hullRatio: 1, inventoryFull: false, specialAmmo: 0, specialAmmoJustRanOut: false, unspentTalentPoints: 0, tutorialDone: false };
+  const base: HintState = { level: 3, mapId: 1, inSafeZone: false, hullRatio: 1, inventoryFull: false, specialAmmo: 0, specialAmmoJustRanOut: false, unspentTalentPoints: 0, tutorialDone: true, firstStoryAvailable: false };
+  it('keeps contextual hints out of the guided start and points to the first story quest afterward', () => {
+    const mem = newHintMemory();
+    expect(nextHint({ ...base, tutorialDone: false, hullRatio: 0.2, firstStoryAvailable: true }, mem, 0)).toBeUndefined();
+    expect(nextHint({ ...base, firstStoryAvailable: true }, mem, 0)?.id).toBe('first_story');
+  });
   it('fires for the situation, then respects cooldown and the lifetime cap', () => {
     const mem = newHintMemory();
     expect(nextHint(base, mem, 0)).toBeUndefined();

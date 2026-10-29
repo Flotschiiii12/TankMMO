@@ -25,7 +25,7 @@ export const TutorialChip: React.FC<{ step?: string; done: number; total: number
 export const HintToast: React.FC<{ text: string | null; onClose: () => void }> = ({ text, onClose }) => {
   if (!text) return null;
   return (
-    <div data-hud="hint" className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 hud-scale max-w-[min(360px,calc(100vw-30rem))]" data-testid="hint-toast">
+    <div data-hud="hint" className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 hud-scale max-w-[min(360px,calc(100vw-2rem))]" data-testid="hint-toast">
       <div className="flex items-start gap-2 rounded-lg border border-sky-500/60 bg-slate-950/90 px-3 py-2 text-[11px] text-slate-100">
         <span className="text-sky-300">💡</span><span className="leading-snug">{tr(text)}</span>
         <button data-compact className="ml-1 min-h-[44px] min-w-[44px] text-slate-400 hover:text-white" onClick={onClose} aria-label={tr('Close')}>✕</button>

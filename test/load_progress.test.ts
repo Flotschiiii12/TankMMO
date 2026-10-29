@@ -26,4 +26,10 @@ describe('loading screen', () => {
     expect(tipAt(-1, 'en')).toBe(TIPS[TIPS.length - 1].en);
     expect(tipAt(TIPS.length, 'de')).toBe(TIPS[0].de);
   });
+  it('keeps loading tips aligned with guided shots and current graphics settings', () => {
+    const terrainTip = TIPS.find((tip) => tip.en.startsWith('Walls and rocks'));
+    expect(terrainTip?.en).toContain('Shells can fly over obstacles');
+    expect(terrainTip?.de).toContain('Geschosse fliegen darüber hinweg');
+    expect(TIPS.some((tip) => tip.en.includes('Performance mode') || tip.de.includes('Leistungsmodus'))).toBe(false);
+  });
 });

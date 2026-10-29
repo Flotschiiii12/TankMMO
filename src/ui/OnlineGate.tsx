@@ -152,7 +152,7 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
               </button>
             ))}
           </div>
-          <p className="tt-factiontext">{tr(ST[faction])}</p>
+          <p className="tt-factiontext">{tr(ST[faction])}<br />{tr('Your faction determines your start region and appearance, not your combat stats.')}</p>
           <label className="tt-check">
             <input type="checkbox" checked={age} onChange={(e) => setAge(e.target.checked)} />
             {tr('I am at least 13 years old.')}

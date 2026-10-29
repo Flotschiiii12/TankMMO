@@ -52,7 +52,7 @@ export async function runNewbie(opts: { minutes: number; seed: number }): Promis
   const tick = async (n = 1) => { for (let i = 0; i < n; i++) { nowMs += 1000 / 30; ctx.game.stepAll(); } await new Promise((r) => setImmediate(r)); };
   while (!character || !me) await tick();
 
-  const first: Record<string, number | null> = { firstKill: null, firstLoot: null, level2: null, level3: null, level5: null, level10: null, firstCraft: null, firstEquip: null, tutorialDone: null, firstGateList: null };
+  const first: Record<string, number | null> = { firstKill: null, firstLoot: null, level2: null, level3: null, level5: null, level10: null, firstCraft: null, firstEquip: null, tutorialDone: null, firstGateList: null, firstStoryAccepted: null, firstStoryClaimed: null };
   const t0 = nowMs; const minutes = () => Math.round(((nowMs - t0) / 60000) * 10) / 10;
   const mark = (k: string) => { if (first[k] === null) first[k] = minutes(); };
   let kills = 0; let deaths = 0; let idleTicks = 0; let claimed = 0; let lastKillsStat = 0; let lastPos = { x: 0, y: 0 }; let moved = 0;
@@ -68,12 +68,18 @@ export async function runNewbie(opts: { minutes: number; seed: number }): Promis
   const maintenance = async () => {
     const ch = character!;
     // quests: claim what is ready, accept the next story quest
-    for (const aq of Object.values(ch.quests.active)) if (aq.ready) { const r = await act({ kind: 'claim_quest', questId: aq.id }); if (r?.ok) claimed++; }
+    for (const aq of Object.values(ch.quests.active)) if (aq.ready) {
+      const r = await act({ kind: 'claim_quest', questId: aq.id });
+      if (r?.ok) { claimed++; if (aq.id === 'story_c1_q1') mark('firstStoryClaimed'); }
+    }
     const st = tutorialStatus(ch);
     if (!st.step) mark('tutorialDone');
     if (!st.step) {
       const next = STORY_QUESTS.find((q) => Q.questAvailable(ch, q) && !ch.quests.active[q.id]);
-      if (next && Object.values(ch.quests.active).filter((x) => !x.id.startsWith('tut_') && QUEST_BY_ID.get(x.id)?.kind === 'story').length < 1) await act({ kind: 'accept_quest', questId: next.id });
+      if (next && Object.values(ch.quests.active).filter((x) => !x.id.startsWith('tut_') && QUEST_BY_ID.get(x.id)?.kind === 'story').length < 1) {
+        const r = await act({ kind: 'accept_quest', questId: next.id });
+        if (r?.ok && next.id === 'story_c1_q1') mark('firstStoryAccepted');
+      }
     }
     // workshop (only in the safe zone): craft the cheapest affordable thing, equip into empty slots
     const e = ownEntity();

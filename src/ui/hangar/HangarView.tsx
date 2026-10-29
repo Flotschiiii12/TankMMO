@@ -8,7 +8,7 @@ import { UserProfile } from '../../save/profile.ts';
 import { VEHICLE_TIERS } from '../../data/vehicles.ts';
 import { describeItem, errorText } from '../../game/actions.ts';
 import { soundEngine } from '../../audio/soundEngine.ts';
-import { FamilyIcon, SlotIcon } from '../GameIcon.tsx';
+import { FamilyIcon, SlotIcon, VehicleClassIcon } from '../GameIcon.tsx';
 import { Button } from '../kit/Button.tsx';
 import { ProgressBar } from '../kit/Indicators.tsx';
 import { StatRow } from '../kit/Currency.tsx';
@@ -133,7 +133,7 @@ export const HangarView: React.FC<{ profile: UserProfile; onAction: Run; onMessa
   const stage = (
     <div className="flex flex-col gap-2 min-w-0 min-h-0">
       <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0"><h3 className="font-bold text-base truncate">{vehicle.name}</h3><div className="text-[11px]" style={{ color: 'var(--accent-2)' }}>{tr('Tier ')}{vehicle.tier} · {tr('Min Level')} {meta.minLevel}</div></div>
+        <div className="min-w-0 flex items-center gap-2"><VehicleClassIcon vehicleClass={vehicle.vehicleClass} size={22} /><div className="min-w-0"><h3 className="font-bold text-base truncate">{vehicle.name}</h3><div className="text-[11px]" style={{ color: 'var(--accent-2)' }}>{tr(vehicle.vehicleClass.charAt(0).toUpperCase() + vehicle.vehicleClass.slice(1))} · {tr('Tier ')}{vehicle.tier} · {tr('Min Level')} {meta.minLevel}</div></div></div>
         {active ? <span className="k-badge k-badge--good">{tr('Deployed')}</span> : owned ? <Button onClick={() => { soundEngine.playUIClick(); void onAction({ kind: 'set_vehicle', vehicleId: vehicle.id }); }}>{tr('Deploy Vehicle')}</Button> : (
           <Button variant="primary" disabled={lockReasons(ch, vehicle.id).length > 0} onClick={async () => { soundEngine.playUIClick(); const r = await onAction({ kind: 'buy_vehicle', vehicleId: vehicle.id }); onMessage(r.ok ? '' : errorText(r.error || 'failed')); }}>{tr('Unlock')} ({meta.costScrap.toLocaleString()} {tr('Scrap')} · {Math.round(meta.costOre).toLocaleString()} {tr('Ore')})</Button>
         )}

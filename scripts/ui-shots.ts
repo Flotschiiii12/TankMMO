@@ -103,10 +103,15 @@ async function gameShots(browser: Browser, base: string, vp: { name: string; wid
   await page.waitForTimeout(1800);
   await shot(page, lang, vp.name, faction, 'hud');
   for (const w of WINDOWS) {
-    if (!want(w.screen)) continue;
+    if (!want(w.screen) && !(w.screen === 'inventory' && want('workshop'))) continue;
     if (w.shift) await page.keyboard.press('Shift+Slash'); else await page.keyboard.press(w.key);
     await page.waitForTimeout(500);
     await shot(page, lang, vp.name, faction, w.screen);
+    if (w.screen === 'inventory' && want('workshop')) {
+      await page.getByRole('tab', { name: /Workshop|Werkstatt/ }).click();
+      await page.waitForTimeout(300);
+      await shot(page, lang, vp.name, faction, 'workshop');
+    }
     await page.keyboard.press('Escape'); await page.waitForTimeout(200);
   }
   if (want('settings')) { // runs for `--screens settings` and for single tabs such as `settings_audio` (the shot() filter picks the tab)

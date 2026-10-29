@@ -40,6 +40,14 @@ export function FamilyIcon({ family, size = 14 }: { family: string; size?: numbe
   return name ? <SafeIcon name={name} size={size} label={family.replace(/_/g, ' ')} /> : null;
 }
 
+const VEHICLE_CLASS_ICON: Record<string, string> = {
+  scout: 'radar', medium: 'fam_cannon', heavy: 'shield', artillery: 'fam_mortar', support: 'repair',
+};
+export function VehicleClassIcon({ vehicleClass, size = 18 }: { vehicleClass: string; size?: number }) {
+  const name = VEHICLE_CLASS_ICON[vehicleClass];
+  return name ? <SafeIcon name={name} size={size} label={vehicleClass} /> : null;
+}
+
 /** Ammo type (as used by the sim) -> icon name. */
 export const AMMO_ICON: Record<string, string> = {
   STANDARD: 'ammo_standard', REINFORCED: 'ammo_reinforced', ARMOR_PIERCING: 'ammo_ap', SHAPED_CHARGE: 'ammo_shaped', EXPLOSIVE: 'ammo_explosive',

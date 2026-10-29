@@ -6,6 +6,7 @@ import { clamp, MapDef, SimEntity, Vec2, dist } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { ParticleSystem } from './particles.ts';
 import { spriteRegistry } from './assets.ts';
+import { isClanEmblem } from '../../shared/data/emblems.ts';
 import {
   drawEnemy,
   drawGate,
@@ -37,6 +38,7 @@ export class WorldRenderer {
   // Cached offscreen pattern canvases for high performance
   private terrainPatternCanvases = new Map<string, CanvasPattern>();
   private chunkCanvases = new Map<string, HTMLCanvasElement>();
+  private clanEmblemImages = new Map<string, HTMLImageElement>();
 
   constructor(camera: Camera, particles: ParticleSystem) {
     this.camera = camera;
@@ -898,7 +900,6 @@ export class WorldRenderer {
   }
 
   private renderNameplate(ctx: CanvasRenderingContext2D, ent: SimEntity) {
-    if (ent.kind === 'player') return;
     const s = this.camera.worldToScreen(ent.pos);
     const zoom = this.camera.zoom;
     const r = ent.radius * zoom;
@@ -919,7 +920,7 @@ export class WorldRenderer {
 
     const isHostile = ent.isHostile || (String(ent.kind) === 'player' && !!ent.faction && !!this.viewerFaction && ent.faction !== this.viewerFaction);
     const clan = ent.clanTag ? `[${ent.clanTag}] ` : '';
-    const label = `${clan}${String(ent.kind) === 'player' ? ent.name : localizeEntityName(ent.name)}`;
+    const label = `${clan}${ent.kind === 'player' ? ent.name : localizeEntityName(ent.name)}`;
 
     if (lod.name) {
       // Dark stroke outline so text is readable over sunlit grass & snow
@@ -929,6 +930,26 @@ export class WorldRenderer {
 
       ctx.fillStyle = isHostile ? (this.colorBlind ? '#fbbf24' : '#f87171') : '#60a5fa';
       ctx.fillText(label, 0, -6);
+      if (ent.kind === 'player' && ent.clanEmblem && isClanEmblem(ent.clanEmblem)) {
+        let image = this.clanEmblemImages.get(ent.clanEmblem);
+        if (!image) {
+          image = spriteRegistry.getImage(`/assets/badges/emblem_${ent.clanEmblem}.png`) ?? undefined;
+          if (image) this.clanEmblemImages.set(ent.clanEmblem, image);
+        }
+        if (image) {
+          const size = Math.max(12, Math.round(fontSize * 1.15));
+          ctx.drawImage(image, ctx.measureText(label).width / 2 + 3, -fontSize - 6, size, size);
+        }
+      }
+      if (ent.questGiverId) {
+        ctx.beginPath();
+        ctx.arc(0, -fontSize - 17, 9, 0, Math.PI * 2);
+        ctx.fillStyle = '#fbbf24';
+        ctx.fill();
+        ctx.fillStyle = '#1f2937';
+        ctx.font = `700 ${Math.max(12, fontSize)}px sans-serif`;
+        ctx.fillText('!', 0, -fontSize - 13);
+      }
     }
 
     const bubble = this.bubbles.get(ent.name);

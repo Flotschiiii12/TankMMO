@@ -790,6 +790,14 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     const snapshot = clientRef.current.getSnapshot();
     if (!snapshot) return;
 
+    const clickedQuestGiver = snapshot.entities.find((ent) => ent.questGiverId && ent.hull > 0 && dist(worldPos, ent.pos) <= ent.radius + 32);
+    if (clickedQuestGiver) {
+      const me = clientRef.current.getPredictedPlayer();
+      if (me && dist(me.pos, clickedQuestGiver.pos) <= 180) setQuestOpen(true);
+      else if (me) { moveTargetRef.current = { ...clickedQuestGiver.pos }; lastMoveSend.current = 0; }
+      return;
+    }
+
     // Find clicked enemy entity
     let clickedEntity: SimEntity | undefined;
     for (const ent of snapshot.entities) {
@@ -987,6 +995,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     currentMapDef && playerEntity && clientRef.current
       ? isInClientSafeZone(currentMapDef, playerEntity.pos)
       : false;
+  const nearbyQuestGiver = gameState === 'PLAYING' && playerEntity
+    ? activeSnapshot?.entities.find((ent) => !!ent.questGiverId && ent.hull > 0 && dist(playerEntity.pos, ent.pos) <= 180)
+    : undefined;
+  const questGiverScreenPos = nearbyQuestGiver ? cameraRef.current.worldToScreen(nearbyQuestGiver.pos) : null;
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-slate-950 font-sans select-none touch-none">
@@ -1046,6 +1058,16 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             navPips={navPips}
           />
 
+          {nearbyQuestGiver && questGiverScreenPos && !questOpen && (
+            <button
+              type="button"
+              onClick={() => setQuestOpen(true)}
+              className="absolute z-30 min-h-11 -translate-x-1/2 rounded-xl border px-3 text-sm font-bold shadow-lg"
+              style={{ left: questGiverScreenPos.x, top: Math.max(64, questGiverScreenPos.y - 72), borderColor: 'var(--accent)', background: 'var(--c-bg-1)', color: 'var(--c-text-1)' }}
+            >
+              {tr('Talk to {name}', { name: nearbyQuestGiver.name })}
+            </button>
+          )}
 
           <HintToast text={hint?.text ?? null} onClose={() => setHint(null)} />
           <LowHealthVignette me={playerEntity} />

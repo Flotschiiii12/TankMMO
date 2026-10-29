@@ -67,7 +67,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({ isOpen, onClose, c
       </div>
       <div className="flex flex-wrap gap-1.5">
         <Badge tone={fit === 'fit' ? 'good' : fit === 'too_high' ? 'bad' : fit === 'tough' ? 'warn' : 'neutral'}>Lv {meta.levelRange[0]}–{meta.levelRange[1]}</Badge>
-        {mk.safe && <Badge tone="good">🛡 {tr('Safe zone')}</Badge>}{mk.pvp && <Badge tone="bad">⚔ PvP</Badge>}{mk.war && <Badge tone="warn">⚑ {tr('Faction war')}</Badge>}{mk.gate && <Badge tone="accent">◈ {tr('Gate')}</Badge>}
+        {mk.safe && <Badge tone="good">🛡 {tr('Safe zone')}</Badge>}{mk.pvp && <Badge tone="bad">⚔ {tr('PvP')}</Badge>}{mk.war && <Badge tone="warn">⚑ {tr('Faction war')}</Badge>}{mk.gate && <Badge tone="accent">◈ {tr('Gate')}</Badge>}
         {meta.type === 'ARENA' && <Badge>{tr('Arena')}</Badge>}{known && <Badge>{tr(meta.weather)}</Badge>}
       </div>
       <div className="text-[12px]" style={{ color: fitColor }}>{fitText}</div>
@@ -116,7 +116,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({ isOpen, onClose, c
   );
 
   return (
-    <WindowFrame id="map" title="World Map & Fast Travel" width="min(1180px, 98vw)" height="min(780px, 95vh)" headerExtra={<div className="max-[1000px]:hidden"><SegmentedControl label={tr('Region')} value={filter} onChange={(v) => setFilter(v as Territory | 'all')} options={FILTERS.map(([l, v]) => ({ id: v, label: l === 'All' ? tr('All') : tr(T(l)) }))} /></div>}>
+    <WindowFrame id="map" title={tr('World Map & Fast Travel')} width="min(1180px, 98vw)" height="min(780px, 95vh)" headerExtra={<div className="max-[1000px]:hidden"><SegmentedControl label={tr('Region')} value={filter} onChange={(v) => setFilter(v as Territory | 'all')} options={FILTERS.map(([l, v]) => ({ id: v, label: l === 'All' ? tr('All') : tr(T(l)) }))} /></div>}>
       <div className={mode === 'sheet' ? 'h-full min-h-0' : 'grid gap-3 h-full min-h-0'} style={mode === 'sheet' ? undefined : { gridTemplateColumns: 'minmax(0, 1fr) 300px' }}>
         {canvas}
         {mode === 'sheet' ? <Modal open={sheet} sheet onClose={() => setSheet(false)} title={known ? nm(meta.nameKey, meta.name) : tr('Unknown zone')} closeLabel={tr('Close')}>{card}</Modal> : <div className="overflow-y-auto rounded-lg p-3" style={{ background: 'var(--c-bg-1)', border: '1px solid var(--c-line)' }}>{card}</div>}

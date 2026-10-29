@@ -11,7 +11,7 @@ const DE: Record<string, string> = {
   'Cannon T3': 'Kanone T3', Tooltips: 'Tooltips', 'Hover, focus or long-press me': 'Berühren, fokussieren oder lang drücken', 'Virtual list (5 000 rows)': 'Virtuelle Liste (5 000 Zeilen)',
   'Virtual grid (2 000 items)': 'Virtuelles Raster (2 000 Gegenstände)', Toasts: 'Hinweise', 'Show toast': 'Hinweis zeigen', 'Dialogs': 'Dialoge', 'Open dialog': 'Dialog öffnen', 'Open sheet': 'Sheet öffnen',
   'Empty states and loading': 'Leere Zustände und Laden', 'Nothing here yet': 'Noch nichts da', 'Loot some items and they will show up here.': 'Sammle Beute, dann erscheint sie hier.',
-  'Dialog title': 'Dialogtitel', 'Close': 'Schließen', 'This dialog traps focus. Escape closes it.': 'Dieser Dialog hält den Fokus. Escape schließt ihn.', 'Armor plating': 'Panzerplatte',
+  'Dialog title': 'Dialogtitel', 'Close': 'Schließen', 'This dialog traps focus. Escape closes it.': 'Dieser Dialog hält den Fokus. Escape schließt ihn.', 'Armor plating': 'Panzerplatte', Level: 'Stufe',
   'Painted frame slot': 'Platz für gemalten Rahmen', 'Falls back to CSS when no image is listed.': 'Fällt auf CSS zurück, wenn kein Bild gelistet ist.', Theme: 'Thema', Language: 'Sprache',
 };
 const params = () => new URLSearchParams((location.hash.split('?')[1] ?? ''));
@@ -47,7 +47,7 @@ export default function Gallery() {
           <div style={{ width: '100%', display: 'grid', gap: 8 }}>
             <ProgressBar kind="hull" value={640} max={960} label="640 / 960" large ghost={800} ariaLabel={g('Hull')} /><ProgressBar kind="armor" value={300} max={1240} ariaLabel={g('Armor')} /><ProgressBar kind="xp" value={45} max={100} ariaLabel={g('Experience')} />
           </div>
-          <Ring kind="hull" value={70} max={100}>70</Ring><Ring kind="armor" value={35} max={100} size={48}>35</Ring><Ring kind="xp" value={90} max={100} size={64}>Lv 7</Ring>
+          <Ring kind="hull" value={70} max={100}>70</Ring><Ring kind="armor" value={35} max={100} size={48}>35</Ring><Ring kind="xp" value={90} max={100} size={64}>{g('Level')} 7</Ring>
         </Section>
         <Section title="Badges">
           <Badge>{g('Secondary')}</Badge><Badge tone="accent">{g('New')}</Badge><Badge tone="good">{g('Good')}</Badge><Badge tone="warn">{g('Warning')}</Badge><Badge tone="bad">{g('Bad')}</Badge>

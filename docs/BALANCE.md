@@ -153,3 +153,5 @@ Since 2026-10-28 the numbers above are tuned against the real simulation instead
 Order after any change to stats or rules: `balance-classes`, `balance-fit` (paste the table), `balance-normalize --write`, `balance-bosses --write`, `balance-sim`, `npm test`. `test/balance.test.ts` fails when time-to-kill, class spread or boss/gate times leave their bands.
 
 Rule changes made for balance: the machine gun is at least 3 % of the main gun's damage per shot (`MG_MAIN_DAMAGE_RATIO`; before, it was 43 % of a tier-1 vehicle's damage but 7 % at tier 10 and was eaten by flat armor); item rarity/upgrades raise speed bonuses at most 1.5x (`MAX_SPEED_ITEM_MULT`; shells miss fast targets, so mirror duels took 50 s at tier 9); player-vs-player damage is x0.7 (`PVP_DAMAGE_MULT`); bosses get a machine gun scaled to their main gun; elites have 5.5x hull and 1.1x damage.
+
+The guard suite also simulates level-appropriate Sentinel drones, adding a Guardian when the vehicle has a second drone slot. At tiers 2, 5 and 8, both normal and elite time-to-kill remain within their target bands; see the drone-equipped case in `test/balance.test.ts`.

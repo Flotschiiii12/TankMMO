@@ -840,7 +840,7 @@ export class GameServer {
     s.clanTag = c?.tag;
     s.clanEmblem = c?.emblem;
     const e = s.instance?.world.entities.get(s.entityId);
-    if (e) e.clanTag = c?.tag ?? 'CMD';
+    if (e) { e.clanTag = c?.tag; e.clanEmblem = c?.emblem; }
   }
 
   private socialEvent(accountId: string, kind: any, data: any): void {
@@ -1075,10 +1075,12 @@ export class GameServer {
   }
 
   private buyAmmo(s: Session, ammo: AmmoType, packs: number): C.Result {
+    if (!Object.hasOwn(AMMO_PRICES, ammo)) return { ok: false, error: 'bad_request' };
     const price = AMMO_PRICES[ammo];
     const n = Math.floor(Number(packs));
     if (!price || !Number.isInteger(n) || n < 1 || n > 50) return { ok: false, error: 'bad_request' };
-    const cost = ammoCost(s.character, ammo, n)!;
+    const cost = ammoCost(s.character, ammo, n);
+    if (cost === undefined) return { ok: false, error: 'bad_request' };
     if (s.character.wallet.scrap < cost) return { ok: false, error: 'not_enough_scrap' };
     s.character.wallet.scrap -= cost;
     const ent = s.instance.world.entities.get(s.entityId);

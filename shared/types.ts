@@ -146,6 +146,8 @@ export interface SimEntity {
   kind: EntityKind;
   name: string;
   clanTag?: string;
+  clanEmblem?: string;
+  questGiverId?: string;
   /** sprite override for enemies without an archetype id (dungeon bosses: the gate id) */
   spriteId?: string;
   /** cosmetic skin id (see CharacterState.activeSkin) */
@@ -517,4 +519,3 @@ export interface MapDef {
     speedFactor: number;
   }>;
 }
-

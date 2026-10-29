@@ -22,7 +22,7 @@ export const FAMILIES = ['cannon', 'rapid_fire', 'rocket', 'mortar', 'railgun', 
 export const TIER_LEVELS = [1, 8, 16, 24, 34, 44, 56, 68, 80, 92]; // minLevel per vehicle tier (shared/data/vehicles.ts TIER_CONFIGS)
 export const NORMAL_ENEMIES = ['scout_buggy', 'gunner_truck', 'artillery', 'flak_wagon', 'engineer', 'ice_tank', 'swamp_crawler', 'lava_truck', 'sandstorm_raider'] as const;
 
-export interface Build { cls: VehicleClass; tier: number; family?: (typeof FAMILIES)[number]; level?: number; rarity?: ItemRarity; upgrade?: number }
+export interface Build { cls: VehicleClass; tier: number; family?: (typeof FAMILIES)[number]; level?: number; rarity?: ItemRarity; upgrade?: number; drones?: readonly ('guardian' | 'sentinel')[] }
 
 /** What a typical player at a given level wears: better rarity and upgrades as the game goes on; the machine gun comes with the first drops. */
 export function gearPolicy(level: number): { rarity: ItemRarity; upgrade: number; secondary: boolean } {
@@ -62,6 +62,13 @@ export function buildCharacter(b: Build): C.CharacterState {
   if (gear.secondary) fill('secondary', bestItem('machine_gun', level));
   fill('armor', bestItem('composite_armor', level));
   fill('engine', bestItem('speed_engine', level));
+  const droneSlots = C.slotKeysFor(vehicleId).filter((s) => s.type === 'drone');
+  const droneTier = Math.min(5, Math.floor((level + 14) / 18));
+  for (const [i, type] of (b.drones ?? []).slice(0, droneSlots.length).entries()) {
+    if (droneTier < 1) continue;
+    const made = C.createItem(ch, `drn_${type}_t${droneTier}`, rarity, rng);
+    if (made.ok) { made.item.upgrade = upgrade; ch.garage[0].loadout[droneSlots[i].key] = made.item.uid; }
+  }
   return ch;
 }
 

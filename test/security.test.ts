@@ -85,6 +85,17 @@ describe('WebSocket hardening', () => {
     expect(pongs).toBeLessThan(total);
     p.ws.close();
   });
+
+  it('applies the connection budget to action packets too', async () => {
+    const p = await join();
+    const total = MAX_MESSAGE_BURST * 3;
+    for (let i = 0; i < total; i++) p.ws.send(JSON.stringify({ type: 'c_action', id: 100_000 + i, action: { kind: 'unknown_action' } }));
+    await wait(300);
+    const results = p.msgs.filter((m) => m.type === 's_action_result' && m.id >= 100_000 && m.id < 100_000 + total);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBeLessThan(total);
+    p.ws.close();
+  });
 });
 
 describe('Rule input validation', () => {
@@ -99,6 +110,44 @@ describe('Rule input validation', () => {
     expect((await act({ kind: 'buy_ammo', ammo: 'REINFORCED', packs: 2 })).ok).toBe(true);
     expect(Number.isFinite(st.character.wallet.scrap)).toBe(true);
     expect(st.character.wallet.scrap).toBeLessThan(5000);
+    p.ws.close();
+  });
+
+  it('rejects prototype-like ammo IDs without changing currency or inventory', async () => {
+    const p = await join();
+    const st = ctx.game.getSessionState(p.id)!;
+    st.character.wallet.scrap = 0;
+    const ammoBefore = { ...st.entity.ammoInventory };
+    p.ws.send(JSON.stringify({ type: 'c_action', id: 1, action: { kind: 'buy_ammo', ammo: '__proto__', packs: 1 } }));
+    await p.until(() => p.msgs.some((m) => m.type === 's_action_result' && m.id === 1));
+    expect(p.msgs.find((m) => m.type === 's_action_result' && m.id === 1).ok).toBe(false);
+    expect(st.character.wallet.scrap).toBe(0);
+    expect(st.entity.ammoInventory).toEqual(ammoBefore);
+    p.ws.send(JSON.stringify({ type: 'c_action', id: 2, action: { kind: 'buy_ammo', ammo: 'REINFORCED', packs: 1 } }));
+    await p.until(() => p.msgs.some((m) => m.type === 's_action_result' && m.id === 2));
+    expect(p.msgs.find((m) => m.type === 's_action_result' && m.id === 2).ok).toBe(false);
+    expect(st.character.wallet.scrap).toBe(0);
+    p.ws.close();
+  });
+
+  it('rejects client-supplied item, recipe, and vehicle IDs without changing state', async () => {
+    const p = await join();
+    const st = ctx.game.getSessionState(p.id)!;
+    const inventoryBefore = structuredClone(st.character.inventory);
+    const walletBefore = structuredClone(st.character.wallet);
+    let id = 100;
+    for (const action of [
+      { kind: 'equip', vehicleId: st.character.activeVehicle, slot: 'main0', uid: '__proto__' },
+      { kind: 'craft', recipeId: '__proto__' },
+      { kind: 'buy_vehicle', vehicleId: '__proto__' },
+    ]) {
+      const requestId = ++id;
+      p.ws.send(JSON.stringify({ type: 'c_action', id: requestId, action }));
+      await p.until(() => p.msgs.some((m) => m.type === 's_action_result' && m.id === requestId));
+      expect(p.msgs.find((m) => m.type === 's_action_result' && m.id === requestId).ok).toBe(false);
+    }
+    expect(st.character.inventory).toEqual(inventoryBefore);
+    expect(st.character.wallet).toEqual(walletBefore);
     p.ws.close();
   });
 

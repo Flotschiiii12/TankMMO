@@ -48,9 +48,10 @@ export const AMMO_PRICES: Record<string, { pack: number; cost: number }> = {
 export const reputationLevel = C.reputationLevel;
 
 export function ammoCost(ch: C.CharacterState, ammo: string, packs: number): number | undefined {
+  if (!Object.hasOwn(AMMO_PRICES, ammo) || !Number.isInteger(packs) || packs < 1 || packs > 50) return undefined;
   const price = AMMO_PRICES[ammo];
-  if (!price) return undefined;
-  return Math.max(1, Math.round(price.cost * packs * (1 - 0.03 * reputationLevel(ch))));
+  const cost = Math.max(1, Math.round(price.cost * packs * (1 - 0.03 * reputationLevel(ch))));
+  return Number.isFinite(cost) ? cost : undefined;
 }
 
 export function executeAction(ch: C.CharacterState, a: ClientAction, rng: SimRNG, ctx: ActionContext): C.Result<any> {

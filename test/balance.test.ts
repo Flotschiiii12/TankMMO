@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLASSES, DUNGEONS, Build, duelPve, duelPvp, groupVsBoss, groupVsGate, tierForLevel } from '../scripts/balanceLib.ts';
+import { CLASSES, DUNGEONS, Build, TIER_LEVELS, duelPve, duelPvp, groupVsBoss, groupVsGate, tierForLevel } from '../scripts/balanceLib.ts';
 import { enemyScale, ENEMY_SCALE_ANCHORS } from '../shared/data/balance.ts';
 
 /**
@@ -53,6 +53,20 @@ describe('time to kill stays inside the design bands', () => {
     }
     expect(bad, bad.join('\n')).toEqual([]);
   });
+
+  it('normal and elite TTK stay in band with the level-appropriate sentinel and guardian drones', () => {
+    const normalBand = band([5, 15]); const eliteBand = band([30, 60]); const bad: string[] = [];
+    for (const tier of [2, 5, 8]) {
+      const level = Math.max(TIER_LEVELS[tier - 1], 4);
+      const drones = tier >= 6 ? ['sentinel', 'guardian'] as const : ['sentinel'] as const;
+      const b: Build = { cls: 'medium', tier, level, drones };
+      const normal = pve(b, ['scout_buggy', 'gunner_truck', 'ice_tank', 'lava_truck']);
+      if (!(normal.ttk >= normalBand[0] && normal.ttk <= normalBand[1]) || normal.win < 0.85) bad.push(`normal T${tier} with drones: ${normal.ttk.toFixed(1)} s, win ${(normal.win * 100).toFixed(0)}%`);
+      const elite = pve(b, ['gunner_truck'], true);
+      if (!(elite.ttk >= eliteBand[0] && elite.ttk <= eliteBand[1]) || elite.win < 0.75) bad.push(`elite T${tier} with drones: ${elite.ttk.toFixed(1)} s, win ${(elite.win * 100).toFixed(0)}%`);
+    }
+    expect(bad, bad.join('\n')).toEqual([]);
+  }, 120_000);
 
   it('PvP duels at equal tier last 20-40 s', () => {
     const [lo, hi] = band([20, 40]);

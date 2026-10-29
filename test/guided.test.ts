@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createStarterCharacterForServer } from '../server/starter.ts';
 import { getMapById } from '../shared/data/maps.ts';
 import { spawnPlayerFromCharacter } from '../shared/sim/playerEntity.ts';
-import { acquireTarget, createWorld, hashWorldState, spawnVehicle, stepWorld, World } from '../shared/sim/world.ts';
+import { acquireTarget, createWorld, fireMainCannon, hashWorldState, spawnVehicle, stepWorld, World } from '../shared/sim/world.ts';
 import type { SimCommand, SimEntity } from '../shared/types.ts';
 
 const NONE = new Map<number, SimCommand[]>();
@@ -80,6 +80,20 @@ describe('shots always hit', () => {
     const a0 = Math.atan2(s.vel.y, s.vel.x);
     for (let t = 0; t < 20; t++) stepWorld(w, NONE);
     expect(Math.atan2(s.vel.y, s.vel.x)).toBeCloseTo(a0, 6);
+  });
+
+  it('does not fire a locked shot through a solid obstacle', () => {
+    const { w, me, foe } = duel(600);
+    w.obstacles = [{ x: 1800, y: 2000, radius: 40, type: 'rock' }];
+    me.targetId = foe.id;
+    me.turretAngle = 0;
+    me.mainReloadRemaining = 0;
+    const ammoBefore = { ...me.ammoInventory };
+
+    expect(fireMainCannon(w, me)).toBe(false);
+    expect(shells(w)).toHaveLength(0);
+    expect(me.ammoInventory).toEqual(ammoBefore);
+    expect(me.mainReloadRemaining).toBe(0);
   });
 
   it('the fire button and auto-fire pick the nearest valid enemy and keep it', () => {

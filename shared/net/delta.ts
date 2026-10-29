@@ -17,7 +17,7 @@ export function compactEntity(e: SimEntity, coarse = false): SimEntity {
     const v = (e as any)[k];
     if (v === undefined) continue;
     if (typeof v === 'number') out[k] = k === 'chassisAngle' || k === 'turretAngle' ? round(v) : r(v);
-    else if (v && typeof v === 'object' && 'x' in (v as any) && 'y' in (v as any) && Object.keys(v as object).length === 2) out[k] = { x: r((v as any).x), y: r((v as any).y) };
+    else if (v && typeof v === 'object' && 'x' in (v as any) && 'y' in (v as any) && typeof (v as any).x === 'number' && typeof (v as any).y === 'number') out[k] = { x: r((v as any).x), y: r((v as any).y) };
     else out[k] = v;
   }
   return out as SimEntity;
@@ -59,10 +59,11 @@ export function diffEntity(prev: SimEntity | undefined, cur: SimEntity): EntityP
 function computeDiff(prev: SimEntity, cur: SimEntity): EntityPatch | undefined {
   const d: any = {};
   let changed = false;
-  for (const k of Object.keys(cur) as Array<keyof SimEntity>) {
+  for (const rawKey in cur) {
+    const k = rawKey as keyof SimEntity;
     if (!fieldEq(prev[k], cur[k])) { d[k] = cur[k]; changed = true; }
   }
-  for (const k of Object.keys(prev) as Array<keyof SimEntity>) if (!(k in cur)) { d[k] = null; changed = true; }
+  for (const rawKey in prev) if (!(rawKey in cur)) { d[rawKey] = null; changed = true; }
   return changed ? { id: cur.id, d } : undefined;
 }
 

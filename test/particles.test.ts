@@ -61,6 +61,17 @@ describe('particle system caps', () => {
     expect(ps.activeCount).toBe(1);
   });
 
+  it('keeps rarity reward beams inside the pool and suppresses them for reduced motion', () => {
+    const ps = new ParticleSystem();
+    ps.emitRewardBeam(P, '#a855f7');
+    expect(ps.activeCount).toBe(1);
+    ps.setReducedMotion(true);
+    ps.emitRewardBeam(P, '#facc15');
+    expect(ps.activeCount).toBe(1);
+    ps.update(2);
+    expect(ps.activeCount).toBe(0);
+  });
+
   it('matches dust to the biome and falls back to valley ground', () => {
     expect(dustColorForBiome('snow')).toBe('#d8e1e9');
     expect(dustColorForBiome('coastal')).not.toBe(dustColorForBiome('ash'));

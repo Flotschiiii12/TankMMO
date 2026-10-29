@@ -3,7 +3,7 @@ import { MusicDirector, STEPS_PER_BAR, buildBar, midiFreq, stepSeconds, type Mus
 
 export type UISound = 'click' | 'hover' | 'open' | 'close' | 'confirm' | 'deny' | 'tab' | 'toast' | 'equip' | 'coin';
 export type WeaponSound = 'cannon' | 'machinegun' | 'missile' | 'laser' | 'mortar';
-export type Fanfare = 'levelup' | 'rankup' | 'quest';
+export type Fanfare = 'levelup' | 'rankup' | 'quest' | 'boss';
 type NodeBus = Exclude<Bus, 'master'>;
 
 /**
@@ -216,9 +216,9 @@ export class SoundEngine {
   }
   public playUIClick() { this.playUI('click'); }
 
-  /** Short ascending phrases for level up (triad), rank up (wider, brighter) and quest complete (two-note resolve). */
+  /** Short ascending phrases for level up, rank up, quest completion and boss victory. */
   public playFanfare(kind: Fanfare) {
-    const seq: Record<Fanfare, number[]> = { levelup: [60, 64, 67, 72], rankup: [62, 67, 71, 74, 79], quest: [65, 72] };
+    const seq: Record<Fanfare, number[]> = { levelup: [60, 64, 67, 72], rankup: [62, 67, 71, 74, 79], quest: [65, 72], boss: [48, 55, 60, 67, 72] };
     seq[kind].forEach((m, i) => { const f = midiFreq(m); this.blip('interface', 'triangle', f, f, kind === 'quest' ? 0.35 : 0.22, 0.14, i * 0.11); this.blip('interface', 'sine', f * 2, f * 2, 0.2, 0.04, i * 0.11); });
   }
   /** Chime when loot is revealed: more notes the rarer it is. */

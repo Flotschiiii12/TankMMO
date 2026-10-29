@@ -62,10 +62,10 @@ import { TutorialOverlay } from './TutorialOverlay.tsx';
 import { DebugPanel } from './DebugPanel.tsx';
 import { TitleScreen } from './TitleScreen.tsx';
 import { ZoneTransition } from './title/ZoneTransition.tsx';
-import { applyFactionTheme } from './kit/logic.ts';
+import { applyFactionTheme, rarityStyle } from './kit/logic.ts';
 import { AnnounceHost, announcements } from './motion/AnnounceHost.tsx';
 import { diffAnnouncements, type ProgressSnapshot } from './motion/announce.ts';
-import { isRevealRarity, prefersReducedMotion } from './motion/motion.ts';
+import { bossSlowMotionTime, isRevealRarity, prefersReducedMotion, shouldPlayRewardEffects } from './motion/motion.ts';
 import { MAP_METADATA_TABLE } from '../../shared/data/maps.ts';
 import { PortraitWarning } from './PortraitWarning.tsx';
 import { WorldMapModal } from './WorldMapModal.tsx';
@@ -109,6 +109,10 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   // Persistence
   const profileStoreRef = useRef(new LocalStorageProfileStore());
   const [profile, setProfile] = useState<UserProfile>(() => profileStoreRef.current.load());
+  const [rewardFlash, setRewardFlash] = useState<{ id: number; color: string } | null>(null);
+  const rewardFlashIdRef = useRef(0);
+  const rewardEffectsEnabled = shouldPlayRewardEffects(profile.settings, prefersReducedMotion());
+  const triggerRewardFlash = (color: string) => setRewardFlash({ id: ++rewardFlashIdRef.current, color });
 
   // Game UI States
   const [gameState, setGameState] = useState<'TITLE' | 'PLAYING'>('TITLE');
@@ -136,6 +140,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [hint, setHint] = useState<{ id: string; text: string } | null>(null);
   const hintMemRef = useRef(newHintMemory());
   const lastSpecialAmmo = useRef(0);
+  const bossSlowStartedAtRef = useRef<number | null>(null);
   useEffect(() => { if (!online) return; const t = setInterval(() => setSpectating(online.spectating), 400); return () => clearInterval(t); }, [online]);
   const [, forceRender] = useState(0);
   const [partyNames, setPartyNames] = useState<string[]>([]);
@@ -345,6 +350,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     cameraRef.current.setShakeSettings(!!profile.settings.cameraShake && !motionReduced, (profile.settings.cameraShakeStrength ?? 0.5) * shakeQuality);
     cameraRef.current.setMotionStrength(motionReduced ? 0 : (profile.settings.cameraMotion ?? 1) * (lowFx ? 0.35 : 1));
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
+    document.documentElement.classList.toggle('reduced-effects', lowFx);
   }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.reduceMotion, profile.settings.cameraShake, profile.settings.cameraShakeStrength, profile.settings.cameraMotion, profile.settings.uiScale, profile.settings.colorBlind]);
   useEffect(() => { applyFactionTheme(profile.character.faction); }, [profile.character.faction]);
   const ambientMapId = online ? online.mapId : Number(profile.currentMapId) || 1;
@@ -400,7 +406,15 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         case 'dungeon_wave': { showBanner(`${tr('Wave')} ${event.wave} / ${event.total}`); gateRef.current = { wave: event.wave, total: event.total, endsAt: event.timeLeft != null ? Date.now() + event.timeLeft * 1000 : 0 }; setProgress('gate'); break; }
         case 'dungeon_cleared': { showBanner(tr('Gate cleared!')); setProgress(null); gateRef.current = null; break; }
         case 'dungeon_failed': { showBanner(`${tr('Gate failed')} (${tr(String(event.reason))})`); setProgress(null); gateRef.current = null; break; }
-        case 'boss_rewards': { showBanner(tr('Boss defeated')); break; }
+        case 'boss_rewards': {
+          showBanner(tr('Boss defeated'));
+          if (clientRef.current?.playerId != null && event.rewards.some((reward) => reward.entityId === clientRef.current?.playerId) && rewardEffectsEnabled) {
+            if (profile.settings.bossSlowMotion !== false) bossSlowStartedAtRef.current = performance.now();
+            if (profile.settings.rewardFlash !== false) triggerRewardFlash('#fef08a');
+            soundEngine.playFanfare('boss');
+          }
+          break;
+        }
         case 'explosion': {
           particles.emitExplosion(event.pos, true);
           particles.emitRing(event.pos, Math.min(160, event.radius ?? 80), '#f97316');
@@ -560,7 +574,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         }
       }
     },
-    [profile, saveProfile]
+    [profile, rewardEffectsEnabled, saveProfile]
   );
 
   // Main Render & Animation Loop
@@ -572,6 +586,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
     let animId: number;
     let lastTime = performance.now();
+    let lastPresentationTime = lastTime;
     let frameCount = 0;
     let lastFpsUpdate = performance.now();
     let currentFps = 60;
@@ -594,6 +609,11 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       if (perfRef.current.frame(currentTime - lastTime)) perfActionRef.current();
       const dt = Math.min((currentTime - lastTime) / 1000, 0.05);
       lastTime = currentTime;
+      const slowStartedAt = bossSlowStartedAtRef.current;
+      const presentationTime = slowStartedAt === null ? currentTime : bossSlowMotionTime(currentTime, slowStartedAt);
+      const presentationDt = Math.max(0, Math.min(0.05, (presentationTime - lastPresentationTime) / 1000));
+      lastPresentationTime = presentationTime;
+      if (slowStartedAt !== null && currentTime - slowStartedAt >= 1000) bossSlowStartedAtRef.current = null;
 
       frameCount++;
       if (currentTime - lastFpsUpdate >= 1000) {
@@ -608,7 +628,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       const particles = particlesRef.current;
 
       if (client && renderer) {
-        const snapshot = client.getSnapshot();
+        const snapshot = client.getSnapshot(presentationTime);
         const predictedPlayer = client.getPredictedPlayer();
 
         if (snapshot) {
@@ -658,8 +678,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           } else camera.setCombatFocus(false, false);
 
           for (const n of mergerRef.current.flush(performance.now())) particles.emitDamageText(n.pos, n.text, n.armor ? '#38bdf8' : '#ef4444', n.crit, n.amount);
-          camera.update(dt, 5000, 5000);
-          particles.update(dt);
+          camera.update(presentationDt, 5000, 5000);
+          particles.update(presentationDt);
 
           const currentMap = client['clientWorld']?.mapDef;
           if (currentMap) {
@@ -863,9 +883,18 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       if (a.kind === 'levelup') announcements.push({ kind: 'levelup', title: tr('Level up!'), sub: tr('You are now level {n}', { n: a.value }) });
       else if (a.kind === 'rankup') announcements.push({ kind: 'rankup', title: tr('Season rank up!'), sub: tr('Tier {n} reached', { n: a.value }) });
       else announcements.push({ kind: 'quest', title: tr('Quest complete'), sub: questName(String(a.value)) });
+      if (rewardEffectsEnabled && profile.settings.rewardFlash !== false) triggerRewardFlash(a.kind === 'quest' ? '#4ade80' : a.kind === 'rankup' ? '#c084fc' : '#34d399');
     }
     const itemRarity = (uid: string) => ch.inventory.find((i) => i.uid === uid)?.rarity;
-    for (const n of diffCharacter(prev, snap, itemName, questName, { levelUp: (lv) => tr('Level up! You are now level {n}', { n: lv }), xp: 'XP', scrap: tr('scrap'), fragments: tr('fragments'), ore: tr('ore'), honor: tr('honor'), questReady: tr('Quest ready') }, itemRarity)) { const made = notifications.push(n); if (made.rarity && made.count === 1 && isRevealRarity(made.rarity)) soundEngine.playLootReveal(made.rarity); }
+    for (const n of diffCharacter(prev, snap, itemName, questName, { levelUp: (lv) => tr('Level up! You are now level {n}', { n: lv }), xp: 'XP', scrap: tr('scrap'), fragments: tr('fragments'), ore: tr('ore'), honor: tr('honor'), questReady: tr('Quest ready') }, itemRarity)) {
+      const made = notifications.push(n);
+      if (made.rarity && made.count === 1 && isRevealRarity(made.rarity) && rewardEffectsEnabled) {
+        soundEngine.playLootReveal(made.rarity);
+        const player = clientRef.current?.getPredictedPlayer();
+        if (player) particlesRef.current.emitRewardBeam(player.pos, rarityStyle(made.rarity).hex);
+        if (profile.settings.rewardFlash !== false) triggerRewardFlash(rarityStyle(made.rarity).hex);
+      }
+    }
   }, [profile.character, gameState]); // eslint-disable-line react-hooks/exhaustive-deps
   // opening the garage by any route (menu, G key) completes the garage lesson of the guided start
   useEffect(() => { if (garageOpen) questEvent({ type: 'tutorial', step: 'garage' }); }, [garageOpen]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1038,6 +1067,14 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
         onPointerCancel={handlePointerUp}
         className="absolute inset-0 w-full h-full cursor-crosshair touch-none select-none"
       />
+      {gameState === 'PLAYING' && rewardFlash && (
+        <div
+          key={rewardFlash.id}
+          className="mo-reward-flash"
+          style={{ '--reward-flash': rewardFlash.color } as React.CSSProperties}
+          aria-hidden="true"
+        />
+      )}
 
       {/* Title Screen Overlay */}
       {gameState === 'TITLE' && (
@@ -1127,7 +1164,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
       <ChatWindow client={online ?? null} character={profile.character} myName={profile.character.name} />
       <ProfileWindow client={online ?? null} myName={profile.character.name} />
       {gameState === 'PLAYING' && <Banner text={banner} />}
-      {gameState === 'PLAYING' && <AnnounceHost />}
+      {gameState === 'PLAYING' && <AnnounceHost fanfareEnabled={rewardEffectsEnabled} />}
       <ZoneTransition mapId={online ? online.mapId : Number(profile.currentMapId) || 1} playing={gameState === 'PLAYING'} />
       {gameState === 'PLAYING' && <ProgressChip text={progress === 'arena' && arenaRef.current ? `${tr('Arena')} · ${tr('Round')} ${arenaRef.current.round} · ${arenaRef.current.wins.join(' - ')} · ${arenaRef.current.phase === 'fighting' ? '' : arenaRef.current.phase === 'break' ? `${tr('Break')} ` : `${tr('Start in')} `}${fmtClock(Math.max(0, (arenaRef.current.endsAt - Date.now()) / 1000))}` : progress === 'gate' && gateRef.current ? `${tr('Gate')} · ${tr('Wave')} ${gateRef.current.wave} / ${gateRef.current.total}${gateRef.current.endsAt ? ` · ${fmtClock((gateRef.current.endsAt - Date.now()) / 1000)}` : ''}` : progress} />}
       {gameState === 'PLAYING' && <BossBar player={playerEntity} entities={activeSnapshot?.entities || []} />}

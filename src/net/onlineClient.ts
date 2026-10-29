@@ -230,7 +230,7 @@ export class OnlineGameClient implements GameClient {
   onServerError(h: (code: string) => void): () => void { this.errorHandlers.add(h); return () => this.errorHandlers.delete(h); }
   onSocialEvent(h: (kind: string, data: any) => void): () => void { this.socialHandlers.add(h); return () => this.socialHandlers.delete(h); }
 
-  getSnapshot(): WorldSnapshot | null {
+  getSnapshot(renderTime = performance.now()): WorldSnapshot | null {
     const now = performance.now();
     const dt = Math.min(0.1, (now - this.lastPredict) / 1000);
     this.lastPredict = now;
@@ -238,7 +238,7 @@ export class OnlineGameClient implements GameClient {
     const list: SimEntity[] = [];
     for (const e of this.entities.values()) {
       if (e.id === this.playerId && this.predicted) { list.push(this.predicted); continue; }
-      const sm = this.interp.sample(e.id, now);
+      const sm = this.interp.sample(e.id, renderTime);
       if (sm) list.push({ ...e, pos: { x: sm.x, y: sm.y }, chassisAngle: sm.a, turretAngle: sm.ta });
       else list.push(e);
     }

@@ -20,6 +20,26 @@ export function prefersReducedMotion(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+export function shouldPlayRewardEffects(settings: { reducedEffects?: boolean; performanceMode?: boolean; reduceMotion?: boolean }, systemReducedMotion = false): boolean {
+  return !settings.reducedEffects && !settings.performanceMode && !settings.reduceMotion && !systemReducedMotion;
+}
+
+export function bossSlowMotionTime(now: number, startedAt: number): number {
+  const elapsed = now - startedAt;
+  const slowDuration = 500;
+  const recoveryDuration = 500;
+  const slowScale = 0.35;
+  const lostTime = slowDuration * (1 - slowScale);
+  if (!Number.isFinite(elapsed) || elapsed <= 0) return now;
+  if (elapsed < slowDuration) return now - elapsed * (1 - slowScale);
+  if (elapsed < slowDuration + recoveryDuration) {
+    const progress = (elapsed - slowDuration) / recoveryDuration;
+    const eased = progress * progress * (3 - 2 * progress);
+    return now - lostTime * (1 - eased);
+  }
+  return now;
+}
+
 export const RARITY_ORDER = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'] as const;
 export const rarityRank = (r: string | undefined): number => Math.max(0, RARITY_ORDER.indexOf(r as (typeof RARITY_ORDER)[number]));
 /** Items from Rare up get the reveal treatment (scale-in, glow, chime). */

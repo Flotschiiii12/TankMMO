@@ -9,7 +9,7 @@ import { WebSocketTransport } from './transport.ts';
 export interface GameClient {
   readonly playerId: number;
   sendCommand(command: SimCommand): void;
-  getSnapshot(): WorldSnapshot | null;
+  getSnapshot(renderTime?: number): WorldSnapshot | null;
   getEntity(id: number): SimEntity | undefined;
   getPredictedPlayer(): SimEntity | null;
   onEvent(handler: (event: SimEvent) => void): () => void;
@@ -237,7 +237,7 @@ export class LocalGameClient implements GameClient {
     }
   }
 
-  getSnapshot(): WorldSnapshot | null {
+  getSnapshot(_renderTime?: number): WorldSnapshot | null {
     return this.latestAuthoritativeSnapshot;
   }
 

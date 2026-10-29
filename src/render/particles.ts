@@ -36,7 +36,7 @@ export function damageNumberSize(amount: number, isCrit = false): number {
 
 export interface Particle {
   active: boolean;
-  type: 'dust' | 'muzzle' | 'spark' | 'smoke' | 'explosion' | 'damage_text' | 'ring' | 'crater';
+  type: 'dust' | 'muzzle' | 'spark' | 'smoke' | 'explosion' | 'damage_text' | 'ring' | 'crater' | 'reward_beam';
   x: number;
   y: number;
   vx: number;
@@ -186,6 +186,13 @@ export class ParticleSystem {
     if (!p) return;
     p.type = 'ring'; p.x = pos.x; p.y = pos.y; p.vx = 0; p.vy = 0;
     p.size = radius * 0.35; p.maxSize = radius; p.life = 0.32; p.maxLife = 0.32; p.color = color; p.alpha = 0.9; p.angle = 0; p.spriteId = undefined;
+  }
+
+  public emitRewardBeam(pos: Vec2, color: string): void {
+    const p = this.alloc();
+    if (!p) return;
+    p.type = 'reward_beam'; p.x = pos.x; p.y = pos.y; p.vx = 0; p.vy = 0;
+    p.size = 14; p.maxSize = 42; p.life = 1.4; p.maxLife = 1.4; p.color = color; p.alpha = 0; p.angle = 0; p.spriteId = undefined;
   }
 
   private emitCrater(pos: Vec2, radius: number): void {
@@ -450,6 +457,9 @@ export class ParticleSystem {
         p.alpha = (1 - progress) * 0.32;
       } else if (p.type === 'damage_text') {
         p.alpha = Math.min(1, (1 - progress) * 1.5);
+      } else if (p.type === 'reward_beam') {
+        p.size = 14 + 28 * progress;
+        p.alpha = Math.min(1, progress * 8) * (1 - progress) ** 1.4;
       } else {
         p.alpha = 1 - progress;
       }
@@ -588,6 +598,19 @@ export class ParticleSystem {
         ctx.beginPath();
         ctx.arc(s.x, s.y, scaledSize, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.restore();
+      } else if (p.type === 'reward_beam') {
+        const height = 150 * camera.zoom;
+        const width = Math.max(3, scaledSize * 0.7);
+        const gradient = ctx.createLinearGradient(0, s.y - height, 0, s.y);
+        gradient.addColorStop(0, 'transparent');
+        gradient.addColorStop(0.35, p.color);
+        gradient.addColorStop(1, 'transparent');
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = p.alpha * 0.45;
+        ctx.fillStyle = gradient;
+        ctx.fillRect(s.x - width / 2, s.y - height, width, height);
         ctx.restore();
       } else if (p.type === 'dust' || p.type === 'smoke') {
         const smokeImg = p.spriteId ? spriteRegistry.getImage(spriteRegistry.getFxPath(p.spriteId)) : null;

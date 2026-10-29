@@ -38,6 +38,8 @@ export interface UserProfile {
     musicEnabled?: boolean;
     ambientEnabled?: boolean;
     reduceMotion?: boolean; // no window/banner animations (also follows prefers-reduced-motion)
+    rewardFlash?: boolean; // brief visual flash on major rewards
+    bossSlowMotion?: boolean; // short client-only presentation slowdown on boss rewards
     cameraShake?: boolean; // opt-in combat camera feedback
     cameraShakeStrength?: number; // 0-1
     cameraMotion?: number; // 0-1 look-ahead and combat zoom strength

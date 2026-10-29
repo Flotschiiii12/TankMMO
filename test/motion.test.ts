@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { countUpDuration, countUpValue, easeOutCubic, isRevealRarity, rarityRank } from '../src/ui/motion/motion.ts';
+import { bossSlowMotionTime, countUpDuration, countUpValue, easeOutCubic, isRevealRarity, rarityRank, shouldPlayRewardEffects } from '../src/ui/motion/motion.ts';
 import { ANNOUNCE_MS, AnnounceStore, MAX_QUEUE, diffAnnouncements } from '../src/ui/motion/announce.ts';
 
 describe('motion maths', () => {
@@ -18,6 +18,27 @@ describe('motion maths', () => {
   it('rare and above are revealed', () => {
     expect(rarityRank('Legendary')).toBe(4); expect(rarityRank('nope')).toBe(0);
     expect(isRevealRarity('Rare')).toBe(true); expect(isRevealRarity('Uncommon')).toBe(false); expect(isRevealRarity(undefined)).toBe(false);
+  });
+  it('slows remote presentation for a boss reward and smoothly catches up without changing world time', () => {
+    const start = 1000;
+    expect(bossSlowMotionTime(start + 250, start)).toBeCloseTo(start + 87.5);
+    expect(bossSlowMotionTime(start + 500, start)).toBeCloseTo(start + 175);
+    expect(bossSlowMotionTime(start + 750, start)).toBeGreaterThan(start + 500);
+    expect(bossSlowMotionTime(start + 1000, start)).toBe(start + 1000);
+    expect(bossSlowMotionTime(start - 10, start)).toBe(start - 10);
+    let previous = start;
+    for (let elapsed = 0; elapsed <= 1000; elapsed += 10) {
+      const current = bossSlowMotionTime(start + elapsed, start);
+      expect(current).toBeGreaterThanOrEqual(previous);
+      previous = current;
+    }
+  });
+  it('only enables reward effects at full quality and without reduced motion', () => {
+    expect(shouldPlayRewardEffects({})).toBe(true);
+    expect(shouldPlayRewardEffects({ reducedEffects: true })).toBe(false);
+    expect(shouldPlayRewardEffects({ performanceMode: true })).toBe(false);
+    expect(shouldPlayRewardEffects({ reduceMotion: true })).toBe(false);
+    expect(shouldPlayRewardEffects({}, true)).toBe(false);
   });
 });
 

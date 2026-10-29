@@ -59,6 +59,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, o
           <Row title={tr('Reduced effects')} hint={tr('No particles or tread marks (less motion, better on slow phones)')}>
             <Toggle setting="reducedEffects" label={tr('Reduced effects')} on={!!s.reducedEffects} onChange={(v) => set({ reducedEffects: v })} />
           </Row>
+          <Row title={tr('Reward screen flash')} hint={tr('Brief color flash on level-ups, rare loot and major victories.')}>
+            <Toggle setting="rewardFlash" label={tr('Reward screen flash')} on={s.rewardFlash !== false} onChange={(v) => set({ rewardFlash: v })} />
+          </Row>
+          <Row title={tr('Boss slow motion')} hint={tr('Briefly slows visual presentation after a boss reward; the simulation keeps running normally.')}>
+            <Toggle setting="bossSlowMotion" label={tr('Boss slow motion')} on={s.bossSlowMotion !== false} onChange={(v) => set({ bossSlowMotion: v })} />
+          </Row>
           <Row title={tr('Developer Diagnostics Overlay (F3)')} hint={tr('Displays real-time FPS, tick time, and entity counts')}>
             <Toggle setting="showDebug" label={tr('Developer Diagnostics Overlay (F3)')} on={!!s.showDebug} onChange={(v) => set({ showDebug: v })} />
           </Row>

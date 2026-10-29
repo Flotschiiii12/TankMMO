@@ -82,9 +82,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, o
           <Row title={tr('Music')}><Toggle setting="musicEnabled" label={tr('Music')} on={s.musicEnabled !== false} onChange={(v) => set({ musicEnabled: v })} /></Row>
           <Row title={tr('Ambience')} hint={tr('Wind, surf and rumble that match the zone.')}><Toggle setting="ambientEnabled" label={tr('Ambience')} on={s.ambientEnabled !== false} onChange={(v) => set({ ambientEnabled: v })} /></Row>
           <Row title={tr('Test sounds')}>
-            <Button onClick={() => soundEngine.playWeapon('cannon', true)}>{tr('Weapon')}</Button>
-            <Button onClick={() => soundEngine.playUI('confirm')}>{tr('Interface')}</Button>
-            <Button onClick={() => soundEngine.playFanfare('levelup')}>{tr('Fanfare')}</Button>
+            <Button onClick={() => { soundEngine.init(); soundEngine.playWeapon('cannon', true); }}>{tr('Weapon')}</Button>
+            <Button onClick={() => { soundEngine.init(); soundEngine.playUI('confirm'); }}>{tr('Interface')}</Button>
+            <Button onClick={() => { soundEngine.init(); soundEngine.playFanfare('levelup'); }}>{tr('Fanfare')}</Button>
           </Row>
         </div>
       )}

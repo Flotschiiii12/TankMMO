@@ -31,7 +31,7 @@ import { MarketWindow } from './items/MarketWindow.tsx';
 import { useTouchLayout } from './useTouchLayout.ts';
 import { Banner, BossBar, ProgressChip } from './Overlays.tsx';
 import { soundEngine } from '../audio/soundEngine.ts';
-import { distanceVolume, mixFromSettings, weaponSoundFor } from '../audio/mixer.ts';
+import { distanceVolume, engineWeightFor, mixFromSettings, weaponSoundFor } from '../audio/mixer.ts';
 import type { MusicInputs } from '../audio/music.ts';
 import { AmmoType, dist, SimCommand, SimEntity, SimEvent } from '../sim/types.ts';
 import { HUD } from './HUD.tsx';
@@ -625,7 +625,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             // Engine sound updates based on vehicle speed
             const speed = Math.hypot(player.vel.x, player.vel.y);
             const speedRatio = player.maxSpeed > 0 ? speed / player.maxSpeed : 0;
-            soundEngine.updateEngine(speedRatio);
+            soundEngine.updateEngine(speedRatio, engineWeightFor(player.vehicleClass));
             musicAcc.current += dt;
             if (musicAcc.current >= 0.25) { // adaptive music: a few updates per second are plenty
               let hostilesNear = 0; let bossNear = false;

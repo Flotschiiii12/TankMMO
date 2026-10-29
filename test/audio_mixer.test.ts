@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MIX, busGain, clamp01, distanceVolume, effectiveGain, mixFromSettings } from '../src/audio/mixer.ts';
+import { DEFAULT_MIX, busGain, clamp01, distanceVolume, effectiveGain, engineWeightFor, mixFromSettings } from '../src/audio/mixer.ts';
 import { COMBAT_LINGER, MIN_DWELL, MusicDirector, SCALE_MINOR, SPEC, ROOT_MIDI, STEPS_PER_BAR, buildBar, midiFreq, rng, stepSeconds, type MusicInputs } from '../src/audio/music.ts';
 
 const calmIn: MusicInputs = { inSafeZone: false, hostilesNear: 0, inCombat: false, bossNear: false };
@@ -16,11 +16,23 @@ describe('mixer', () => {
   it('clamps and survives garbage', () => {
     expect(clamp01(5)).toBe(1); expect(clamp01(-2)).toBe(0); expect(clamp01(NaN, 0.3)).toBe(0.3); expect(clamp01('x', 0.2)).toBe(0.2);
     const m = mixFromSettings({ masterVolume: 9, musicVolume: -1 });
-    expect(m.master).toBe(1); expect(m.music).toBe(0); expect(m.effects).toBe(1); expect(m.enabled).toBe(true);
+    expect(m.master).toBe(1); expect(m.music).toBe(0); expect(m.effects).toBe(DEFAULT_MIX.effects); expect(m.enabled).toBe(true);
     expect(mixFromSettings({ soundEnabled: false }).enabled).toBe(false);
     expect(mixFromSettings({}).music).toBe(DEFAULT_MIX.music);
   });
-  it('music defaults low', () => { expect(DEFAULT_MIX.music).toBeLessThanOrEqual(0.35); });
+  it('balances music and interface levels below combat effects', () => {
+    expect(DEFAULT_MIX.music).toBeLessThanOrEqual(0.35);
+    expect(DEFAULT_MIX.music).toBeLessThan(DEFAULT_MIX.interface);
+    expect(DEFAULT_MIX.interface).toBeLessThan(DEFAULT_MIX.effects);
+    expect(effectiveGain(DEFAULT_MIX, 'music')).toBeLessThan(effectiveGain(DEFAULT_MIX, 'effects'));
+  });
+  it('gives heavier vehicle classes a deeper engine profile', () => {
+    expect(engineWeightFor('scout')).toBeLessThan(engineWeightFor('medium'));
+    expect(engineWeightFor('medium')).toBeLessThan(engineWeightFor('support'));
+    expect(engineWeightFor('support')).toBeLessThan(engineWeightFor('artillery'));
+    expect(engineWeightFor('artillery')).toBeLessThan(engineWeightFor('heavy'));
+    expect(engineWeightFor(undefined)).toBe(engineWeightFor('medium'));
+  });
   it('distance volume falls off smoothly to silence', () => {
     expect(distanceVolume(0)).toBe(1); expect(distanceVolume(300)).toBe(1); expect(distanceVolume(1800)).toBe(0); expect(distanceVolume(5000)).toBe(0);
     const a = distanceVolume(600), b = distanceVolume(1200);

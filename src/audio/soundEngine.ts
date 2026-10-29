@@ -18,6 +18,7 @@ export class SoundEngine {
   private engineOsc: OscillatorNode | null = null;
   private engineFilter: BiquadFilterNode | null = null;
   private engineGain: GainNode | null = null;
+  private reverb: ConvolverNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
   private mix: Mix = { ...DEFAULT_MIX };
   private initialized = false;
@@ -40,6 +41,7 @@ export class SoundEngine {
       this.master.connect(this.ctx.destination);
       for (const b of ['music', 'effects', 'interface'] as const) { const g = this.ctx.createGain(); g.connect(this.master); this.buses[b] = g; }
       this.applyMix(this.mix, true);
+      this.initReverb();
       this.initEngineSound();
       this.initialized = true;
       this.syncMusic();
@@ -79,24 +81,49 @@ export class SoundEngine {
   }
 
   // ------------------------------------------------------------------ building blocks
-  private blip(bus: NodeBus, type: OscillatorType, f0: number, f1: number, dur: number, vol: number, delay = 0, volume = 1) {
+  private blip(bus: NodeBus, type: OscillatorType, f0: number, f1: number, dur: number, vol: number, delay = 0, volume = 1, reverbSend = 0) {
     const ctx = this.ready(); const dest = this.out(bus); if (!ctx || !dest) return;
     const t = ctx.currentTime + delay;
     const osc = ctx.createOscillator(); const g = ctx.createGain();
     osc.type = type; osc.frequency.setValueAtTime(f0, t);
     if (f1 !== f0) osc.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
     g.gain.setValueAtTime(vol * volume, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    osc.connect(g); g.connect(dest); osc.start(t); osc.stop(t + dur + 0.02);
+    osc.connect(g); g.connect(dest);
+    if (reverbSend > 0) this.sendToReverb(g, osc, reverbSend);
+    osc.start(t); osc.stop(t + dur + 0.02);
   }
-  private noise(bus: NodeBus, dur: number, vol: number, cutoff: number, delay = 0, volume = 1, type: BiquadFilterType = 'lowpass') {
+  private noise(bus: NodeBus, dur: number, vol: number, cutoff: number, delay = 0, volume = 1, type: BiquadFilterType = 'lowpass', reverbSend = 0) {
     const ctx = this.ready(); const dest = this.out(bus); if (!ctx || !dest) return;
     try {
       const t = ctx.currentTime + delay;
       const src = ctx.createBufferSource(); src.buffer = this.noiseBuffer(ctx);
       const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(cutoff, t);
       const g = ctx.createGain(); g.gain.setValueAtTime(vol * volume, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      src.connect(f); f.connect(g); g.connect(dest); src.start(t, Math.random() * 0.5, dur + 0.02);
+      src.connect(f); f.connect(g); g.connect(dest);
+      if (reverbSend > 0) this.sendToReverb(g, src, reverbSend);
+      src.start(t, Math.random() * 0.5, dur + 0.02);
     } catch { /* noise is optional */ }
+  }
+  private initReverb() {
+    if (!this.ctx || !this.buses.effects) return;
+    const ctx = this.ctx; const convolver = ctx.createConvolver(); const length = Math.floor(ctx.sampleRate * 0.32);
+    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+    convolver.normalize = false;
+    for (let channel = 0; channel < impulse.numberOfChannels; channel++) {
+      const data = impulse.getChannelData(channel);
+      for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / length) ** 3;
+    }
+    convolver.buffer = impulse;
+    const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 1400;
+    const returnGain = ctx.createGain(); returnGain.gain.value = 0.18;
+    convolver.connect(tone); tone.connect(returnGain); returnGain.connect(this.buses.effects);
+    this.reverb = convolver;
+  }
+  private sendToReverb(source: AudioNode, lifetime: AudioScheduledSourceNode, amount: number) {
+    if (!this.ctx || !this.reverb) return;
+    const send = this.ctx.createGain(); send.gain.value = amount;
+    source.connect(send); send.connect(this.reverb);
+    lifetime.addEventListener('ended', () => send.disconnect(), { once: true });
   }
   private noiseBuffer(ctx: AudioContext): AudioBuffer {
     if (!this.noiseBuf) {
@@ -136,8 +163,9 @@ export class SoundEngine {
     const pitch = (Math.random() - 0.5) * 15; const v = volume;
     switch (kind) {
       case 'cannon':
+        this.blip('effects', 'sine', isPlayer ? 96 : 82, 28, 0.34, isPlayer ? 0.2 : 0.14, 0, v, 0.2);
         this.blip('effects', 'triangle', (isPlayer ? 180 : 150) + pitch, 35, 0.22, isPlayer ? 0.35 : 0.22, 0, v);
-        this.noise('effects', 0.08, isPlayer ? 0.25 : 0.15, 800, 0, v); break;
+        this.noise('effects', 0.08, isPlayer ? 0.25 : 0.15, 800, 0, v, 'lowpass', 0.08); break;
       case 'machinegun':
         this.blip('effects', 'square', 480 + pitch * 4, 80, 0.045, isPlayer ? 0.12 : 0.07, 0, v); break;
       case 'missile':

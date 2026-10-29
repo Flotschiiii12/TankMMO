@@ -1,3 +1,5 @@
+import type { VehicleClass } from '../../shared/types.ts';
+
 /** Pure mixer maths: four buses (master, music, effects, interface) and what each one should output. */
 export type Bus = 'master' | 'music' | 'effects' | 'interface';
 
@@ -8,8 +10,8 @@ export interface Mix {
   musicEnabled: boolean; ambientEnabled: boolean;
 }
 
-/** Music is a background layer and defaults low; everything else is full level under the master volume. */
-export const DEFAULT_MIX: Mix = { enabled: true, master: 0.7, music: 0.3, effects: 1, interface: 1, musicEnabled: true, ambientEnabled: true };
+/** Keep adaptive music under the action mix and soften interface sounds relative to combat. */
+export const DEFAULT_MIX: Mix = { enabled: true, master: 0.7, music: 0.28, effects: 0.85, interface: 0.75, musicEnabled: true, ambientEnabled: true };
 
 export const clamp01 = (v: unknown, fallback = 0): number => {
   const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -28,6 +30,18 @@ export function busGain(mix: Mix, bus: Bus): number {
 
 /** What actually reaches the speakers for a bus (bus gain times master), for tests and the mixer meters. */
 export const effectiveGain = (mix: Mix, bus: Bus): number => (bus === 'master' ? busGain(mix, 'master') : busGain(mix, 'master') * busGain(mix, bus));
+
+/** Relative engine weight by vehicle class, used to deepen the motor hum without changing vehicle stats. */
+export function engineWeightFor(vehicleClass: VehicleClass | undefined): number {
+  switch (vehicleClass) {
+    case 'scout': return 0.12;
+    case 'medium': return 0.45;
+    case 'heavy': return 0.95;
+    case 'artillery': return 0.8;
+    case 'support': return 0.6;
+    default: return 0.45;
+  }
+}
 
 /** Volume of a sound that happens `distance` away from the player: full within `near`, silent beyond `far`, smooth in between. */
 export function distanceVolume(distance: number, near = 300, far = 1800): number {

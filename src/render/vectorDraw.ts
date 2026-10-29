@@ -2,6 +2,7 @@ import { clamp, SimEntity, Vec2 } from '../sim/types.ts';
 import { DEFAULT_SUN_DIRECTION } from '../../shared/types.ts';
 import { Camera } from './camera.ts';
 import { spriteRegistry } from './assets.ts';
+import { selectEntitySpritePath } from './entitySprites.ts';
 import { drawSpriteShadow, drawStaticSpriteShadow } from './shadows.ts';
 import type { VehicleVisualMotion } from './vehicleMotion.ts';
 
@@ -108,11 +109,17 @@ export function drawVehicle(
   // 1. Draw Chassis
   const classKey = ent.vehicleClass && ent.tier ? `${ent.tier}_${ent.vehicleClass}` : '';
   const classBody = classKey ? spriteRegistry.getVehicleBodyPath(ent.tier!, ent.vehicleClass!) : '';
-  const bodyImg = spriteRegistry.getImage(classBody && spriteRegistry.isListed(classBody) ? classBody : spriteRegistry.getVehicleBodyPath(tier, ent.kind));
+  const bodyPath = selectEntitySpritePath(ent, 'vehicle', spriteRegistry.listedPaths, tier);
+  const normalBodyPath = classBody && spriteRegistry.isListed(classBody)
+    ? classBody
+    : spriteRegistry.getVehicleBodyPath(tier, ent.kind);
+  const requestedBodyImg = bodyPath ? spriteRegistry.getImage(bodyPath) : null;
+  const bodyImg = requestedBodyImg ?? (bodyPath !== normalBodyPath ? spriteRegistry.getImage(normalBodyPath) : null);
   const wreckImg = ent.isWreck ? spriteRegistry.getImage(spriteRegistry.getFxPath(ent.id % 2 === 0 ? 'fx_09' : 'fx_10')) : null;
   const bodyWidth = radius * 2.4;
   const bodyHeight = radius * 2.0;
-  const shadowImage = ent.isWreck ? wreckImg : bodyImg;
+  const hasWreckBody = !!bodyPath?.endsWith('_body_wreck.png');
+  const shadowImage = hasWreckBody ? bodyImg : ent.isWreck ? wreckImg : bodyImg;
   const shadowWidth = ent.isWreck ? radius * 2.4 : bodyWidth;
   const shadowHeight = ent.isWreck ? radius * 2 : bodyHeight;
   if (shadowImage && highQualityShadows) {
@@ -128,6 +135,12 @@ export function drawVehicle(
   ctx.scale(1, motion?.hullScaleY ?? 1);
 
   if (ent.isWreck) {
+    if (hasWreckBody && bodyImg) {
+      ctx.drawImage(bodyImg, -bodyWidth / 2, -bodyHeight / 2, bodyWidth, bodyHeight);
+      ctx.restore();
+      ctx.restore();
+      return;
+    }
     if (wreckImg) {
       const w = radius * 2.4;
       const h = radius * 2.0;
@@ -144,6 +157,11 @@ export function drawVehicle(
     drawChassisByTier(ctx, tier, radius, ent.isHostile, ent.distanceDriven || 0, ent.isWreck);
   }
   ctx.restore();
+
+  if (ent.isWreck) {
+    ctx.restore();
+    return;
+  }
 
   // 2. Draw Turret (rotates independently with turretAngle)
   const classTurret = classKey ? spriteRegistry.getVehicleTurretPath(ent.tier!, ent.vehicleClass!) : '';
@@ -434,8 +452,10 @@ export function drawEnemy(
   }
 
   // painted sprite by sprite override (dungeon bosses), archetype id (flak_wagon, boss_*...) or kind
-  const enemyKey = [ent.spriteId, ent.archetypeId].find((k) => k && spriteRegistry.isListed(spriteRegistry.getEnemyPath(k))) ?? ent.kind;
-  const enemyImg = spriteRegistry.getImage(spriteRegistry.getEnemyPath(enemyKey));
+  const enemyPath = selectEntitySpritePath(ent, 'enemy', spriteRegistry.listedPaths);
+  const requestedEnemyImg = enemyPath ? spriteRegistry.getImage(enemyPath) : null;
+  const normalEnemyPath = enemyPath?.endsWith('_elite.png') ? enemyPath.replace(/_elite\.png$/, '.png') : undefined;
+  const enemyImg = requestedEnemyImg ?? (normalEnemyPath ? spriteRegistry.getImage(normalEnemyPath) : null);
   if (enemyImg) {
     if (highQualityShadows) drawSpriteShadow(ctx, enemyImg, 0, 0, r * 2.6, r * 2.6, sunDirection, zoom, ent.chassisAngle);
     else drawBlobShadow(ctx, 0, 0, r * 2.6, r * 2.6, sunDirection, zoom);

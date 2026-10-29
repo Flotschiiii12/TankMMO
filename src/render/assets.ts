@@ -7,6 +7,10 @@
 
 const TOTAL_EXPECTED_SPRITES = 71;
 
+export function shouldPreloadSprite(path: string): boolean {
+  return !/^\/assets\/vehicles\/(?:[7-9]|10)_(?:scout|medium|heavy|artillery|support)_body_(?:damaged|wreck)\.png$/.test(path);
+}
+
 export class SpriteRegistry {
   private images = new Map<string, HTMLImageElement | null>();
   private allowedFiles = new Set<string>();
@@ -16,6 +20,10 @@ export class SpriteRegistry {
 
   constructor() {
     this.loadManifest();
+  }
+
+  public get listedPaths(): ReadonlySet<string> {
+    return this.allowedFiles;
   }
 
   public onChange(listener: (path?: string) => void) {
@@ -54,7 +62,7 @@ export class SpriteRegistry {
 
       // Preload priority assets immediately
       for (const path of this.allowedFiles) {
-        this.getImage(path);
+        if (shouldPreloadSprite(path)) this.getImage(path);
       }
     }
   }
@@ -153,4 +161,3 @@ export class SpriteRegistry {
 }
 
 export const spriteRegistry = new SpriteRegistry();
-

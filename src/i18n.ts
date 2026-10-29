@@ -472,6 +472,8 @@ const DE: Record<string, string> = {
   'Screen shake': 'Bildschirmwackeln',
   'Camera shake on your shots and strong hits. Off by default.': 'Kamerawackeln bei eigenen Schüssen und starken Treffern. Standardmäßig aus.',
   'Shake strength': 'Stärke des Wackelns',
+  'Camera effects': 'Kameraeffekte',
+  'Look-ahead while driving and gentle zoom in combat. Reduce this for a steadier view.': 'Vorausschau beim Fahren und sanfter Zoom im Kampf. Reduziere den Wert für ein ruhigeres Bild.',
   'Joystick on the right, fire buttons on the left': 'Joystick rechts, Feuer-Tasten links',
   'Left-handed controls': 'Linkshänder-Steuerung',
   'Sending failed, please try again.': 'Senden fehlgeschlagen, bitte versuche es noch einmal.',

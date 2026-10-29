@@ -9,6 +9,9 @@ export class Camera {
   public zoom = 0.85;
   public targetZoom = 0.85;
   public userZoomOverride: number | null = null;
+  private motionStrength = 1;
+  private combatFocus = false;
+  private targetFocus = false;
 
   private shakeIntensity = 0;
   private shakeDecay = 8.0;
@@ -22,32 +25,38 @@ export class Camera {
     this.viewportWidth = width;
     this.viewportHeight = height;
 
-    const baseDefault = width < 960 || height < 500 ? 0.75 : 0.9;
-    if (this.userZoomOverride !== null) {
-      this.targetZoom = clamp(this.userZoomOverride, 0.5, 1.2);
-    } else {
-      this.targetZoom = baseDefault;
-    }
+    this.refreshTargetZoom();
   }
 
   public setUserZoom(z: number | null) {
     this.userZoomOverride = z !== null ? clamp(z, 0.5, 1.2) : null;
-    if (this.userZoomOverride !== null) {
-      this.targetZoom = this.userZoomOverride;
-    } else {
-      const baseDefault = this.viewportWidth < 960 || this.viewportHeight < 500 ? 0.75 : 0.9;
-      this.targetZoom = baseDefault;
-    }
+    this.refreshTargetZoom();
   }
 
   public adjustZoom(factor: number) {
-    const newTarget = clamp(this.targetZoom * factor, 0.5, 1.2);
-    this.targetZoom = newTarget;
-    this.userZoomOverride = newTarget;
+    this.userZoomOverride = clamp(this.baseZoom() * factor, 0.5, 1.2);
+    this.refreshTargetZoom();
   }
 
-  public setTarget(target: Vec2) {
-    this.targetPos = target;
+  public setMotionStrength(strength: number) {
+    this.motionStrength = clamp(strength, 0, 1);
+    this.refreshTargetZoom();
+  }
+
+  public setCombatFocus(inCombat: boolean, hasTarget: boolean) {
+    this.combatFocus = inCombat;
+    this.targetFocus = hasTarget;
+    this.refreshTargetZoom();
+  }
+
+  public setTarget(target: Vec2, velocity?: Vec2) {
+    const speed = velocity ? Math.hypot(velocity.x, velocity.y) : 0;
+    const lead = Math.min(80, speed * 0.28) * this.motionStrength;
+    const scale = speed > 0 ? lead / speed : 0;
+    this.targetPos = {
+      x: target.x + (velocity?.x ?? 0) * scale,
+      y: target.y + (velocity?.y ?? 0) * scale,
+    };
   }
 
   public setShakeSettings(enabled: boolean, strength = 0.5) {
@@ -63,6 +72,16 @@ export class Camera {
   public addShake(amount: number) {
     if (!this.shakeEnabled || amount <= 0) return;
     this.shakeIntensity = clamp(this.shakeIntensity + amount * this.shakeStrength, 0, 16);
+  }
+
+  private baseZoom(): number {
+    if (this.userZoomOverride !== null) return this.userZoomOverride;
+    return this.viewportWidth < 960 || this.viewportHeight < 500 ? 0.75 : 0.9;
+  }
+
+  private refreshTargetZoom(): void {
+    const focusBoost = (this.combatFocus ? 0.035 : 0) + (this.targetFocus ? 0.045 : 0);
+    this.targetZoom = clamp(this.baseZoom() + focusBoost * this.motionStrength, 0.5, 1.2);
   }
 
   public update(dt: number, mapWidth = 4000, mapHeight = 4000) {

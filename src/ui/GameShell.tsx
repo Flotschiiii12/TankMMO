@@ -342,8 +342,9 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
     if (rendererRef.current) { rendererRef.current.reducedEffects = lowFx; rendererRef.current.plainGround = !!profile.settings.performanceMode; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
     const shakeQuality = lowFx ? 0.3 : 1;
     cameraRef.current.setShakeSettings(!!profile.settings.cameraShake && !motionReduced, (profile.settings.cameraShakeStrength ?? 0.5) * shakeQuality);
+    cameraRef.current.setMotionStrength(motionReduced ? 0 : (profile.settings.cameraMotion ?? 1) * (lowFx ? 0.35 : 1));
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
-  }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.reduceMotion, profile.settings.cameraShake, profile.settings.cameraShakeStrength, profile.settings.uiScale, profile.settings.colorBlind]);
+  }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.reduceMotion, profile.settings.cameraShake, profile.settings.cameraShakeStrength, profile.settings.cameraMotion, profile.settings.uiScale, profile.settings.colorBlind]);
   useEffect(() => { applyFactionTheme(profile.character.faction); }, [profile.character.faction]);
   const ambientMapId = online ? online.mapId : Number(profile.currentMapId) || 1;
   useEffect(() => { soundEngine.setAmbient(gameState === 'PLAYING' ? MAP_METADATA_TABLE[ambientMapId]?.biome : undefined); }, [ambientMapId, gameState]);
@@ -610,7 +611,8 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           if (spectate && !player && specClient.freeCam) camera.setTarget(specClient.freeCam);
 
           if (player) {
-            camera.setTarget(player.pos);
+            camera.setTarget(player.pos, player.vel);
+            camera.setCombatFocus(performance.now() - lastCombatAt.current < 2500, player.targetId !== undefined);
 
             // Engine sound updates based on vehicle speed
             const speed = Math.hypot(player.vel.x, player.vel.y);
@@ -645,7 +647,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             if (profile.tutorialStep === 1 && player.targetId !== undefined) {
               saveProfile({ ...profile, tutorialStep: 2 });
             }
-          }
+          } else camera.setCombatFocus(false, false);
 
           for (const n of mergerRef.current.flush(performance.now())) particles.emitDamageText(n.pos, n.text, n.armor ? '#38bdf8' : '#ef4444', n.crit, n.amount);
           camera.update(dt, 5000, 5000);

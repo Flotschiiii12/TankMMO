@@ -38,4 +38,24 @@ describe('combat camera shake', () => {
     };
     expect(offsetFor(1)).toBeCloseTo(offsetFor(0.5) * 2);
   });
+
+  it('looks ahead in the direction of travel and removes it when camera effects are reduced', () => {
+    const camera = new Camera();
+    camera.setMotionStrength(1);
+    camera.setTarget({ x: 1000, y: 1200 }, { x: 100, y: 0 });
+    expect(camera.targetPos).toEqual({ x: 1028, y: 1200 });
+    camera.setMotionStrength(0);
+    camera.setTarget({ x: 1000, y: 1200 }, { x: 100, y: 0 });
+    expect(camera.targetPos).toEqual({ x: 1000, y: 1200 });
+  });
+
+  it('gently zooms toward combat and the locked target based on camera effect strength', () => {
+    const camera = new Camera();
+    camera.resize(844, 390);
+    const base = camera.targetZoom;
+    camera.setCombatFocus(true, true);
+    expect(camera.targetZoom).toBeGreaterThan(base);
+    camera.setMotionStrength(0);
+    expect(camera.targetZoom).toBe(base);
+  });
 });

@@ -4,9 +4,11 @@ import { VEHICLE_CATALOG } from '../../../shared/data/vehicles.ts';
 import { CLASS_ABILITY } from '../../../shared/rules/abilities.ts';
 import type * as C from '../../../shared/rules/character.ts';
 import { VEHICLE_TIERS } from '../../data/vehicles.ts';
+import { spriteRegistry } from '../../render/assets.ts';
 import { Badge } from '../kit/Indicators.tsx';
 import { SegmentedControl } from '../kit/Tabs.tsx';
 import { CurrencyIcon, VehicleClassIcon } from '../GameIcon.tsx';
+import { ArtSlot } from '../kit/art.tsx';
 
 export const CLASSES = ['scout', 'medium', 'heavy', 'artillery', 'support'] as const;
 const ABILITY_NAME: Record<string, string> = { dash: 'Dash', overcharge: 'Overcharge', fortify: 'Fortify', barrage: 'Barrage', repair_aura: 'Repair aura' };
@@ -39,6 +41,9 @@ export const VehicleCarousel: React.FC<{ ch: C.CharacterState; selectedId: strin
         return (
           <button key={v.id} type="button" role="option" aria-selected={sel} onClick={() => onSelect(v.id)} className="text-left p-2 rounded-lg border min-h-[56px]" style={{ borderColor: sel ? 'var(--accent)' : 'var(--c-line)', background: sel ? 'var(--accent-soft)' : 'var(--c-bg-1)', opacity: owned ? 1 : 0.85 }}>
             <div className="flex items-center gap-2">
+              <span className="w-12 h-9 flex-none overflow-hidden rounded-md" style={{ background: 'var(--c-bg-0)' }} aria-hidden>
+                <ArtSlot src={spriteRegistry.getVehicleBodyPath(v.tier, v.vehicleClass)} className="w-full h-full object-contain" />
+              </span>
               <VehicleClassIcon vehicleClass={v.vehicleClass} size={18} />
               <b className="text-[13px] truncate flex-1">{v.name}</b>
               <Badge tone="accent">T{v.tier}</Badge>

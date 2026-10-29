@@ -1,10 +1,32 @@
 /* Title, login and loading screens. Tokens come from kit/tokens.css; motion is transform/opacity only. */
-.tt-screen { position: fixed; inset: 0; z-index: 100; display: flex; overflow-y: auto; color: var(--c-text); font-family: var(--font);
+.tt-screen { position: fixed; inset: 0; z-index: 100; display: flex; overflow-y: auto; isolation: isolate; color: var(--c-text); font-family: var(--font);
   padding: max(12px, var(--safe-top, 0px)) max(16px, var(--safe-right, 0px)) max(12px, var(--safe-bottom, 0px)) max(16px, var(--safe-left, 0px));
   background: radial-gradient(120% 90% at 20% 0%, color-mix(in srgb, var(--accent) 14%, var(--c-bg-1)) 0%, var(--c-bg-0) 60%), var(--c-bg-0); }
 .tt-screen--art { background-size: cover; background-position: center; }
-.tt-screen > .tt-wrap { margin: auto; width: 100%; max-width: 920px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); align-items: start; }
-@media (max-width: 760px) { .tt-screen > .tt-wrap { grid-template-columns: minmax(0, 1fr); max-width: 420px; } }
+.tt-screen > .tt-wrap { position: relative; z-index: 2; margin: auto; width: 100%; max-width: 920px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); align-items: start; animation: tt-title-enter 420ms var(--ease-out) both; }
+@media (max-width: 620px) { .tt-screen > .tt-wrap { grid-template-columns: minmax(0, 1fr); max-width: 420px; } }
+.tt-screen__scenery { position: absolute; z-index: 1; inset: 0; overflow: hidden; pointer-events: none; }
+.tt-screen__scene { position: absolute; inset: 0; opacity: 0; transition: opacity 420ms var(--ease-out); mix-blend-mode: screen; }
+.tt-screen__scene.is-active { opacity: 1; }
+.tt-screen__scene--coastal { background: radial-gradient(70% 55% at 88% 100%, rgba(14, 165, 165, 0.24), transparent 72%), radial-gradient(42% 38% at 8% 84%, rgba(10, 112, 132, 0.12), transparent 78%); }
+.tt-screen__scene--highland { background: radial-gradient(66% 60% at 85% 98%, rgba(217, 119, 6, 0.22), transparent 70%), radial-gradient(42% 38% at 12% 88%, rgba(125, 74, 34, 0.12), transparent 78%); }
+.tt-screen__scene--steppe { background: radial-gradient(74% 52% at 90% 94%, rgba(132, 145, 52, 0.22), transparent 70%), radial-gradient(42% 38% at 8% 84%, rgba(176, 112, 31, 0.12), transparent 78%); }
+.tt-hero { position: relative; height: clamp(108px, 30vh, 164px); overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--c-line)); border-radius: 12px; background: radial-gradient(ellipse at 50% 70%, color-mix(in srgb, var(--accent) 16%, var(--c-bg-2)), var(--c-bg-0) 70%); }
+.tt-hero > .tt-hangar-preview { min-height: 100%; }
+.tt-hangar-preview::before { content: ''; position: absolute; z-index: 0; inset: 8% 12%; pointer-events: none; background: radial-gradient(ellipse at 50% 62%, color-mix(in srgb, var(--accent-2) 28%, transparent), transparent 64%); opacity: 0.72; }
+.tt-hangar-preview::after { content: ''; position: absolute; z-index: 0; width: 54%; height: 23%; left: 23%; bottom: 13%; border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 50%; transform: perspective(20rem) rotateX(62deg); pointer-events: none; }
+.tt-hangar-preview--effects::before { animation: tt-stage-light 6s ease-in-out infinite alternate; }
+.tt-hangar-preview canvas { z-index: 1; }
+.tt-hangar-particles { position: absolute; z-index: 2; inset: 0; overflow: hidden; pointer-events: none; }
+.tt-hangar-particles i { position: absolute; bottom: 16%; width: 3px; height: 3px; border-radius: 50%; background: var(--accent-2); opacity: 0; animation: tt-hangar-mote 5.4s ease-in-out infinite; }
+.tt-hangar-particles i:nth-child(1) { left: 24%; animation-delay: -1.3s; }
+.tt-hangar-particles i:nth-child(2) { left: 42%; animation-delay: -3.4s; animation-duration: 6.2s; }
+.tt-hangar-particles i:nth-child(3) { left: 63%; animation-delay: -2.2s; animation-duration: 4.8s; }
+.tt-hangar-particles i:nth-child(4) { left: 79%; animation-delay: -4.1s; animation-duration: 6.8s; }
+.tt-loading__main { animation: tt-title-enter 420ms var(--ease-out) both; }
+@keyframes tt-title-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes tt-stage-light { from { opacity: 0.5; transform: scale(0.96); } to { opacity: 0.9; transform: scale(1.04); } }
+@keyframes tt-hangar-mote { 0%, 100% { opacity: 0; transform: translate3d(0, 8px, 0); } 25%, 75% { opacity: 0.7; } 50% { opacity: 0.35; transform: translate3d(5px, -20px, 0); } }
 .tt-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .tt-card { background: color-mix(in srgb, var(--c-bg-1) 92%, transparent); border: 1px solid var(--c-line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .tt-card h2 { margin: 0; font-size: 15px; font-weight: 700; }
@@ -62,10 +84,16 @@
 .tt-zone__sub { font-size: 12px; color: var(--accent); letter-spacing: 0.14em; text-transform: uppercase; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9); }
 @keyframes tt-zone { 0% { opacity: 0; transform: translate(-50%, 8px); } 12% { opacity: 1; transform: translate(-50%, 0); } 78% { opacity: 1; } 100% { opacity: 0; } }
 :root.reduced-motion .tt-fade--on, :root.reduced-motion .tt-loading__tip { animation: none; }
+:root.reduced-motion .tt-screen > .tt-wrap, :root.reduced-motion .tt-loading__main, :root.reduced-motion .tt-hangar-preview--effects::before { animation: none; }
+:root.reduced-motion .tt-hangar-particles { display: none; }
+:root.reduced-motion .tt-screen__scene { transition: none; }
 :root.reduced-motion .tt-zone { animation: tt-zone-still 3200ms linear both; }
 @keyframes tt-zone-still { 0% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .tt-fade--on, .tt-loading__tip { animation: none; }
+  .tt-screen > .tt-wrap, .tt-loading__main, .tt-hangar-preview--effects::before { animation: none; }
+  .tt-hangar-particles { display: none; }
+  .tt-screen__scene { transition: none; }
   .tt-zone { animation: tt-zone-still 3200ms linear both; }
 }
 
@@ -78,6 +106,7 @@
   .tt-logo--lg { flex-direction: row; gap: 10px; text-align: left; }
   .tt-logo--lg .tt-logo__word { font-size: 26px; }
   .tt-logo__tag { display: none; }
+  .tt-hero { height: 108px; }
   .tt-faction { min-height: 62px; padding: 4px 2px; }
   .tt-factiontext { min-height: 0; font-size: 11px; }
   .tt-news__list { max-height: 30vh; }

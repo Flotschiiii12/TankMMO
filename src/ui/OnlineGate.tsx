@@ -12,6 +12,9 @@ import { tr, T, currentLang, setLang } from '../i18n.ts';
 import { createGuest, clearCredential, detectServer, getCredential, recoverAccount, serverBase, setCredential } from '../net/connect.ts';
 import { OnlineGameClient } from '../net/onlineClient.ts';
 import { createDefaultProfile } from '../save/profile.ts';
+import { getVehicleById, STARTER_VEHICLE_ID } from '../data/vehicles.ts';
+import { HangarPreview } from './hangar/HangarPreview.tsx';
+import { prefersReducedMotion } from './motion/motion.ts';
 
 type Phase = 'probing' | 'welcome' | 'recover' | 'connecting' | 'error' | 'offline';
 
@@ -35,6 +38,7 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
   const [lost, setLost] = useState('');
   const started = useRef(false);
   const info = useServerInfo();
+  const reducedMotion = prefersReducedMotion();
   useEffect(() => { if (!client) applyFactionTheme(faction); }, [faction, client]);
 
   const connect = useCallback(async (credential: string) => {
@@ -118,9 +122,15 @@ export const OnlineGate: React.FC<{ children: (online: OnlineGameClient | null) 
     );
   }
   return (
-    <div className={box} data-testid="title-screen"><ArtSlot src={ART.titleBg(faction)} className="k-bgart" /><div className="tt-wrap" style={{ position: 'relative' }}>
+    <div className={`${box} tt-screen--welcome`} data-testid="title-screen" data-faction={faction}>
+      <ArtSlot src={ART.titleBg(faction)} className="k-bgart" />
+      <div className="tt-screen__scenery" aria-hidden>{['coastal', 'highland', 'steppe'].map((scene) => <div key={scene} className={`tt-screen__scene tt-screen__scene--${scene}${faction === scene ? ' is-active' : ''}`} />)}</div>
+      <div className="tt-wrap" style={{ position: 'relative' }}>
       <div className="tt-col">
         <Logo tagline={tr('An online tank MMO. Your progress lives on the server.')} />
+        <div className="tt-hero" data-testid="title-hero" aria-hidden>
+          <HangarPreview vehicle={getVehicleById(STARTER_VEHICLE_ID)} level={1} reduceMotion={reducedMotion} effects={!reducedMotion} />
+        </div>
         <NewsPanel items={info.news} />
       </div>
       <div className="tt-col">

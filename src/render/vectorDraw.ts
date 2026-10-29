@@ -1,4 +1,4 @@
-import { SimEntity, Vec2 } from '../sim/types.ts';
+import { clamp, SimEntity, Vec2 } from '../sim/types.ts';
 import { DEFAULT_SUN_DIRECTION } from '../../shared/types.ts';
 import { Camera } from './camera.ts';
 import { spriteRegistry } from './assets.ts';
@@ -23,6 +23,17 @@ function drawBlobShadow(
   ctx.restore();
 }
 
+function drawHitFlash(ctx: CanvasRenderingContext2D, radius: number, strength: number): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = clamp(strength / 0.12, 0, 1);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 1.15, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 /**
  * Draws vehicles, enemies, props, gates, and landmarks with high aesthetic quality,
  * drop shadows cast to the bottom-right, animated rolling tracks, recoil kick, and hit flashes.
@@ -36,13 +47,15 @@ export function drawVehicle(
   time = 0,
   sunDirection: Vec2 = DEFAULT_SUN_DIRECTION,
   highQualityShadows = true,
+  recoilKick = 0,
+  recoilAngle = ent.turretAngle,
 ) {
   const s = camera.worldToScreen(ent.pos);
   const zoom = camera.zoom;
   const radius = ent.radius * zoom;
 
   ctx.save();
-  ctx.translate(s.x, s.y);
+  ctx.translate(s.x - Math.cos(recoilAngle) * 4 * zoom * recoilKick, s.y - Math.sin(recoilAngle) * 4 * zoom * recoilKick);
 
   // Wreck state: linger and fade out over 8 seconds
   if (ent.isWreck) {
@@ -139,7 +152,10 @@ export function drawVehicle(
   ctx.save();
   ctx.rotate(ent.turretAngle);
   if (turretImg) {
-    ctx.drawImage(turretImg, -tw / 4, -th / 2, tw, th);
+    const recoil = ent.mainReloadTime > 0
+      ? clamp(ent.mainReloadRemaining / ent.mainReloadTime, 0, 1) * radius * 0.25
+      : 0;
+    ctx.drawImage(turretImg, -tw / 4 - recoil - recoilKick * radius * 0.18, -th / 2, tw, th);
   } else {
     drawTurretByTier(
       ctx,
@@ -155,13 +171,7 @@ export function drawVehicle(
 
   // 3. Short White Hit Flash on damage
   if (ent.hitFlashTimer && ent.hitFlashTimer > 0) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.beginPath();
-    ctx.arc(0, 0, radius * 1.15, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    drawHitFlash(ctx, radius, ent.hitFlashTimer);
   }
 
   ctx.restore();
@@ -424,6 +434,7 @@ export function drawEnemy(
     ctx.rotate(ent.chassisAngle);
     ctx.drawImage(enemyImg, -r * 1.3, -r * 1.3, r * 2.6, r * 2.6);
     ctx.restore();
+    if (ent.hitFlashTimer && ent.hitFlashTimer > 0) drawHitFlash(ctx, r, ent.hitFlashTimer);
     ctx.restore();
     return;
   }
@@ -541,13 +552,7 @@ export function drawEnemy(
 
   // White Hit Flash on damage
   if (ent.hitFlashTimer && ent.hitFlashTimer > 0) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 1.15, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    drawHitFlash(ctx, r, ent.hitFlashTimer);
   }
 
   ctx.restore();

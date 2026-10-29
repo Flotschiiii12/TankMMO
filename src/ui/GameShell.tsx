@@ -65,7 +65,7 @@ import { ZoneTransition } from './title/ZoneTransition.tsx';
 import { applyFactionTheme } from './kit/logic.ts';
 import { AnnounceHost, announcements } from './motion/AnnounceHost.tsx';
 import { diffAnnouncements, type ProgressSnapshot } from './motion/announce.ts';
-import { isRevealRarity } from './motion/motion.ts';
+import { isRevealRarity, prefersReducedMotion } from './motion/motion.ts';
 import { MAP_METADATA_TABLE } from '../../shared/data/maps.ts';
 import { PortraitWarning } from './PortraitWarning.tsx';
 import { WorldMapModal } from './WorldMapModal.tsx';
@@ -334,12 +334,14 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
   // Accessibility: reduced effects and UI scale follow the settings
   useEffect(() => {
-    const lowFx = !!profile.settings.reducedEffects || !!profile.settings.performanceMode;
-    particlesRef.current.enabled = !profile.settings.reducedEffects; // performance mode keeps the effects but caps them
+    const motionReduced = !!profile.settings.reduceMotion || prefersReducedMotion();
+    const lowFx = !!profile.settings.reducedEffects || !!profile.settings.performanceMode || motionReduced;
+    particlesRef.current.enabled = !profile.settings.reducedEffects && !motionReduced; // performance mode keeps the effects but caps them
     particlesRef.current.setReduced(lowFx);
+    particlesRef.current.setReducedMotion(motionReduced);
     if (rendererRef.current) { rendererRef.current.reducedEffects = lowFx; rendererRef.current.plainGround = !!profile.settings.performanceMode; rendererRef.current.colorBlind = !!profile.settings.colorBlind; rendererRef.current.uiScale = profile.settings.uiScale || 1; }
     document.documentElement.style.setProperty('--ui-scale', String(profile.settings.uiScale || 1));
-  }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.uiScale, profile.settings.colorBlind]);
+  }, [profile.settings.reducedEffects, profile.settings.performanceMode, profile.settings.reduceMotion, profile.settings.uiScale, profile.settings.colorBlind]);
   useEffect(() => { applyFactionTheme(profile.character.faction); }, [profile.character.faction]);
   const ambientMapId = online ? online.mapId : Number(profile.currentMapId) || 1;
   useEffect(() => { soundEngine.setAmbient(gameState === 'PLAYING' ? MAP_METADATA_TABLE[ambientMapId]?.biome : undefined); }, [ambientMapId, gameState]);
@@ -377,6 +379,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           if (!event.isSecondary) {
             const family = clientRef.current?.getEntity(event.shooterId)?.weaponFamily;
             particles.emitMuzzleFlash(event.pos, event.angle, family);
+            rendererRef.current?.kickRecoil(event.shooterId, event.angle, performance.now() / 1000);
             soundEngine.playWeapon(weaponSoundFor(family), isPlayer, isPlayer ? 1 : distanceVolume(distToPlayer(event.pos)));
           }
           // Tutorial auto-advance: Player fired cannon!
@@ -406,7 +409,13 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           {
             const victim = clientRef.current?.getEntity(event.targetId);
             const level = impactLevel(event.finalDamage, victim ? victim.maxHull + victim.maxArmor : 1000);
-            particles.emitHitSparks(event.pos, SPARKS_BY_LEVEL[level], event.armorDamage > 0 ? '#38bdf8' : '#f97316');
+            particles.emitImpact(
+              event.pos,
+              SPARKS_BY_LEVEL[level],
+              event.armorDamage > 0 ? '#38bdf8' : '#f97316',
+              16 + level * 12,
+              level >= 2,
+            );
             if (RING_BY_LEVEL[level]) particles.emitRing(event.pos, RING_BY_LEVEL[level], event.isCrit ? '#fde047' : '#f97316');
             if (event.isCrit) particles.emitRing(event.pos, 30, '#fde047');
             if (event.armorDamage > 0 && victim && victim.armor <= 1 && victim.maxArmor > 0) { particles.emitRing(event.pos, 44, '#38bdf8'); particles.emitDamageText(event.pos, tr('ARMOR BREAK'), '#38bdf8', true); }
@@ -619,7 +628,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
 
             // Emit dust trails and tread marks when driving
             if (speed > 15) {
-              particles.emitDust(player.pos, player.chassisAngle, speedRatio);
+              particles.emitDust(player.pos, player.chassisAngle, speedRatio, client['clientWorld']?.mapDef.biome);
               particles.addTreadMark(player.pos, player.chassisAngle, player.radius * 1.1);
 
               // Tutorial auto-advance: Driving tracking

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ParticleSystem, PARTICLE_CAP, REDUCED_PARTICLE_CAP } from '../src/render/particles.ts';
+import { ParticleSystem, PARTICLE_CAP, REDUCED_PARTICLE_CAP, REDUCED_TREAD_CAP, dustColorForBiome } from '../src/render/particles.ts';
 import { ammoLook, familyLook, impactLevel, lobHeight, RING_BY_LEVEL, SPARKS_BY_LEVEL } from '../src/render/combatFx.ts';
 
 const P = { x: 100, y: 100 };
@@ -21,16 +21,50 @@ describe('particle system caps', () => {
     expect(ps.activeCount).toBe(0);
   });
 
-  it('reduced mode lowers the cap, disabled mode only keeps the damage numbers', () => {
+  it('reduced mode trims particles and tracks to its hard cap, disabled mode only keeps damage numbers', () => {
     const ps = new ParticleSystem(); ps.setReduced(true);
     flood(ps, 100);
-    expect(ps.activeCount).toBeLessThanOrEqual(REDUCED_PARTICLE_CAP + 100); // numbers may exceed the soft cap but never the hard one
-    expect(ps.activeCount).toBeLessThanOrEqual(PARTICLE_CAP);
+    expect(ps.activeCount).toBeLessThanOrEqual(REDUCED_PARTICLE_CAP);
+    expect(ps.cap).toBe(REDUCED_PARTICLE_CAP);
+    for (let i = 0; i < 100; i++) ps.addTreadMark(P, 0);
+    expect(ps.treadMarkCount).toBe(REDUCED_TREAD_CAP);
     const quiet = new ParticleSystem(); quiet.enabled = false;
     quiet.emitHitSparks(P, 10); quiet.emitExplosion(P, true); quiet.emitRing(P, 40);
     expect(quiet.activeCount).toBe(0);
     quiet.emitDamageText(P, '-12');
     expect(quiet.activeCount).toBe(1);
+  });
+
+  it('adds impact feedback and rate-limits wreck smoke within the particle cap', () => {
+    const ps = new ParticleSystem();
+    ps.emitImpact(P, 6, '#f97316', 36, true);
+    expect(ps.activeCount).toBeGreaterThan(1);
+    const before = ps.activeCount;
+    ps.emitWreckSmoke(P, 42, 1);
+    const afterFirst = ps.activeCount;
+    ps.emitWreckSmoke(P, 42, 1.1);
+    expect(ps.activeCount).toBe(afterFirst);
+    ps.emitWreckSmoke(P, 42, 2);
+    expect(ps.activeCount).toBeGreaterThan(afterFirst);
+    expect(ps.activeCount).toBeLessThanOrEqual(PARTICLE_CAP);
+    expect(before).toBeLessThan(afterFirst);
+  });
+
+  it('keeps informational damage text while reduced motion suppresses moving effects', () => {
+    const ps = new ParticleSystem();
+    ps.setReducedMotion(true);
+    ps.emitExplosion(P, true);
+    ps.addTreadMark(P, 0);
+    expect(ps.activeCount).toBe(0);
+    expect(ps.treadMarkCount).toBe(0);
+    ps.emitDamageText(P, '-12');
+    expect(ps.activeCount).toBe(1);
+  });
+
+  it('matches dust to the biome and falls back to valley ground', () => {
+    expect(dustColorForBiome('snow')).toBe('#d8e1e9');
+    expect(dustColorForBiome('coastal')).not.toBe(dustColorForBiome('ash'));
+    expect(dustColorForBiome()).toBe(dustColorForBiome('valley'));
   });
 });
 

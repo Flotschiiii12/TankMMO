@@ -6,10 +6,32 @@ import { drawRadialLight } from './lightSprites.ts';
 /** Hard cap of simultaneous particles; low quality lowers it to REDUCED_PARTICLE_CAP. */
 export const PARTICLE_CAP = 600;
 export const REDUCED_PARTICLE_CAP = 120;
+export const TREAD_CAP = 300;
+export const REDUCED_TREAD_CAP = 60;
+
+const DUST_COLORS: Record<string, string> = {
+  coastal: '#c4aa7f',
+  highland: '#8a806d',
+  steppe: '#b59a68',
+  marsh: '#766d55',
+  canyon: '#b9794f',
+  snow: '#d8e1e9',
+  ruins: '#77736d',
+  desert: '#d1a26d',
+  volcanic: '#625b55',
+  arena: '#8a7863',
+  valley: '#8c8568',
+  ash: '#716d69',
+  green_valley: '#8c8568',
+};
+
+export function dustColorForBiome(biome?: string): string {
+  return DUST_COLORS[biome ?? 'valley'];
+}
 
 export interface Particle {
   active: boolean;
-  type: 'dust' | 'muzzle' | 'spark' | 'smoke' | 'explosion' | 'damage_text' | 'ring';
+  type: 'dust' | 'muzzle' | 'spark' | 'smoke' | 'explosion' | 'damage_text' | 'ring' | 'crater';
   x: number;
   y: number;
   vx: number;
@@ -39,7 +61,9 @@ export class ParticleSystem {
   private maxParticles = PARTICLE_CAP;
   private live = 0;
   private reducedMode = false;
-  private maxTreads = 300;
+  private reducedMotion = false;
+  private maxTreads = TREAD_CAP;
+  private wreckSmokeLast = new Map<number, number>();
 
   constructor() {
     // Pre-allocate pool
@@ -63,13 +87,40 @@ export class ParticleSystem {
   }
 
   /** Low quality: far fewer particles (damage numbers are still shown, they are information). */
-  public setReduced(reduced: boolean): void { this.reducedMode = reduced; }
+  public setReduced(reduced: boolean): void {
+    this.reducedMode = reduced;
+    this.maxTreads = reduced ? REDUCED_TREAD_CAP : TREAD_CAP;
+    while (this.treadMarks.length > this.maxTreads) this.treadMarks.shift();
+    for (const particle of this.pool) {
+      if (this.live <= this.cap) break;
+      if (particle.active && particle.type !== 'damage_text') {
+        particle.active = false;
+        this.live--;
+      }
+    }
+    for (const particle of this.pool) {
+      if (this.live <= this.cap) break;
+      if (particle.active) {
+        particle.active = false;
+        this.live--;
+      }
+    }
+  }
+  public setReducedMotion(reduced: boolean): void { this.reducedMotion = reduced; }
   public get activeCount(): number { return this.live; }
   public get cap(): number { return this.reducedMode ? REDUCED_PARTICLE_CAP : this.maxParticles; }
+  public get treadMarkCount(): number { return this.treadMarks.length; }
 
   private alloc(essential = false): Particle | null {
     if (!this.enabled && !essential) return null;
-    if (this.live >= (essential ? this.maxParticles : this.cap)) return null;
+    if (this.reducedMotion && !essential) return null;
+    if (this.live >= this.cap) {
+      if (!essential) return null;
+      const disposable = this.pool.find((particle) => particle.active && particle.type !== 'damage_text');
+      if (!disposable) return null;
+      disposable.active = false;
+      this.live--;
+    }
     for (let i = 0; i < this.pool.length; i++) {
       if (!this.pool[i].active) {
         this.pool[i].active = true;
@@ -80,30 +131,34 @@ export class ParticleSystem {
     return null;
   }
 
-  public emitDust(pos: Vec2, angle: number, speedRatio: number) {
-    if (Math.random() > 0.45 * speedRatio) return;
+  public emitDust(pos: Vec2, angle: number, speedRatio: number, biome?: string) {
+    const speed = Math.max(0, Math.min(1, speedRatio));
+    const density = this.reducedMode ? 0.35 : 1;
+    if (speed <= 0.05 || Math.random() > 0.45 * speed * density) return;
     const p = this.alloc();
     if (!p) return;
 
     const backAngle = angle + Math.PI + (Math.random() - 0.5) * 0.8;
-    const speed = 20 + Math.random() * 40;
+    const driftSpeed = 20 + Math.random() * 40;
+    const lateral = (Math.random() - 0.5) * 24;
 
     p.type = 'dust';
-    p.x = pos.x + (Math.random() - 0.5) * 16;
-    p.y = pos.y + (Math.random() - 0.5) * 16;
-    p.vx = Math.cos(backAngle) * speed;
-    p.vy = Math.sin(backAngle) * speed;
+    p.x = pos.x - Math.cos(angle) * 14 + Math.cos(angle + Math.PI / 2) * lateral;
+    p.y = pos.y - Math.sin(angle) * 14 + Math.sin(angle + Math.PI / 2) * lateral;
+    p.vx = Math.cos(backAngle) * driftSpeed;
+    p.vy = Math.sin(backAngle) * driftSpeed;
     p.size = 6 + Math.random() * 6;
     p.maxSize = p.size * 2.2;
     p.life = 0.5 + Math.random() * 0.4;
     p.maxLife = p.life;
-    p.color = '#a89f91';
+    p.color = dustColorForBiome(biome);
     p.alpha = 0.45;
     p.angle = Math.random() * Math.PI * 2;
     p.spriteId = Math.random() > 0.5 ? 'fx_24' : 'fx_25';
   }
 
   public addTreadMark(pos: Vec2, angle: number, width = 28) {
+    if (this.reducedMotion || !this.enabled) return;
     if (this.treadMarks.length >= this.maxTreads) {
       this.treadMarks.shift();
     }
@@ -124,6 +179,31 @@ export class ParticleSystem {
     p.size = radius * 0.35; p.maxSize = radius; p.life = 0.32; p.maxLife = 0.32; p.color = color; p.alpha = 0.9; p.angle = 0; p.spriteId = undefined;
   }
 
+  private emitCrater(pos: Vec2, radius: number): void {
+    const p = this.alloc();
+    if (!p) return;
+    p.type = 'crater';
+    p.x = pos.x;
+    p.y = pos.y;
+    p.vx = 0;
+    p.vy = 0;
+    p.size = radius;
+    p.maxSize = radius;
+    p.life = 10;
+    p.maxLife = 10;
+    p.color = '#302a24';
+    p.alpha = 0.32;
+    p.angle = 0;
+    p.spriteId = undefined;
+  }
+
+  public emitImpact(pos: Vec2, sparkCount: number, color: string, pressureRadius: number, leaveCrater: boolean): void {
+    this.emitRing(pos, pressureRadius, '#e7e5e4');
+    this.emitHitSparks(pos, sparkCount, color);
+    this.emitSmokePuff(pos, 7 + pressureRadius * 0.06, 0.45);
+    if (leaveCrater) this.emitCrater(pos, pressureRadius * 0.45);
+  }
+
   /** One grey smoke puff (rocket trail, backblast). */
   public emitSmokePuff(pos: Vec2, size = 7, life = 0.5) {
     const p = this.alloc();
@@ -134,7 +214,7 @@ export class ParticleSystem {
 
   /** Flamethrower: a few short orange sparks fanned around the aim angle. */
   public emitFlame(pos: Vec2, angle: number) {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < (this.reducedMode ? 1 : 3); i++) {
       const p = this.alloc();
       if (!p) return;
       const a = angle + (Math.random() - 0.5) * 0.7; const sp = 160 + Math.random() * 120;
@@ -148,6 +228,7 @@ export class ParticleSystem {
     if (family === 'railgun') this.emitRing(pos, 34, '#67e8f9');
     if (family === 'rocket') { const back = { x: pos.x - Math.cos(angle) * 30, y: pos.y - Math.sin(angle) * 30 }; this.emitSmokePuff(back, 11, 0.6); this.emitSmokePuff(back, 9, 0.5); }
     if (family === 'mortar') this.emitSmokePuff(pos, 12, 0.7);
+    this.emitMuzzleSparks(pos, angle, this.reducedMode ? 1 : 4);
     // Muzzle blast flare with random pick from fx_13-fx_17
     const p = this.alloc();
     if (p) {
@@ -168,7 +249,7 @@ export class ParticleSystem {
     }
 
     // A couple smoke puffs
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < (this.reducedMode ? 1 : 3); i++) {
       const sp = this.alloc();
       if (!sp) break;
       const smokeAngle = angle + (Math.random() - 0.5) * 0.6;
@@ -188,8 +269,31 @@ export class ParticleSystem {
     }
   }
 
-  public emitHitSparks(pos: Vec2, count = 6, color = '#f59e0b') {
+  private emitMuzzleSparks(pos: Vec2, angle: number, count: number): void {
     for (let i = 0; i < count; i++) {
+      const p = this.alloc();
+      if (!p) break;
+      const sparkAngle = angle + (Math.random() - 0.5) * 0.9;
+      const speed = 80 + Math.random() * 110;
+      p.type = 'spark';
+      p.x = pos.x + Math.cos(angle) * 8;
+      p.y = pos.y + Math.sin(angle) * 8;
+      p.vx = Math.cos(sparkAngle) * speed;
+      p.vy = Math.sin(sparkAngle) * speed;
+      p.size = 2 + Math.random() * 2;
+      p.maxSize = p.size;
+      p.life = 0.12 + Math.random() * 0.1;
+      p.maxLife = p.life;
+      p.color = i % 2 === 0 ? '#fde047' : '#fb923c';
+      p.alpha = 1;
+      p.angle = sparkAngle;
+      p.spriteId = undefined;
+    }
+  }
+
+  public emitHitSparks(pos: Vec2, count = 6, color = '#f59e0b') {
+    const particleCount = this.reducedMode ? Math.ceil(count * 0.35) : count;
+    for (let i = 0; i < particleCount; i++) {
       const p = this.alloc();
       if (!p) break;
       const angle = Math.random() * Math.PI * 2;
@@ -210,7 +314,8 @@ export class ParticleSystem {
   }
 
   public emitExplosion(pos: Vec2, isLarge = false, targetScale: 'small' | 'medium' | 'large' | 'boss' = isLarge ? 'large' : 'medium') {
-    const count = isLarge ? 22 : 12;
+    const baseCount = isLarge ? 22 : 12;
+    const count = this.reducedMode ? Math.ceil(baseCount * 0.35) : baseCount;
 
     // Center fireball from fx_20-fx_23 scaled by target size
     const p = this.alloc();
@@ -259,6 +364,26 @@ export class ParticleSystem {
       sp.angle = angle;
       sp.spriteId = Math.random() > 0.5 ? 'fx_24' : 'fx_25';
     }
+    this.emitCrater(pos, targetScale === 'boss' ? 42 : targetScale === 'large' ? 34 : 24);
+  }
+
+  public emitWreckSmoke(pos: Vec2, entityId: number, now: number): void {
+    if (!this.enabled || this.reducedMotion) return;
+    const interval = this.reducedMode ? 1.8 : 0.8;
+    const last = this.wreckSmokeLast.get(entityId);
+    if (last !== undefined && now - last < interval) return;
+    this.wreckSmokeLast.set(entityId, now);
+    if (this.wreckSmokeLast.size > PARTICLE_CAP) {
+      for (const [id, emittedAt] of this.wreckSmokeLast) {
+        if (now - emittedAt > 10) this.wreckSmokeLast.delete(id);
+      }
+      while (this.wreckSmokeLast.size > PARTICLE_CAP) {
+        const oldestId = this.wreckSmokeLast.keys().next().value;
+        if (oldestId === undefined) break;
+        this.wreckSmokeLast.delete(oldestId);
+      }
+    }
+    this.emitSmokePuff({ x: pos.x, y: pos.y - 8 }, this.reducedMode ? 7 : 12, this.reducedMode ? 0.65 : 1.2);
   }
 
   public emitDamageText(pos: Vec2, text: string, color = '#ef4444', isCrit = false) {
@@ -267,8 +392,8 @@ export class ParticleSystem {
     p.type = 'damage_text';
     p.x = pos.x + (Math.random() - 0.5) * 20;
     p.y = pos.y - 15;
-    p.vx = (Math.random() - 0.5) * 35;
-    p.vy = isCrit ? -75 : -55; // Floats upwards faster on crits
+    p.vx = this.reducedMotion ? 0 : (Math.random() - 0.5) * 35;
+    p.vy = this.reducedMotion ? 0 : isCrit ? -75 : -55; // Floats upwards faster on crits
     p.size = isCrit ? 19 : 13;
     p.maxSize = p.size;
     p.life = isCrit ? 0.95 : 0.75;
@@ -311,6 +436,9 @@ export class ParticleSystem {
         p.vx = 0; p.vy = 0;
         p.size = p.size + (p.maxSize - p.size) * (dt * 9);
         p.alpha = (1 - progress) * 0.9;
+      } else if (p.type === 'crater') {
+        p.vx = 0; p.vy = 0;
+        p.alpha = (1 - progress) * 0.32;
       } else if (p.type === 'damage_text') {
         p.alpha = Math.min(1, (1 - progress) * 1.5);
       } else {
@@ -328,7 +456,7 @@ export class ParticleSystem {
   }
 
   public renderTreads(ctx: CanvasRenderingContext2D, camera: Camera) {
-    if (!this.enabled) return;
+    if (!this.enabled || this.reducedMotion) return;
     ctx.save();
     for (let i = 0; i < this.treadMarks.length; i++) {
       const tm = this.treadMarks[i];
@@ -356,6 +484,32 @@ export class ParticleSystem {
     ctx.restore();
   }
 
+  public renderCraterDecals(ctx: CanvasRenderingContext2D, camera: Camera) {
+    if (!this.enabled || this.reducedMotion) return;
+    ctx.save();
+    for (const p of this.pool) {
+      if (!p.active || p.type !== 'crater') continue;
+      const screen = camera.worldToScreen({ x: p.x, y: p.y });
+      const radius = p.size * camera.zoom;
+      if (screen.x < -radius || screen.x > camera.viewportWidth + radius || screen.y < -radius || screen.y > camera.viewportHeight + radius) continue;
+      ctx.save();
+      ctx.globalAlpha = p.alpha * (this.reducedMode ? 0.45 : 1);
+      ctx.translate(screen.x, screen.y);
+      ctx.rotate(p.angle);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, radius, radius * 0.52, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#171411';
+      ctx.lineWidth = Math.max(1, radius * 0.08);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, radius * 0.78, radius * 0.36, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
   /** Accessibility: when false, particles and tread marks are not drawn. */
   public enabled = true;
 
@@ -366,6 +520,8 @@ export class ParticleSystem {
       const p = this.pool[i];
       if (!p.active) continue;
       if (!this.enabled && p.type !== 'damage_text') continue; // reduced effects keep the damage numbers (they are information)
+      if (this.reducedMotion && p.type !== 'damage_text') continue;
+      if (p.type === 'crater') continue;
 
       const s = camera.worldToScreen({ x: p.x, y: p.y });
       if (

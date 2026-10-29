@@ -310,6 +310,15 @@ export class WorldRenderer {
   private byId = new Map<number, SimEntity>();
   private ambientTint: AmbientTint = ambientTintForTimeOfDay('noon');
   private lightingUpdatedAt = 0;
+  private recoilKicks = new Map<number, { angle: number; startedAt: number }>();
+
+  public kickRecoil(entityId: number, angle: number, now: number): void {
+    this.recoilKicks.set(entityId, { angle, startedAt: now });
+    if (this.recoilKicks.size > 200) {
+      const oldest = this.recoilKicks.keys().next().value;
+      if (oldest !== undefined) this.recoilKicks.delete(oldest);
+    }
+  }
 
   public render(
     ctx: CanvasRenderingContext2D,
@@ -322,6 +331,8 @@ export class WorldRenderer {
     const height = this.camera.viewportHeight;
     const now = performance.now() / 1000;
     const motionReduced = prefersReducedMotion();
+    this.particles.setReducedMotion(motionReduced);
+    if (motionReduced) this.recoilKicks.clear();
     const lightingDelta = this.lightingUpdatedAt ? Math.min(0.1, Math.max(0, now - this.lightingUpdatedAt)) : 0;
     this.lightingUpdatedAt = now;
     const targetTint = ambientTintForTimeOfDay(mapDef.timeOfDay);
@@ -354,6 +365,7 @@ export class WorldRenderer {
 
     // 5. Render Tread Marks
     this.particles.renderTreads(ctx, this.camera);
+    this.particles.renderCraterDecals(ctx, this.camera);
 
     // 6. Render Gates
     for (const ent of entities) {
@@ -423,9 +435,26 @@ export class WorldRenderer {
         continue;
       }
 
+      if (ent.isWreck) this.particles.emitWreckSmoke(ent.pos, ent.id, now);
+
       if (ent.kind === 'player' || ent.kind === 'npc_driver') {
         const tier = Math.min(6, Math.max(1, Math.floor(ent.level / 5) + 1));
-        drawVehicle(ctx, ent, this.camera, tier, time, mapDef.sunDirection ?? DEFAULT_SUN_DIRECTION, !this.reducedEffects);
+        const recoil = this.recoilKicks.get(ent.id);
+        const recoilAge = recoil ? now - recoil.startedAt : 1;
+        const recoilKick = recoilAge >= 0.16 ? 0 : Math.exp(-recoilAge * 22);
+        const visibleRecoil = this.reducedEffects ? recoilKick * 0.35 : recoilKick;
+        if (recoil && recoilAge >= 0.16) this.recoilKicks.delete(ent.id);
+        drawVehicle(
+          ctx,
+          ent,
+          this.camera,
+          tier,
+          time,
+          mapDef.sunDirection ?? DEFAULT_SUN_DIRECTION,
+          !this.reducedEffects,
+          visibleRecoil,
+          recoil?.angle,
+        );
         if (!ent.isWreck) {
           drawAuras(ctx, this.camera, ent, performance.now() / 1000, this.reducedEffects);
           this.renderStatusIcons(ctx, ent);

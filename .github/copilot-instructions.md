@@ -1,0 +1,1 @@
+Follow the briefing in `/AGENTS.md` (project state, rules, commands) and `/CLAUDE.md` (invariants and hard rules). Answer the owner in German; code, commits and docs in English. Work only in the dev checkout on branch `claude/unify-client`, never deploy, never push to `main`.

@@ -6,6 +6,11 @@ import { clamp, MapDef, SimEntity, Vec2, dist } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { ParticleSystem } from './particles.ts';
 import { spriteRegistry } from './assets.ts';
+import { DEFAULT_SUN_DIRECTION } from '../../shared/types.ts';
+import { ambientTintForTimeOfDay, ambientTintCss, blendAmbientTint, type AmbientTint } from './lighting.ts';
+import { drawStaticSpriteShadow } from './shadows.ts';
+import { drawRadialLight } from './lightSprites.ts';
+import { prefersReducedMotion } from '../ui/motion/motion.ts';
 import { isClanEmblem } from '../../shared/data/emblems.ts';
 import {
   drawEnemy,
@@ -303,6 +308,8 @@ export class WorldRenderer {
   /** faction-war control points of the current map (polled from the server every few seconds) */
   warPoints: Array<{ id: string; x: number; y: number; radius: number; owner: string | null; progress: Record<string, number>; contested: boolean }> = [];
   private byId = new Map<number, SimEntity>();
+  private ambientTint: AmbientTint = ambientTintForTimeOfDay('noon');
+  private lightingUpdatedAt = 0;
 
   public render(
     ctx: CanvasRenderingContext2D,
@@ -313,6 +320,14 @@ export class WorldRenderer {
   ) {
     const width = this.camera.viewportWidth;
     const height = this.camera.viewportHeight;
+    const now = performance.now() / 1000;
+    const motionReduced = prefersReducedMotion();
+    const lightingDelta = this.lightingUpdatedAt ? Math.min(0.1, Math.max(0, now - this.lightingUpdatedAt)) : 0;
+    this.lightingUpdatedAt = now;
+    const targetTint = ambientTintForTimeOfDay(mapDef.timeOfDay);
+    this.ambientTint = motionReduced
+      ? targetTint
+      : blendAmbientTint(this.ambientTint, targetTint, lightingDelta);
 
     ctx.clearRect(0, 0, width, height);
     this.localPlayer = localPlayer;
@@ -329,10 +344,10 @@ export class WorldRenderer {
     // 4. Render Safe Zone perimeters
     if (mapDef.safeZones && mapDef.safeZones.length > 0) {
       for (const sz of mapDef.safeZones) {
-        this.renderSafeZone(ctx, sz, time);
+        this.renderSafeZone(ctx, sz, time, mapDef.sunDirection ?? DEFAULT_SUN_DIRECTION);
       }
     } else if (mapDef.safeZone) {
-      this.renderSafeZone(ctx, mapDef.safeZone, time);
+      this.renderSafeZone(ctx, mapDef.safeZone, time, mapDef.sunDirection ?? DEFAULT_SUN_DIRECTION);
     }
 
     for (const p of this.warPoints) this.renderWarPoint(ctx, p, time);
@@ -369,9 +384,13 @@ export class WorldRenderer {
     // 8. Render Props (Trees, Rocks, Ruins) with drop shadows and top-left lighting
     this.renderObstacles(ctx, mapDef);
 
+    if (mapDef.timeOfDay === 'night' && !this.reducedEffects && !motionReduced) {
+      this.renderNightHeadlights(ctx, entities);
+    }
+
     // 9. Render Landmark
     if (mapDef.landmark && !scene) {
-      drawLandmark(ctx, mapDef.landmark, this.camera, time);
+      drawLandmark(ctx, mapDef.landmark, this.camera, time, mapDef.sunDirection ?? DEFAULT_SUN_DIRECTION, !this.reducedEffects);
     }
 
     // 10. Render Telegraph Danger Rings
@@ -406,7 +425,7 @@ export class WorldRenderer {
 
       if (ent.kind === 'player' || ent.kind === 'npc_driver') {
         const tier = Math.min(6, Math.max(1, Math.floor(ent.level / 5) + 1));
-        drawVehicle(ctx, ent, this.camera, tier, time);
+        drawVehicle(ctx, ent, this.camera, tier, time, mapDef.sunDirection ?? DEFAULT_SUN_DIRECTION, !this.reducedEffects);
         if (!ent.isWreck) {
           drawAuras(ctx, this.camera, ent, performance.now() / 1000, this.reducedEffects);
           this.renderStatusIcons(ctx, ent);
@@ -420,7 +439,7 @@ export class WorldRenderer {
         ent.kind === 'loot_convoy' ||
         ent.kind === 'boss'
       ) {
-        drawEnemy(ctx, ent, this.camera, time);
+        drawEnemy(ctx, ent, this.camera, time, mapDef.sunDirection ?? DEFAULT_SUN_DIRECTION, !this.reducedEffects);
         if (!ent.isWreck) {
           drawAuras(ctx, this.camera, ent, performance.now() / 1000, this.reducedEffects);
           this.renderStatusIcons(ctx, ent);
@@ -441,7 +460,8 @@ export class WorldRenderer {
     this.renderProjectiles(ctx, entities);
 
     // 13. Render Particles & Floating Damage Numbers
-    this.particles.renderParticles(ctx, this.camera);
+    this.particles.renderParticles(ctx, this.camera, mapDef.timeOfDay === 'night' && !this.reducedEffects && !motionReduced);
+    this.renderDayTint(ctx);
 
     // 13b. Target brackets and off-screen threat arrows
     if (localPlayer && localPlayer.hull > 0) {
@@ -474,6 +494,34 @@ export class WorldRenderer {
 
     // 17. Drifting Clouds / Light Weather & Vignette
     this.renderAtmosphere(ctx);
+  }
+
+  private renderNightHeadlights(ctx: CanvasRenderingContext2D, entities: SimEntity[]): void {
+    const zoom = this.camera.zoom;
+    for (const ent of entities) {
+      if (ent.hull <= 0 || !['player', 'npc_driver', 'scout_buggy', 'gunner_truck', 'artillery', 'bunker_turret', 'loot_convoy', 'boss'].includes(ent.kind)) continue;
+      const screen = this.camera.worldToScreen(ent.pos);
+      if (screen.x < -220 || screen.x > this.camera.viewportWidth + 220 || screen.y < -120 || screen.y > this.camera.viewportHeight + 120) continue;
+      const forwardX = Math.cos(ent.chassisAngle);
+      const forwardY = Math.sin(ent.chassisAngle);
+      drawRadialLight(
+        ctx,
+        screen.x + forwardX * ent.radius * zoom,
+        screen.y + forwardY * ent.radius * zoom,
+        210 * zoom,
+        90 * zoom,
+        ent.kind === 'player' ? 0.22 : 0.1,
+        ent.chassisAngle,
+      );
+    }
+  }
+
+  private renderDayTint(ctx: CanvasRenderingContext2D): void {
+    if (this.ambientTint.a <= 0.005) return;
+    ctx.save();
+    ctx.fillStyle = ambientTintCss(this.ambientTint);
+    ctx.fillRect(0, 0, this.camera.viewportWidth, this.camera.viewportHeight);
+    ctx.restore();
   }
 
   private renderTerrain(ctx: CanvasRenderingContext2D, mapDef: MapDef) {
@@ -584,10 +632,10 @@ export class WorldRenderer {
     const bw = 90 * zoom;
     const bh = 130 * zoom;
 
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-    ctx.shadowBlur = 6 * zoom;
-    ctx.shadowOffsetX = 4 * zoom;
-    ctx.shadowOffsetY = 5 * zoom;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.beginPath();
+    ctx.ellipse(bridgeCenter.x + 5 * zoom, bridgeCenter.y + 7 * zoom, bw * 0.55, bh * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     // Bridge planks
     ctx.fillStyle = '#854d0e';
@@ -632,7 +680,12 @@ export class WorldRenderer {
     }
   }
 
-  private renderSafeZone(ctx: CanvasRenderingContext2D, safeZone: { x: number; y: number; radius: number }, time: number) {
+  private renderSafeZone(
+    ctx: CanvasRenderingContext2D,
+    safeZone: { x: number; y: number; radius: number },
+    time: number,
+    sunDirection: Vec2,
+  ) {
     const s = this.camera.worldToScreen({ x: safeZone.x, y: safeZone.y });
     const r = safeZone.radius * this.camera.zoom;
     const zoom = this.camera.zoom;
@@ -643,11 +696,14 @@ export class WorldRenderer {
     const homeBaseImg = spriteRegistry.getImage(spriteRegistry.getPropPath('home_base'));
     if (homeBaseImg) {
       ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-      ctx.shadowBlur = 10 * zoom;
-      ctx.shadowOffsetX = 6 * zoom;
-      ctx.shadowOffsetY = 8 * zoom;
       const baseSize = 220 * zoom;
+      if (!this.reducedEffects) drawStaticSpriteShadow(ctx, homeBaseImg, s.x, s.y, baseSize, baseSize, sunDirection, zoom);
+      else {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
+        ctx.beginPath();
+        ctx.ellipse(s.x + 5 * zoom, s.y + 7 * zoom, baseSize * 0.42, baseSize * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.drawImage(homeBaseImg, s.x - baseSize / 2, s.y - baseSize / 2, baseSize, baseSize);
       ctx.restore();
     }
@@ -670,6 +726,7 @@ export class WorldRenderer {
 
   private renderObstacles(ctx: CanvasRenderingContext2D, mapDef: MapDef) {
     const zoom = this.camera.zoom;
+    const sunDirection = mapDef.sunDirection ?? DEFAULT_SUN_DIRECTION;
 
     for (const obs of mapDef.obstacles) {
       const s = this.camera.worldToScreen({ x: obs.x, y: obs.y });
@@ -739,12 +796,15 @@ export class WorldRenderer {
             ph = 56 * zoom;
           }
 
-          // cheap blob shadow (a canvas shadowBlur per prop is far too slow); flat decals get none
+          // Flat decals do not cast shadows.
           if (!FLAT_PROPS.test(obs.propId)) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
-            ctx.beginPath();
-            ctx.ellipse(3 * zoom, 5 * zoom, pw * 0.4, ph * 0.36, 0, 0, Math.PI * 2);
-            ctx.fill();
+            const drewCachedShadow = !this.reducedEffects && drawStaticSpriteShadow(ctx, propImg, 0, 0, pw, ph, sunDirection, zoom);
+            if (!drewCachedShadow) {
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+              ctx.beginPath();
+              ctx.ellipse(-sunDirection.x * 7 * zoom, -sunDirection.y * 7 * zoom, pw * 0.4, ph * 0.36, 0, 0, Math.PI * 2);
+              ctx.fill();
+            }
           }
           ctx.drawImage(propImg, -pw / 2, -ph / 2, pw, ph);
           ctx.restore();
@@ -756,11 +816,12 @@ export class WorldRenderer {
       ctx.save();
       ctx.translate(s.x, s.y);
 
-      // Soft drop shadow cast to bottom-right
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-      ctx.shadowBlur = 6 * zoom;
-      ctx.shadowOffsetX = 4 * zoom;
-      ctx.shadowOffsetY = 6 * zoom;
+      if (!FLAT_PROPS.test(obs.propId ?? '')) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+        ctx.beginPath();
+        ctx.ellipse(-sunDirection.x * 7 * zoom, -sunDirection.y * 7 * zoom, r * 0.8, r * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       if (obs.type === 'tree') {
         // Multi-layered pine/foliage canopy with top-left sun illumination

@@ -1,6 +1,27 @@
 import { SimEntity, Vec2 } from '../sim/types.ts';
+import { DEFAULT_SUN_DIRECTION } from '../../shared/types.ts';
 import { Camera } from './camera.ts';
 import { spriteRegistry } from './assets.ts';
+import { drawSpriteShadow, drawStaticSpriteShadow } from './shadows.ts';
+
+function drawBlobShadow(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  sunDirection: Vec2,
+  zoom: number,
+): void {
+  const magnitude = Math.hypot(sunDirection.x, sunDirection.y) || 1;
+  ctx.save();
+  ctx.translate(x - (sunDirection.x / magnitude) * 7 * zoom, y - (sunDirection.y / magnitude) * 7 * zoom);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, width * 0.42, height * 0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
 
 /**
  * Draws vehicles, enemies, props, gates, and landmarks with high aesthetic quality,
@@ -12,7 +33,9 @@ export function drawVehicle(
   ent: SimEntity,
   camera: Camera,
   tier = 1,
-  time = 0
+  time = 0,
+  sunDirection: Vec2 = DEFAULT_SUN_DIRECTION,
+  highQualityShadows = true,
 ) {
   const s = camera.worldToScreen(ent.pos);
   const zoom = camera.zoom;
@@ -64,18 +87,26 @@ export function drawVehicle(
     ctx.restore();
   }
 
-  // 1. Draw Chassis (rotates with chassisAngle, casts drop shadow to bottom-right)
+  // 1. Draw Chassis
+  const classKey = ent.vehicleClass && ent.tier ? `${ent.tier}_${ent.vehicleClass}` : '';
+  const classBody = classKey ? spriteRegistry.getVehicleBodyPath(ent.tier!, ent.vehicleClass!) : '';
+  const bodyImg = spriteRegistry.getImage(classBody && spriteRegistry.isListed(classBody) ? classBody : spriteRegistry.getVehicleBodyPath(tier, ent.kind));
+  const wreckImg = ent.isWreck ? spriteRegistry.getImage(spriteRegistry.getFxPath(ent.id % 2 === 0 ? 'fx_09' : 'fx_10')) : null;
+  const bodyWidth = radius * 2.4;
+  const bodyHeight = radius * 2.0;
+  const shadowImage = ent.isWreck ? wreckImg : bodyImg;
+  const shadowWidth = ent.isWreck ? radius * 2.4 : bodyWidth;
+  const shadowHeight = ent.isWreck ? radius * 2 : bodyHeight;
+  if (shadowImage && highQualityShadows) {
+    drawSpriteShadow(ctx, shadowImage, 0, 0, shadowWidth, shadowHeight, sunDirection, zoom, ent.chassisAngle);
+  } else {
+    drawBlobShadow(ctx, 0, 0, shadowWidth, shadowHeight, sunDirection, zoom);
+  }
+
   ctx.save();
   ctx.rotate(ent.chassisAngle);
 
-  // Soft drop shadow cast to bottom-right
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  ctx.shadowBlur = 6 * zoom;
-  ctx.shadowOffsetX = 3.5 * zoom;
-  ctx.shadowOffsetY = 4.5 * zoom;
-
   if (ent.isWreck) {
-    const wreckImg = spriteRegistry.getImage(spriteRegistry.getFxPath(ent.id % 2 === 0 ? 'fx_09' : 'fx_10'));
     if (wreckImg) {
       const w = radius * 2.4;
       const h = radius * 2.0;
@@ -86,44 +117,28 @@ export function drawVehicle(
     }
   }
 
-  // Painted sprites per vehicle class and tier (1-6 so far); older art is keyed by level tier and kind.
-  const classKey = ent.vehicleClass && ent.tier ? `${ent.tier}_${ent.vehicleClass}` : '';
-  const classBody = classKey ? spriteRegistry.getVehicleBodyPath(ent.tier!, ent.vehicleClass!) : '';
-  const bodyImg = spriteRegistry.getImage(classBody && spriteRegistry.isListed(classBody) ? classBody : spriteRegistry.getVehicleBodyPath(tier, ent.kind));
   if (bodyImg) {
-    const w = radius * 2.4;
-    const h = radius * 2.0;
-    // cheap blob shadow instead of canvas shadowBlur (a blur pass per sprite is very slow on phones)
-    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.26)';
-    ctx.beginPath();
-    ctx.ellipse(3 * zoom, 4.5 * zoom, w * 0.45, h * 0.42, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.drawImage(bodyImg, -w / 2, -h / 2, w, h);
+    ctx.drawImage(bodyImg, -bodyWidth / 2, -bodyHeight / 2, bodyWidth, bodyHeight);
   } else {
     drawChassisByTier(ctx, tier, radius, ent.isHostile, ent.distanceDriven || 0, ent.isWreck);
   }
   ctx.restore();
 
   // 2. Draw Turret (rotates independently with turretAngle)
-  ctx.save();
-  ctx.rotate(ent.turretAngle);
-
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-  ctx.shadowBlur = 4 * zoom;
-  ctx.shadowOffsetX = 2.5 * zoom;
-  ctx.shadowOffsetY = 3.5 * zoom;
-
   const classTurret = classKey ? spriteRegistry.getVehicleTurretPath(ent.tier!, ent.vehicleClass!) : '';
   // a class body without its own painted turret keeps the vector turret instead of borrowing a mismatched old one
   const usesClassArt = !!classBody && spriteRegistry.isListed(classBody);
   const turretImg = usesClassArt
     ? (spriteRegistry.isListed(classTurret) ? spriteRegistry.getImage(classTurret) : null)
     : spriteRegistry.getImage(spriteRegistry.getVehicleTurretPath(tier, ent.kind));
+  const tw = radius * 2.2;
+  const th = radius * 1.4;
+  if (turretImg && highQualityShadows) {
+    drawSpriteShadow(ctx, turretImg, 0, 0, tw, th, sunDirection, zoom, ent.turretAngle);
+  }
+  ctx.save();
+  ctx.rotate(ent.turretAngle);
   if (turretImg) {
-    const tw = radius * 2.2;
-    const th = radius * 1.4;
-    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
     ctx.drawImage(turretImg, -tw / 4, -th / 2, tw, th);
   } else {
     drawTurretByTier(
@@ -375,7 +390,9 @@ export function drawEnemy(
   ctx: CanvasRenderingContext2D,
   ent: SimEntity,
   camera: Camera,
-  time = 0
+  time = 0,
+  sunDirection: Vec2 = DEFAULT_SUN_DIRECTION,
+  highQualityShadows = true,
 ) {
   const s = camera.worldToScreen(ent.pos);
   const zoom = camera.zoom;
@@ -401,6 +418,8 @@ export function drawEnemy(
   const enemyKey = [ent.spriteId, ent.archetypeId].find((k) => k && spriteRegistry.isListed(spriteRegistry.getEnemyPath(k))) ?? ent.kind;
   const enemyImg = spriteRegistry.getImage(spriteRegistry.getEnemyPath(enemyKey));
   if (enemyImg) {
+    if (highQualityShadows) drawSpriteShadow(ctx, enemyImg, 0, 0, r * 2.6, r * 2.6, sunDirection, zoom, ent.chassisAngle);
+    else drawBlobShadow(ctx, 0, 0, r * 2.6, r * 2.6, sunDirection, zoom);
     ctx.save();
     ctx.rotate(ent.chassisAngle);
     ctx.drawImage(enemyImg, -r * 1.3, -r * 1.3, r * 2.6, r * 2.6);
@@ -410,13 +429,9 @@ export function drawEnemy(
   }
 
   // Procedural enemy rendering with drop shadows
+  drawBlobShadow(ctx, 0, 0, r * 2, r * 1.5, sunDirection, zoom);
   ctx.save();
   ctx.rotate(ent.chassisAngle);
-
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  ctx.shadowBlur = 6 * zoom;
-  ctx.shadowOffsetX = 3.5 * zoom;
-  ctx.shadowOffsetY = 4.5 * zoom;
 
   if (ent.isWreck) {
     ctx.fillStyle = '#292524';
@@ -551,11 +566,10 @@ export function drawLootCrate(
   ctx.save();
   ctx.translate(s.x, s.y);
 
-  // Drop shadow
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  ctx.shadowBlur = 4 * zoom;
-  ctx.shadowOffsetX = 3 * zoom;
-  ctx.shadowOffsetY = 4 * zoom;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
+  ctx.beginPath();
+  ctx.ellipse(3 * zoom, 4 * zoom, r * 1.15, r * 0.65, 0, 0, Math.PI * 2);
+  ctx.fill();
 
   // Pulsing aura
   const pulse = 0.5 + Math.sin(time * 6 + crate.id) * 0.3;
@@ -667,7 +681,9 @@ export function drawLandmark(
   ctx: CanvasRenderingContext2D,
   landmark: { name: string; x: number; y: number; type: string },
   camera: Camera,
-  time = 0
+  time = 0,
+  sunDirection: Vec2 = DEFAULT_SUN_DIRECTION,
+  highQualityShadows = true,
 ) {
   const s = camera.worldToScreen({ x: landmark.x, y: landmark.y });
   const zoom = camera.zoom;
@@ -675,15 +691,12 @@ export function drawLandmark(
   ctx.save();
   ctx.translate(s.x, s.y);
 
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  ctx.shadowBlur = 10 * zoom;
-  ctx.shadowOffsetX = 6 * zoom;
-  ctx.shadowOffsetY = 8 * zoom;
-
   // Check for lighthouse raster sprite
   const lighthouseImg = spriteRegistry.getImage(spriteRegistry.getLandmarkPath('green_valley'));
   if (landmark.type === 'lighthouse' && lighthouseImg) {
     const size = 180 * zoom;
+    if (highQualityShadows) drawStaticSpriteShadow(ctx, lighthouseImg, 0, 0, size, size, sunDirection, zoom);
+    else drawBlobShadow(ctx, 0, 0, size, size, sunDirection, zoom);
     ctx.drawImage(lighthouseImg, -size / 2, -size / 2, size, size);
 
     // Dynamic rotating beacon light cone beam
@@ -701,6 +714,7 @@ export function drawLandmark(
     ctx.fill();
     ctx.restore();
   } else if (landmark.type === 'watchtower' || landmark.type === 'windmill' || landmark.type === 'lighthouse') {
+    drawBlobShadow(ctx, 0, 0, 70 * zoom, 80 * zoom, sunDirection, zoom);
     // Highland Windmill Landmark with spinning sails
     // Octagonal stone mill tower base
     ctx.fillStyle = '#d6d3d1';
@@ -742,6 +756,7 @@ export function drawLandmark(
     ctx.fill();
     ctx.restore();
   } else if (landmark.type === 'canyon_arch') {
+    drawBlobShadow(ctx, 0, 0, 130 * zoom, 40 * zoom, sunDirection, zoom);
     // Titan Canyon Arch
     ctx.strokeStyle = '#b45309';
     ctx.lineWidth = 24 * zoom;
@@ -749,6 +764,7 @@ export function drawLandmark(
     ctx.arc(0, 0, 80 * zoom, Math.PI, 0);
     ctx.stroke();
   } else if (landmark.type === 'frozen_waterfall') {
+    drawBlobShadow(ctx, 0, 0, 60 * zoom, 120 * zoom, sunDirection, zoom);
     // Frozen Waterfall Spire
     ctx.fillStyle = '#bae6fd';
     ctx.beginPath();
@@ -761,6 +777,7 @@ export function drawLandmark(
     ctx.lineWidth = 2;
     ctx.stroke();
   } else {
+    drawBlobShadow(ctx, 0, 0, 100 * zoom, 80 * zoom, sunDirection, zoom);
     // Collapsed Skyscraper
     ctx.fillStyle = '#27272a';
     ctx.beginPath();
@@ -833,11 +850,7 @@ export function drawResourceNode(
   ctx.save();
   ctx.translate(s.x, s.y);
 
-  // Soft drop shadow cast to bottom-right
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-  ctx.shadowBlur = 6 * zoom;
-  ctx.shadowOffsetX = 4 * zoom;
-  ctx.shadowOffsetY = 5 * zoom;
+  drawBlobShadow(ctx, 0, 0, r * 2, r * 1.4, DEFAULT_SUN_DIRECTION, zoom);
 
   // Base rock polygon
   ctx.fillStyle = '#3f3f46';
@@ -897,4 +910,3 @@ export function drawResourceNode(
   ctx.fillStyle = glowColor;
   ctx.fillText(label, s.x, s.y - r - 8);
 }
-

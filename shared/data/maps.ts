@@ -22,6 +22,8 @@ import {
   WeatherType,
   TimeOfDay,
   OreType,
+  DEFAULT_SUN_DIRECTION,
+  Vec2,
   vec2,
 } from '../types.ts';
 
@@ -37,6 +39,7 @@ export interface MapMetadata {
   biome: BiomeType;
   weather: WeatherType;
   timeOfDay: TimeOfDay;
+  sunDirection?: Vec2;
   width: number;
   height: number;
   seed: number;
@@ -120,6 +123,7 @@ export const MAP_METADATA_TABLE: Record<number, MapMetadata> = {
     biome: 'coastal',
     weather: 'clear',
     timeOfDay: 'noon',
+    sunDirection: { x: -0.65, y: -0.76 },
     width: 4000,
     height: 4000,
     seed: 101,
@@ -156,6 +160,7 @@ export const MAP_METADATA_TABLE: Record<number, MapMetadata> = {
     biome: 'marsh',
     weather: 'fog',
     timeOfDay: 'dusk',
+    sunDirection: { x: -0.9, y: -0.3 },
     width: 4400,
     height: 4400,
     seed: 103,
@@ -357,6 +362,7 @@ export const MAP_METADATA_TABLE: Record<number, MapMetadata> = {
     biome: 'valley',
     weather: 'clear',
     timeOfDay: 'noon',
+    sunDirection: { x: -0.2, y: -0.98 },
     width: 4500,
     height: 4500,
     seed: 114,
@@ -538,6 +544,7 @@ export const MAP_METADATA_TABLE: Record<number, MapMetadata> = {
     biome: 'ruins',
     weather: 'storm',
     timeOfDay: 'night',
+    sunDirection: { x: 0.4, y: -0.92 },
     width: 5600,
     height: 5600,
     seed: 124,
@@ -891,6 +898,7 @@ export function generateMapCatalog(): Record<number, MapDef> {
       faction: meta.faction,
       weather: meta.weather,
       timeOfDay: meta.timeOfDay,
+      sunDirection: meta.sunDirection ?? DEFAULT_SUN_DIRECTION,
       instanceCapacity: meta.instanceCapacity,
       seed: meta.seed,
       safeZones,

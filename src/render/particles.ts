@@ -1,8 +1,9 @@
 import { Vec2 } from '../sim/types.ts';
 import { Camera } from './camera.ts';
 import { spriteRegistry } from './assets.ts';
+import { drawRadialLight } from './lightSprites.ts';
 
-/** Hard cap of simultaneous particles; "Reduced effects" lowers it to REDUCED_PARTICLE_CAP. */
+/** Hard cap of simultaneous particles; low quality lowers it to REDUCED_PARTICLE_CAP. */
 export const PARTICLE_CAP = 600;
 export const REDUCED_PARTICLE_CAP = 120;
 
@@ -61,7 +62,7 @@ export class ParticleSystem {
     }
   }
 
-  /** Reduced effects: far fewer particles (damage numbers are still shown, they are information). */
+  /** Low quality: far fewer particles (damage numbers are still shown, they are information). */
   public setReduced(reduced: boolean): void { this.reducedMode = reduced; }
   public get activeCount(): number { return this.live; }
   public get cap(): number { return this.reducedMode ? REDUCED_PARTICLE_CAP : this.maxParticles; }
@@ -358,7 +359,7 @@ export class ParticleSystem {
   /** Accessibility: when false, particles and tread marks are not drawn. */
   public enabled = true;
 
-  public renderParticles(ctx: CanvasRenderingContext2D, camera: Camera) {
+  public renderParticles(ctx: CanvasRenderingContext2D, camera: Camera, nightLighting = false) {
     ctx.save();
 
     for (let i = 0; i < this.pool.length; i++) {
@@ -377,6 +378,21 @@ export class ParticleSystem {
       }
 
       const scaledSize = Math.max(1, p.size * camera.zoom);
+      if (nightLighting && (p.type === 'muzzle' || p.type === 'explosion')) {
+        if (p.type === 'muzzle') {
+          drawRadialLight(
+            ctx,
+            s.x + Math.cos(p.angle) * scaledSize * 0.8,
+            s.y + Math.sin(p.angle) * scaledSize * 0.8,
+            scaledSize * 7,
+            scaledSize * 4.5,
+            p.alpha * 0.45,
+            p.angle,
+          );
+        } else {
+          drawRadialLight(ctx, s.x, s.y, scaledSize * 4.5, scaledSize * 4.5, p.alpha * 0.5);
+        }
+      }
 
       if (p.type === 'damage_text') {
         ctx.save();

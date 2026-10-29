@@ -6,7 +6,7 @@ export {
 export type {
   Vec2, AmmoType, EntityKind, SimEntity, SimCommand, SimEvent, ChatMessage, MapObstacle, AbilityId, StatusEffectType,
 } from '../../shared/types.ts';
-import type { Vec2, EntityKind, MapObstacle, AmmoType } from '../../shared/types.ts';
+import type { Vec2, EntityKind, MapObstacle, AmmoType, TimeOfDay } from '../../shared/types.ts';
 
 export interface VehicleStats {
   id: string;
@@ -120,7 +120,6 @@ export interface MapDef {
     pos: Vec2;
   };
   weather?: string;
-  timeOfDay?: string;
+  timeOfDay?: TimeOfDay;
+  sunDirection?: Vec2;
 }
-
-

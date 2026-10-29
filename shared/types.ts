@@ -16,6 +16,8 @@ export interface Vec2 {
   y: number;
 }
 
+export const DEFAULT_SUN_DIRECTION: Vec2 = { x: -0.6, y: -0.8 };
+
 export function vec2(x = 0, y = 0): Vec2 {
   return { x, y };
 }
@@ -500,6 +502,8 @@ export interface MapDef {
   faction?: FactionId;
   weather?: WeatherType;
   timeOfDay?: TimeOfDay;
+  /** Client-only lighting direction, pointing from the ground toward the sun. */
+  sunDirection?: Vec2;
   instanceCapacity?: number;
   seed?: number;
   safeZones: SafeZone[];

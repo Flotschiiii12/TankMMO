@@ -447,7 +447,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             if (event.armorDamage > 0 && victim && victim.armor <= 1 && victim.maxArmor > 0) { particles.emitRing(event.pos, 44, '#38bdf8'); particles.emitDamageText(event.pos, tr('ARMOR BREAK'), '#38bdf8', true); }
             if (event.isRearHit) particles.emitDamageText({ x: event.pos.x, y: event.pos.y + 14 }, tr('REAR'), '#fb923c');
           }
-          soundEngine.playImpact(event.armorDamage > 0, distanceVolume(distToPlayer(event.pos)));
+          soundEngine.playAmmoImpact(event.ammoType, event.armorDamage > 0, distanceVolume(distToPlayer(event.pos)));
           if (event.attackerId === clientRef.current?.playerId || event.targetId === clientRef.current?.playerId) lastCombatAt.current = performance.now();
           if (event.attackerId === clientRef.current?.playerId) camera.addShake(event.isCrit ? 4 : 2);
           if (event.targetId === clientRef.current?.playerId && event.finalDamage > 0 && profileRef.current.settings.hapticsEnabled !== false && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {

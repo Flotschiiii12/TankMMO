@@ -1,8 +1,10 @@
-import { DEFAULT_MIX, ambientFor, busGain, clamp01, type Bus, type Mix } from './mixer.ts';
+import { DEFAULT_MIX, ambientFor, ammoImpactToneFor, busGain, clamp01, type Bus, type Mix } from './mixer.ts';
 import { MusicDirector, STEPS_PER_BAR, buildBar, midiFreq, stepSeconds, type MusicInputs, type MusicNote, type MusicState } from './music.ts';
+import type { AmmoType } from '../../shared/types.ts';
+import type { WeaponSoundKind } from './mixer.ts';
 
 export type UISound = 'click' | 'hover' | 'open' | 'close' | 'confirm' | 'deny' | 'tab' | 'toast' | 'equip' | 'coin';
-export type WeaponSound = 'cannon' | 'machinegun' | 'missile' | 'laser' | 'mortar';
+export type WeaponSound = WeaponSoundKind | 'missile';
 export type Fanfare = 'levelup' | 'rankup' | 'quest' | 'boss';
 type NodeBus = Exclude<Bus, 'master'>;
 
@@ -159,7 +161,7 @@ export class SoundEngine {
   // ------------------------------------------------------------------ weapons, hits, explosions (effects bus)
   /** `volume` 0..1 is the distance falloff for shots that are not the player's own. */
   public playWeapon(kind: WeaponSound, isPlayer = false, volume = 1) {
-    if (volume <= 0.02 || this.throttled(`w:${kind}:${isPlayer}`, kind === 'machinegun' ? 40 : 25)) return;
+    if (volume <= 0.02 || this.throttled(`w:${kind}:${isPlayer}`, kind === 'machinegun' || kind === 'rapid_fire' ? 40 : 25)) return;
     const pitch = (Math.random() - 0.5) * 15; const v = volume;
     switch (kind) {
       case 'cannon':
@@ -168,8 +170,18 @@ export class SoundEngine {
         this.noise('effects', 0.08, isPlayer ? 0.25 : 0.15, 800, 0, v, 'lowpass', 0.08); break;
       case 'machinegun':
         this.blip('effects', 'square', 480 + pitch * 4, 80, 0.045, isPlayer ? 0.12 : 0.07, 0, v); break;
-      case 'missile':
+      case 'rapid_fire':
+        this.blip('effects', 'triangle', 720 + pitch * 3, 240, 0.075, isPlayer ? 0.12 : 0.07, 0, v);
+        this.blip('effects', 'sine', 1120, 620, 0.035, 0.035, 0.012, v); break;
+      case 'rocket': case 'missile':
         this.noise('effects', 0.45, 0.18, 1800, 0, v, 'bandpass'); this.blip('effects', 'sawtooth', 220, 520, 0.4, 0.08, 0, v); break;
+      case 'railgun':
+        this.blip('effects', 'sawtooth', 1850 + pitch * 8, 160, 0.13, 0.12, 0, v);
+        this.blip('effects', 'sine', 105, 42, 0.18, 0.17, 0.015, v);
+        this.noise('effects', 0.045, 0.12, 4200, 0, v, 'highpass'); break;
+      case 'flamethrower':
+        this.noise('effects', 0.18, 0.16, 1100, 0, v, 'lowpass');
+        this.blip('effects', 'sawtooth', 92, 68, 0.16, 0.08, 0, v); break;
       case 'laser':
         this.blip('effects', 'sawtooth', 1400 + pitch * 10, 380, 0.16, 0.1, 0, v); this.blip('effects', 'sine', 2100, 900, 0.1, 0.05, 0, v); break;
       case 'mortar':
@@ -183,6 +195,12 @@ export class SoundEngine {
     if (this.throttled(`hit:${isArmor}`, 35)) return;
     if (isArmor) this.blip('effects', 'sine', 950 + Math.random() * 200, 320, 0.09, 0.2, 0, volume);
     else { this.blip('effects', 'triangle', 140 + Math.random() * 40, 45, 0.13, 0.25, 0, volume); this.noise('effects', 0.06, 0.1, 400, 0, volume); }
+  }
+  public playAmmoImpact(ammoType: AmmoType, isArmor = true, volume = 1) {
+    if (volume <= 0.02 || this.throttled(`ammo-hit:${ammoType}:${isArmor}`, 35)) return;
+    const tone = ammoImpactToneFor(ammoType, isArmor);
+    this.blip('effects', tone.waveform, tone.startHz, tone.endHz, tone.duration, tone.gain, 0, volume);
+    if (tone.noise) this.noise('effects', tone.noise.duration, tone.noise.gain, tone.noise.cutoff, 0, volume, tone.noise.filter);
   }
   public playExplosion(isLarge = false, volume = 1) {
     if (this.throttled('boom', 60)) return;

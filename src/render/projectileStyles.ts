@@ -4,6 +4,11 @@ export const WEAPON_FAMILIES = ['cannon', 'rapid_fire', 'rocket', 'mortar', 'rai
 export type WeaponFamily = typeof WEAPON_FAMILIES[number];
 export type ProjectileShape = 'round' | 'block' | 'dart' | 'cone' | 'burst';
 export type ProjectileRotation = 'velocity' | 'tumble' | 'spin';
+export const PROJECTILE_TRAIL_SIMPLIFY_THRESHOLD = 24;
+
+export function shouldSimplifyProjectileTrails(visibleProjectileCount: number, reducedEffects: boolean): boolean {
+  return reducedEffects || visibleProjectileCount > PROJECTILE_TRAIL_SIMPLIFY_THRESHOLD;
+}
 
 export interface ProjectileStyle {
   spriteId: 'fx_18' | 'fx_19' | null;

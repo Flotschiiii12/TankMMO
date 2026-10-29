@@ -37,6 +37,7 @@ async function main() {
   server.stderr.on('data', (d) => { serverLog += d; });
   const base = `http://127.0.0.1:${port}`;
   let browser;
+  let botsProcess: ReturnType<typeof spawn> | undefined;
   try {
     const t0 = Date.now();
     while (true) {
@@ -84,6 +85,26 @@ async function main() {
       return [Number(m![1]), Number(m![2])];
     };
     await page.waitForTimeout(1000);
+    const botsCount = Number(process.env.E2E_BOTS_COUNT ?? '0');
+    let botsDone: Promise<number> | undefined;
+    let botsLog = '';
+    if (botsCount > 0) {
+      if (!Number.isInteger(botsCount) || botsCount > 200) fail(`invalid E2E_BOTS_COUNT "${process.env.E2E_BOTS_COUNT}" (expected 1..200)`);
+      const botsSeconds = Number(process.env.E2E_BOTS_SECONDS ?? '20');
+      if (!Number.isInteger(botsSeconds) || botsSeconds < 5 || botsSeconds > 120) fail(`invalid E2E_BOTS_SECONDS "${process.env.E2E_BOTS_SECONDS}" (expected 5..120)`);
+      botsProcess = spawn('npm', ['run', 'bots', '--', '--count', String(botsCount), '--seconds', String(botsSeconds), '--mode', 'clustered', '--url', base], { stdio: ['ignore', 'pipe', 'pipe'] });
+      const botsStdout = botsProcess.stdout;
+      const botsStderr = botsProcess.stderr;
+      if (botsStdout === null || botsStderr === null) throw new Error('bot benchmark output streams were not created');
+      botsStdout.on('data', (data) => { botsLog += data.toString(); });
+      botsStderr.on('data', (data) => { botsLog += data.toString(); });
+      botsDone = new Promise((resolve, reject) => {
+        botsProcess!.once('error', reject);
+        botsProcess!.once('close', (code) => resolve(code ?? 1));
+      });
+      await page.waitForTimeout(2000);
+      console.log(`browser frame sample under ${botsCount} clustered bots`);
+    }
     const before = await readPos();
     // frame-time probe: requestAnimationFrame deltas while driving and shooting (budget check below)
     await page.evaluate('window.__frames = []; (function () { var last = performance.now(); function tick(t) { window.__frames.push(t - last); last = t; requestAnimationFrame(tick); } requestAnimationFrame(tick); })()');
@@ -100,6 +121,12 @@ async function main() {
     console.log(`frame time: avg ${avgFrame.toFixed(1)} ms, p95 ${p95Frame.toFixed(1)} ms over ${frames.length} frames (software-rendered headless Chromium)`);
     if (frames.length < 20) fail('too few animation frames measured');
     if (avgFrame > Number(process.env.E2E_MAX_AVG_FRAME_MS ?? 80)) fail(`average frame time ${avgFrame.toFixed(1)} ms is over the budget`);
+    if (botsDone) {
+      const code = await botsDone;
+      botsProcess = undefined;
+      if (code !== 0) fail(`npm run bots exited with code ${code}\n${botsLog}`);
+      console.log(`browser bot load finished:\n${botsLog.trim()}`);
+    }
     const moved = Math.hypot(after[0] - before[0], after[1] - before[1]);
     if (moved < 20) fail(`player did not move (before ${before}, after ${after})`);
 
@@ -109,6 +136,7 @@ async function main() {
     if (errors.length) fail(`browser errors:\n${errors.join('\n')}`);
     console.log(`E2E OK: moved ${moved.toFixed(0)} units in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
   } finally {
+    if (botsProcess && !botsProcess.killed) botsProcess.kill('SIGTERM');
     await browser?.close();
     server.kill('SIGTERM');
     rmSync(dir, { recursive: true, force: true });

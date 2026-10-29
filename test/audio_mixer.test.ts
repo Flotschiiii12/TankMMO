@@ -97,12 +97,28 @@ describe('music phrases', () => {
   });
 });
 
-import { ambientFor, weaponSoundFor } from '../src/audio/mixer.ts';
+import { ammoImpactToneFor, ambientFor, weaponSoundFor } from '../src/audio/mixer.ts';
+import { AMMO_CONFIGS } from '../shared/rules/ammo.ts';
+import type { AmmoType } from '../shared/types.ts';
 describe('audio mappings', () => {
-  it('maps every shipped weapon family to a sound and unknowns to the cannon', () => {
+  it('gives every main weapon family a distinct sound and auxiliary families deliberate fallbacks', () => {
     const fam = ['cannon', 'machine_gun', 'rapid_fire', 'flak', 'rocket', 'arc_coil', 'railgun', 'flamethrower', 'mortar', 'mine_layer'];
-    for (const f of fam) expect(['cannon', 'machinegun', 'missile', 'laser', 'mortar']).toContain(weaponSoundFor(f));
-    expect(weaponSoundFor('rocket')).toBe('missile'); expect(weaponSoundFor(undefined)).toBe('cannon'); expect(weaponSoundFor('???')).toBe('cannon');
+    const soundKinds = ['cannon', 'rapid_fire', 'rocket', 'mortar', 'railgun', 'flamethrower', 'machinegun', 'laser'];
+    for (const f of fam) expect(soundKinds).toContain(weaponSoundFor(f));
+    const mains = ['cannon', 'rapid_fire', 'rocket', 'mortar', 'railgun', 'flamethrower'];
+    expect(new Set(mains.map(weaponSoundFor)).size).toBe(mains.length);
+    expect(weaponSoundFor('machine_gun')).toBe('machinegun');
+    expect(weaponSoundFor('arc_coil')).toBe('laser');
+    expect(weaponSoundFor(undefined)).toBe('cannon');
+    expect(weaponSoundFor('???')).toBe('cannon');
+  });
+  it('gives each ammo type its own synthetic hit timbre', () => {
+    const ammoTypes: AmmoType[] = ['STANDARD', 'REINFORCED', 'ARMOR_PIERCING', 'SHAPED_CHARGE', 'EXPLOSIVE'];
+    expect(ammoTypes.every((ammo) => ammo in AMMO_CONFIGS)).toBe(true);
+    const tones = ammoTypes.map((ammo) => ammoImpactToneFor(ammo, false));
+    expect(new Set(tones.map((tone) => tone.startHz)).size).toBe(tones.length);
+    expect(new Set(tones.map((tone) => tone.waveform)).size).toBeGreaterThan(1);
+    expect(ammoImpactToneFor('STANDARD', true).startHz).toBeGreaterThan(ammoImpactToneFor('STANDARD', false).startHz);
   });
   it('every biome has a bed or is deliberately silent, with quiet gains', () => {
     for (const b of ['coastal', 'highland', 'steppe', 'marsh', 'canyon', 'snow', 'ruins', 'desert', 'volcanic', 'valley', 'ash']) {

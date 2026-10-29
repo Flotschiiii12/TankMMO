@@ -1,4 +1,4 @@
-import type { VehicleClass } from '../../shared/types.ts';
+import type { AmmoType, VehicleClass } from '../../shared/types.ts';
 
 /** Pure mixer maths: four buses (master, music, effects, interface) and what each one should output. */
 export type Bus = 'master' | 'music' | 'effects' | 'interface';
@@ -78,14 +78,39 @@ export function ambientFor(biome: string | undefined): AmbientSpec | null {
   }
 }
 
-export type WeaponSoundKind = 'cannon' | 'machinegun' | 'missile' | 'laser' | 'mortar';
-/** Which synthesised shot a weapon family gets (families come from shared item data; unknown ones fire like a cannon). */
+export type WeaponSoundKind = 'cannon' | 'rapid_fire' | 'rocket' | 'mortar' | 'railgun' | 'flamethrower' | 'machinegun' | 'laser';
+/** Canonical shot timbre for each main weapon family; auxiliary families retain deliberate shared sounds. */
 export function weaponSoundFor(family: string | undefined): WeaponSoundKind {
   switch (family) {
-    case 'machine_gun': case 'rapid_fire': case 'flak': return 'machinegun';
-    case 'rocket': return 'missile';
-    case 'arc_coil': case 'railgun': case 'flamethrower': return 'laser';
-    case 'mortar': case 'mine_layer': return 'mortar';
+    case 'rapid_fire': return 'rapid_fire';
+    case 'rocket': return 'rocket';
+    case 'mortar': return 'mortar';
+    case 'railgun': return 'railgun';
+    case 'flamethrower': return 'flamethrower';
+    case 'machine_gun': case 'flak': return 'machinegun';
+    case 'arc_coil': return 'laser';
+    case 'mine_layer': return 'mortar';
     default: return 'cannon';
+  }
+}
+
+export interface AmmoImpactTone {
+  waveform: 'sine' | 'triangle' | 'sawtooth';
+  startHz: number;
+  endHz: number;
+  duration: number;
+  gain: number;
+  noise?: { duration: number; gain: number; cutoff: number; filter: 'lowpass' | 'bandpass' | 'highpass' };
+}
+
+/** A distinct synthetic impact timbre per ammo family; armor hits shift the pitch without losing the ammo identity. */
+export function ammoImpactToneFor(ammo: AmmoType, isArmor: boolean): AmmoImpactTone {
+  const armorShift = isArmor ? 180 : 0;
+  switch (ammo) {
+    case 'STANDARD': return { waveform: 'sine', startHz: 820 + armorShift, endHz: 260, duration: 0.08, gain: 0.14 };
+    case 'REINFORCED': return { waveform: 'triangle', startHz: 430 + armorShift, endHz: 150, duration: 0.12, gain: 0.18, noise: { duration: 0.045, gain: 0.07, cutoff: 1200, filter: 'lowpass' } };
+    case 'ARMOR_PIERCING': return { waveform: 'sine', startHz: 1480 + armorShift, endHz: 520, duration: 0.1, gain: 0.14, noise: { duration: 0.035, gain: 0.06, cutoff: 3200, filter: 'highpass' } };
+    case 'SHAPED_CHARGE': return { waveform: 'sawtooth', startHz: 620 + armorShift, endHz: 180, duration: 0.13, gain: 0.13, noise: { duration: 0.055, gain: 0.08, cutoff: 1700, filter: 'bandpass' } };
+    case 'EXPLOSIVE': return { waveform: 'triangle', startHz: 190 + armorShift, endHz: 55, duration: 0.2, gain: 0.2, noise: { duration: 0.12, gain: 0.15, cutoff: 650, filter: 'lowpass' } };
   }
 }

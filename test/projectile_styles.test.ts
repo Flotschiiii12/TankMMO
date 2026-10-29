@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { AMMO_CONFIGS } from '../shared/rules/ammo.ts';
 import {
   getProjectileStyle,
+  PROJECTILE_TRAIL_SIMPLIFY_THRESHOLD,
   PROJECTILE_STYLES,
+  shouldSimplifyProjectileTrails,
   WEAPON_FAMILIES,
   type WeaponFamily,
 } from '../src/render/projectileStyles.ts';
@@ -37,5 +39,11 @@ describe('projectile styles', () => {
     expect(families.find((style) => style.rotation === 'tumble')).toBe(getProjectileStyle('mortar'));
     expect(families.some((style) => style.trail.lightLine)).toBe(true);
     expect(families.some((style) => style.trail.flame)).toBe(true);
+  });
+
+  it('simplifies trails above the visible-projectile budget or at reduced effects', () => {
+    expect(shouldSimplifyProjectileTrails(PROJECTILE_TRAIL_SIMPLIFY_THRESHOLD, false)).toBe(false);
+    expect(shouldSimplifyProjectileTrails(PROJECTILE_TRAIL_SIMPLIFY_THRESHOLD + 1, false)).toBe(true);
+    expect(shouldSimplifyProjectileTrails(0, true)).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { localizeEntityName } from '../i18n.ts';
 import { DroneRenderer } from './droneDraw.ts';
 import { drawAuras, drawProjectileGlyph, drawShellTrail } from './combatFx.ts';
-import { getProjectileStyle } from './projectileStyles.ts';
+import { getProjectileStyle, shouldSimplifyProjectileTrails } from './projectileStyles.ts';
 import { plateLod, selectThreats } from '../ui/combatLogic.ts';
 import { clamp, MapDef, SimEntity, Vec2, dist } from '../sim/types.ts';
 import { Camera } from './camera.ts';
@@ -933,7 +933,7 @@ export class WorldRenderer {
       const shooter = projectile.sourceEntityId !== undefined ? this.byId.get(projectile.sourceEntityId) : undefined;
       visible.push({ projectile, screen, shooter });
     }
-    const simplifyTrails = this.reducedEffects || visible.length > 24;
+    const simplifyTrails = shouldSimplifyProjectileTrails(visible.length, this.reducedEffects);
     for (const { projectile: proj, screen: s, shooter } of visible) {
       const family = shooter?.weaponFamily;
       const style = getProjectileStyle(family, proj.selectedAmmo);
@@ -970,7 +970,7 @@ export class WorldRenderer {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = 0.82;
-        ctx.strokeStyle = '#fb7185';
+        ctx.strokeStyle = this.colorBlind ? '#fbbf24' : '#f87171';
         ctx.lineWidth = Math.max(1, zoom * 1.1);
         ctx.beginPath();
         ctx.ellipse(s.x, s.y, Math.max(4, style.length * zoom * 0.72), Math.max(3, style.width * zoom * 0.9), angle, 0, Math.PI * 2);

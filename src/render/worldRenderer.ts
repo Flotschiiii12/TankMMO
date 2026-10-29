@@ -11,6 +11,7 @@ import { ambientTintForTimeOfDay, ambientTintCss, blendAmbientTint, type Ambient
 import { drawStaticSpriteShadow } from './shadows.ts';
 import { drawRadialLight } from './lightSprites.ts';
 import { drawPostProcessing } from './postProcessing.ts';
+import { createVehicleMotionState, updateVehicleMotion, type VehicleMotionState } from './vehicleMotion.ts';
 import { prefersReducedMotion } from '../ui/motion/motion.ts';
 import { isClanEmblem } from '../../shared/data/emblems.ts';
 import {
@@ -312,6 +313,7 @@ export class WorldRenderer {
   private ambientTint: AmbientTint = ambientTintForTimeOfDay('noon');
   private lightingUpdatedAt = 0;
   private recoilKicks = new Map<number, { angle: number; startedAt: number }>();
+  private vehicleMotion = new Map<number, VehicleMotionState>();
 
   public kickRecoil(entityId: number, angle: number, now: number): void {
     this.recoilKicks.set(entityId, { angle, startedAt: now });
@@ -445,6 +447,8 @@ export class WorldRenderer {
         const recoilKick = recoilAge >= 0.16 ? 0 : Math.exp(-recoilAge * 22);
         const visibleRecoil = this.reducedEffects ? recoilKick * 0.35 : recoilKick;
         if (recoil && recoilAge >= 0.16) this.recoilKicks.delete(ent.id);
+        const motionStrength = motionReduced ? 0 : this.reducedEffects ? 0.35 : 1;
+        const motion = ent.isWreck ? undefined : this.getVehicleMotion(ent, now, time, motionStrength);
         drawVehicle(
           ctx,
           ent,
@@ -455,6 +459,7 @@ export class WorldRenderer {
           !this.reducedEffects,
           visibleRecoil,
           recoil?.angle,
+          motion,
         );
         if (!ent.isWreck) {
           drawAuras(ctx, this.camera, ent, performance.now() / 1000, this.reducedEffects);
@@ -525,6 +530,19 @@ export class WorldRenderer {
     if (!this.reducedEffects && !motionReduced) {
       drawPostProcessing(ctx, width, height, mapDef.colorGrade);
     }
+  }
+
+  private getVehicleMotion(ent: SimEntity, now: number, animationTime: number, strength: number) {
+    let state = this.vehicleMotion.get(ent.id);
+    if (!state || state.kind !== ent.kind || now - state.updatedAt > 0.25) {
+      state = createVehicleMotionState(ent, now);
+      this.vehicleMotion.set(ent.id, state);
+    }
+    if (this.vehicleMotion.size > 256) {
+      const oldest = this.vehicleMotion.keys().next().value;
+      if (oldest !== undefined) this.vehicleMotion.delete(oldest);
+    }
+    return updateVehicleMotion(state, ent, now, animationTime, strength);
   }
 
   private renderNightHeadlights(ctx: CanvasRenderingContext2D, entities: SimEntity[]): void {

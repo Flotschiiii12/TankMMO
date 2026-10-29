@@ -3,6 +3,7 @@ import { DEFAULT_SUN_DIRECTION } from '../../shared/types.ts';
 import { Camera } from './camera.ts';
 import { spriteRegistry } from './assets.ts';
 import { drawSpriteShadow, drawStaticSpriteShadow } from './shadows.ts';
+import type { VehicleVisualMotion } from './vehicleMotion.ts';
 
 function drawBlobShadow(
   ctx: CanvasRenderingContext2D,
@@ -49,13 +50,17 @@ export function drawVehicle(
   highQualityShadows = true,
   recoilKick = 0,
   recoilAngle = ent.turretAngle,
+  motion?: VehicleVisualMotion,
 ) {
   const s = camera.worldToScreen(ent.pos);
   const zoom = camera.zoom;
   const radius = ent.radius * zoom;
 
   ctx.save();
-  ctx.translate(s.x - Math.cos(recoilAngle) * 4 * zoom * recoilKick, s.y - Math.sin(recoilAngle) * 4 * zoom * recoilKick);
+  ctx.translate(
+    s.x - Math.cos(recoilAngle) * 4 * zoom * recoilKick,
+    s.y - Math.sin(recoilAngle) * 4 * zoom * recoilKick + (motion?.bob ?? 0) * zoom,
+  );
 
   // Wreck state: linger and fade out over 8 seconds
   if (ent.isWreck) {
@@ -118,6 +123,9 @@ export function drawVehicle(
 
   ctx.save();
   ctx.rotate(ent.chassisAngle);
+  ctx.translate((motion?.hullOffset ?? 0) * zoom, 0);
+  ctx.rotate(motion?.hullLean ?? 0);
+  ctx.scale(1, motion?.hullScaleY ?? 1);
 
   if (ent.isWreck) {
     if (wreckImg) {
@@ -146,11 +154,12 @@ export function drawVehicle(
     : spriteRegistry.getImage(spriteRegistry.getVehicleTurretPath(tier, ent.kind));
   const tw = radius * 2.2;
   const th = radius * 1.4;
+  const turretAngle = motion?.turretAngle ?? ent.turretAngle;
   if (turretImg && highQualityShadows) {
-    drawSpriteShadow(ctx, turretImg, 0, 0, tw, th, sunDirection, zoom, ent.turretAngle);
+    drawSpriteShadow(ctx, turretImg, 0, 0, tw, th, sunDirection, zoom, turretAngle);
   }
   ctx.save();
-  ctx.rotate(ent.turretAngle);
+  ctx.rotate(turretAngle);
   if (turretImg) {
     const recoil = ent.mainReloadTime > 0
       ? clamp(ent.mainReloadRemaining / ent.mainReloadTime, 0, 1) * radius * 0.25

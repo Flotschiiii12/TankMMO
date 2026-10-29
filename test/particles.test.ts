@@ -26,7 +26,7 @@ describe('particle system caps', () => {
     flood(ps, 100);
     expect(ps.activeCount).toBeLessThanOrEqual(REDUCED_PARTICLE_CAP);
     expect(ps.cap).toBe(REDUCED_PARTICLE_CAP);
-    for (let i = 0; i < 100; i++) ps.addTreadMark(P, 0);
+    for (let i = 0; i < 100; i++) ps.addTreadMark({ x: i * 20, y: 0 }, 0);
     expect(ps.treadMarkCount).toBe(REDUCED_TREAD_CAP);
     const quiet = new ParticleSystem(); quiet.enabled = false;
     quiet.emitHitSparks(P, 10); quiet.emitExplosion(P, true); quiet.emitRing(P, 40);
@@ -65,6 +65,14 @@ describe('particle system caps', () => {
     expect(dustColorForBiome('snow')).toBe('#d8e1e9');
     expect(dustColorForBiome('coastal')).not.toBe(dustColorForBiome('ash'));
     expect(dustColorForBiome()).toBe(dustColorForBiome('valley'));
+  });
+
+  it('spaces tread marks by vehicle travel distance instead of frame count', () => {
+    const ps = new ParticleSystem();
+    ps.addTreadMark({ x: 0, y: 0 }, 0, 28);
+    ps.addTreadMark({ x: 10, y: 0 }, 0, 28);
+    ps.addTreadMark({ x: 20, y: 0 }, 0, 28);
+    expect(ps.treadMarkCount).toBe(2);
   });
 });
 

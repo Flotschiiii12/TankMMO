@@ -64,6 +64,7 @@ export class ParticleSystem {
   private reducedMotion = false;
   private maxTreads = TREAD_CAP;
   private wreckSmokeLast = new Map<number, number>();
+  private lastTreadMarkPos: Vec2 | null = null;
 
   constructor() {
     // Pre-allocate pool
@@ -159,6 +160,8 @@ export class ParticleSystem {
 
   public addTreadMark(pos: Vec2, angle: number, width = 28) {
     if (this.reducedMotion || !this.enabled) return;
+    const minSpacing = Math.max(12, width * 0.55);
+    if (this.lastTreadMarkPos && Math.hypot(pos.x - this.lastTreadMarkPos.x, pos.y - this.lastTreadMarkPos.y) < minSpacing) return;
     if (this.treadMarks.length >= this.maxTreads) {
       this.treadMarks.shift();
     }
@@ -169,6 +172,7 @@ export class ParticleSystem {
       alpha: 0.35,
       width,
     });
+    this.lastTreadMarkPos = { x: pos.x, y: pos.y };
   }
 
   /** Expanding ring (impact, crit, armor break, mortar landing). */

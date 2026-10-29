@@ -82,18 +82,10 @@ describe('shots always hit', () => {
     expect(Math.atan2(s.vel.y, s.vel.x)).toBeCloseTo(a0, 6);
   });
 
-  it('does not fire a locked shot through a solid obstacle', () => {
+  it('a locked shot fired past a solid obstacle still lands (shells fly over obstacles)', () => {
     const { w, me, foe } = duel(600);
     w.obstacles = [{ x: 1800, y: 2000, radius: 40, type: 'rock' }];
-    me.targetId = foe.id;
-    me.turretAngle = 0;
-    me.mainReloadRemaining = 0;
-    const ammoBefore = { ...me.ammoInventory };
-
-    expect(fireMainCannon(w, me)).toBe(false);
-    expect(shells(w)).toHaveLength(0);
-    expect(me.ammoInventory).toEqual(ammoBefore);
-    expect(me.mainReloadRemaining).toBe(0);
+    expect(fireAndWait(w, me, foe, () => {})).toBeGreaterThan(0);
   });
 
   it('the fire button and auto-fire pick the nearest valid enemy and keep it', () => {

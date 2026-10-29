@@ -127,7 +127,7 @@ npm run build
 4. **Art:** vector placeholders everywhere except the painted pack for tiers 1-3 vehicles, 4 enemy types, ground/props/landmark/fx sprites. Tiers 4-10, artillery/bosses, class-specific sprites and UI icons are still placeholders. No audio files (procedural sounds only).
 5. **UI gaps:** no dedicated screens for event banners, boss health bars, dungeon wave progress, arena HUD (round score/timer), party markers on the radar, emotes, and settings beyond sound/zoom. The social/market/arena/gates screens are functional but plain.
 6. **Not implemented:** clan wars over bases and alliances; clan storage of items (scrap only); spectator mode; map-specific ground/weather rendering beyond the existing basics; reputation only gives the ammo discount (3 % per level); cosmetic skin application; party markers use the radar only (not name plates).
-7. **Anti-cheat:** server checks movement speed, per-connection action rates, item/ammo IDs, shot rate/range and line of fire. No IP/device reputation; bans are account-based.
+7. **Anti-cheat:** server checks movement speed, per-connection action rates, item/ammo IDs, shot rate/range (no line-of-fire check: shots always hit, shells fly over obstacles). No IP/device reputation; bans are account-based.
 8. **Ops:** SQLite single file (backup via file copy / `VACUUM INTO`), no automatic backups yet, no TLS/domain setup (use a reverse proxy), no CI.
 9. **Mobile builds:** Capacitor wrappers are not set up yet; see docs/DEPLOY.md (VITE_SERVER_URL is supported).
 

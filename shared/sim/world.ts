@@ -566,20 +566,6 @@ export const GUIDED_TURN_RATE = 7;
 /** A guided shell may fly this much farther than the weapon range (curved path + grace) before it gives up. */
 export const GUIDED_RANGE_FACTOR = 1.5;
 
-function hasLineOfFire(world: World, from: Vec2, to: Vec2): boolean {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const lengthSq = dx * dx + dy * dy;
-  if (lengthSq === 0) return true;
-  return world.obstacles.every((obstacle) => {
-    if (obstacle.blocks === false || obstacle.type === 'water') return true;
-    const t = clamp(((obstacle.x - from.x) * dx + (obstacle.y - from.y) * dy) / lengthSq, 0, 1);
-    const x = from.x + t * dx;
-    const y = from.y + t * dy;
-    return distSq({ x, y }, obstacle) > (obstacle.radius + 4) ** 2;
-  });
-}
-
 export function fireMainCannon(world: World, ent: SimEntity): boolean {
   if (ent.mainReloadRemaining > 0 || ent.hull <= 0) return false;
   if (isPosInSafeZone(world, ent.pos)) return false;
@@ -590,7 +576,6 @@ export function fireMainCannon(world: World, ent: SimEntity): boolean {
     x: ent.pos.x + Math.cos(ent.turretAngle) * muzzleOffset,
     y: ent.pos.y + Math.sin(ent.turretAngle) * muzzleOffset,
   };
-  if (lock && lock.hull > 0 && dist(ent.pos, lock.pos) <= ent.mainRange * 1.1 && !hasLineOfFire(world, spawnPos, lock.pos)) return false;
 
   // Consume ammo or fallback to STANDARD
   const ammoRes = consumeAmmo(ent.ammoInventory, ent.selectedAmmo);

@@ -513,7 +513,7 @@ export class ParticleSystem {
   /** Accessibility: when false, particles and tread marks are not drawn. */
   public enabled = true;
 
-  public renderParticles(ctx: CanvasRenderingContext2D, camera: Camera, nightLighting = false) {
+  public renderParticles(ctx: CanvasRenderingContext2D, camera: Camera, bloomEnabled = false) {
     ctx.save();
 
     for (let i = 0; i < this.pool.length; i++) {
@@ -534,19 +534,19 @@ export class ParticleSystem {
       }
 
       const scaledSize = Math.max(1, p.size * camera.zoom);
-      if (nightLighting && (p.type === 'muzzle' || p.type === 'explosion')) {
+      if (bloomEnabled && (p.type === 'muzzle' || p.type === 'explosion')) {
         if (p.type === 'muzzle') {
           drawRadialLight(
             ctx,
             s.x + Math.cos(p.angle) * scaledSize * 0.8,
             s.y + Math.sin(p.angle) * scaledSize * 0.8,
-            scaledSize * 7,
-            scaledSize * 4.5,
-            p.alpha * 0.45,
+            scaledSize * 5,
+            scaledSize * 3.5,
+            p.alpha * 0.16,
             p.angle,
           );
         } else {
-          drawRadialLight(ctx, s.x, s.y, scaledSize * 4.5, scaledSize * 4.5, p.alpha * 0.5);
+          drawRadialLight(ctx, s.x, s.y, scaledSize * 3.5, scaledSize * 3.5, p.alpha * 0.18);
         }
       }
 

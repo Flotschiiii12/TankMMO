@@ -10,6 +10,7 @@ import { DEFAULT_SUN_DIRECTION } from '../../shared/types.ts';
 import { ambientTintForTimeOfDay, ambientTintCss, blendAmbientTint, type AmbientTint } from './lighting.ts';
 import { drawStaticSpriteShadow } from './shadows.ts';
 import { drawRadialLight } from './lightSprites.ts';
+import { drawPostProcessing } from './postProcessing.ts';
 import { prefersReducedMotion } from '../ui/motion/motion.ts';
 import { isClanEmblem } from '../../shared/data/emblems.ts';
 import {
@@ -489,7 +490,7 @@ export class WorldRenderer {
     this.renderProjectiles(ctx, entities);
 
     // 13. Render Particles & Floating Damage Numbers
-    this.particles.renderParticles(ctx, this.camera, mapDef.timeOfDay === 'night' && !this.reducedEffects && !motionReduced);
+    this.particles.renderParticles(ctx, this.camera, !this.reducedEffects && !motionReduced);
     this.renderDayTint(ctx);
 
     // 13b. Target brackets and off-screen threat arrows
@@ -521,8 +522,9 @@ export class WorldRenderer {
       this.renderOffscreenIndicators(ctx, localPlayer, entities, mapDef);
     }
 
-    // 17. Drifting Clouds / Light Weather & Vignette
-    this.renderAtmosphere(ctx);
+    if (!this.reducedEffects && !motionReduced) {
+      drawPostProcessing(ctx, width, height, mapDef.colorGrade);
+    }
   }
 
   private renderNightHeadlights(ctx: CanvasRenderingContext2D, entities: SimEntity[]): void {
@@ -1315,17 +1317,4 @@ export class WorldRenderer {
     ctx.restore();
   }
 
-  private renderAtmosphere(ctx: CanvasRenderingContext2D) {
-    const w = this.camera.viewportWidth;
-    const h = this.camera.viewportHeight;
-
-    // Subtle Vignette at Screen Edges
-    ctx.save();
-    const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.75);
-    grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    grad.addColorStop(1, 'rgba(0, 0, 0, 0.25)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-  }
 }

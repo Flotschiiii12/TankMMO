@@ -504,6 +504,8 @@ export interface MapDef {
   timeOfDay?: TimeOfDay;
   /** Client-only lighting direction, pointing from the ground toward the sun. */
   sunDirection?: Vec2;
+  /** Client-only color grade for the world; omitted maps use the renderer default. */
+  colorGrade?: MapColorGrade;
   instanceCapacity?: number;
   seed?: number;
   safeZones: SafeZone[];
@@ -522,4 +524,11 @@ export interface MapDef {
     type: string;
     speedFactor: number;
   }>;
+}
+
+export interface MapColorGrade {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
 }

@@ -15,6 +15,7 @@ import {
   GateDef,
   GroundGenerationParams,
   MapDef,
+  MapColorGrade,
   MapType,
   ResourceNodeDef,
   SafeZone,
@@ -40,6 +41,7 @@ export interface MapMetadata {
   weather: WeatherType;
   timeOfDay: TimeOfDay;
   sunDirection?: Vec2;
+  colorGrade?: MapColorGrade;
   width: number;
   height: number;
   seed: number;
@@ -124,6 +126,7 @@ export const MAP_METADATA_TABLE: Record<number, MapMetadata> = {
     weather: 'clear',
     timeOfDay: 'noon',
     sunDirection: { x: -0.65, y: -0.76 },
+    colorGrade: { r: 255, g: 239, b: 218, a: 0.035 },
     width: 4000,
     height: 4000,
     seed: 101,
@@ -161,6 +164,7 @@ export const MAP_METADATA_TABLE: Record<number, MapMetadata> = {
     weather: 'fog',
     timeOfDay: 'dusk',
     sunDirection: { x: -0.9, y: -0.3 },
+    colorGrade: { r: 187, g: 220, b: 207, a: 0.04 },
     width: 4400,
     height: 4400,
     seed: 103,
@@ -234,6 +238,7 @@ export const MAP_METADATA_TABLE: Record<number, MapMetadata> = {
     biome: 'highland',
     weather: 'fog',
     timeOfDay: 'dawn',
+    colorGrade: { r: 255, g: 220, b: 173, a: 0.035 },
     width: 4400,
     height: 4400,
     seed: 107,
@@ -252,6 +257,7 @@ export const MAP_METADATA_TABLE: Record<number, MapMetadata> = {
     biome: 'highland',
     weather: 'storm',
     timeOfDay: 'sunset',
+    colorGrade: { r: 255, g: 190, b: 154, a: 0.03 },
     width: 4500,
     height: 4500,
     seed: 108,
@@ -471,6 +477,7 @@ export const MAP_METADATA_TABLE: Record<number, MapMetadata> = {
     biome: 'marsh',
     weather: 'fog',
     timeOfDay: 'night',
+    colorGrade: { r: 143, g: 166, b: 213, a: 0.035 },
     width: 5200,
     height: 5200,
     seed: 120,
@@ -899,6 +906,7 @@ export function generateMapCatalog(): Record<number, MapDef> {
       weather: meta.weather,
       timeOfDay: meta.timeOfDay,
       sunDirection: meta.sunDirection ?? DEFAULT_SUN_DIRECTION,
+      colorGrade: meta.colorGrade,
       instanceCapacity: meta.instanceCapacity,
       seed: meta.seed,
       safeZones,

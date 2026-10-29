@@ -4,9 +4,9 @@ export {
   vec2, distSq, dist, normalize, angleDiff, clamp, lerp,
 } from '../../shared/types.ts';
 export type {
-  Vec2, AmmoType, EntityKind, SimEntity, SimCommand, SimEvent, ChatMessage, MapObstacle, AbilityId, StatusEffectType,
+  Vec2, AmmoType, EntityKind, SimEntity, SimCommand, SimEvent, ChatMessage, MapObstacle, AbilityId, StatusEffectType, MapColorGrade,
 } from '../../shared/types.ts';
-import type { Vec2, EntityKind, MapObstacle, AmmoType, TimeOfDay } from '../../shared/types.ts';
+import type { Vec2, EntityKind, MapObstacle, AmmoType, TimeOfDay, MapColorGrade } from '../../shared/types.ts';
 
 export interface VehicleStats {
   id: string;
@@ -122,4 +122,5 @@ export interface MapDef {
   weather?: string;
   timeOfDay?: TimeOfDay;
   sunDirection?: Vec2;
+  colorGrade?: MapColorGrade;
 }

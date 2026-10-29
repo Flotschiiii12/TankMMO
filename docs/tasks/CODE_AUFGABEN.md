@@ -141,3 +141,31 @@ Suche nach Abstürzen und stillen Fehlern im Client: Fehlergrenze (React Error B
 Meldung und "Neu laden"-Knopf, Reconnect nach Verbindungsabbruch (Handy wechselt WLAN/Mobilfunk) mit klarer
 Anzeige, nicht endlos hängende Ladebildschirme. Schreibe Tests, wo es geht.
 ```
+
+---
+
+## F. Geschosse
+
+### F1. Geschoss-Stile (Waffenfamilie x Munitionsart)
+```
+Aktuell zeichnet der Renderer fast alle Geschosse gleich (fx_18 Granate, fx_19 Leuchtspur; Vektor-Fallback nur
+nach Munitionsfarbe). Baue ein datengetriebenes Stil-System im Client: `src/render/projectileStyles.ts` mit einer
+Tabelle pro Waffenfamilie (cannon, rapid_fire, rocket, mortar, railgun, flamethrower) und pro Munitionsart
+(STANDARD, REINFORCED, ARMOR_PIERCING, SHAPED_CHARGE, EXPLOSIVE aus shared/rules/ammo.ts): Sprite (aus
+public/assets/fx, in manifest.json gelistet, Vektor-Fallback wenn fehlend), Größe, Leuchtfarbe (additiv, aus der
+Munitionsart), Schweif (Länge, Rauch, Funken, Flamme), Rotation (Mörser taumelt, Rakete mit Flammenschweif, Railgun
+mit Lichtlinie), Mündungsfeuer pro Familie und Einschlag pro Munitionsart (Explosiv: sichtbarer Splash-Radius, Panzer-
+brechend: blauer Funkenstrahl, Hohlladung: gebündelter Stichflamme). Munitionsart muss auf einen Blick erkennbar sein
+(Farbe plus Form, nicht nur Farbe, wegen Farbenblind-Modus). Keine Änderung in shared/ (nur Optik), Schüsse treffen
+weiterhin immer. Alles hinter dem Qualitätsschalter, Pool-begrenzt. Test: eine reine Funktion, die zu jeder
+Kombination einen Stil liefert und nie undefined zurückgibt.
+```
+
+### F2. Einschläge, Treffer-Töne und Lesbarkeit im Kampf
+```
+Ergänze zu F1: pro Munitionsart ein eigener Einschlagseffekt und ein eigener Treffer-Ton (src/audio, synthetisch),
+pro Waffenfamilie ein eigener Abschusston (die Zuordnung steht in src/audio/mixer.ts, prüfe, ob sie jede Familie
+abdeckt). Gegnerische Geschosse bekommen einen dezenten Rand in Feindfarbe, damit man in Kämpfen mit vielen
+Geschossen eigene und fremde unterscheidet. Bei sehr vielen Geschossen auf dem Bildschirm vereinfache die
+Darstellung automatisch (Schweife weglassen). Messe die Frame-Zeit mit `npm run bots` im Browser-Lauf.
+```

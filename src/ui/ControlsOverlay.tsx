@@ -5,6 +5,7 @@ import { AmmoType, SimCommand, SimEntity } from '../sim/types.ts';
 import { soundEngine } from '../audio/soundEngine.ts';
 import { actionForCode, keybinds } from './title/keybinds.ts';
 import { CooldownSweep, ABILITY_COOLDOWN } from './hud/Cooldown.tsx';
+import { applyJoystickCurve } from './touchInput.ts';
 
 interface ControlsOverlayProps {
   player: SimEntity | null;
@@ -14,6 +15,7 @@ interface ControlsOverlayProps {
   onCycleAmmo: () => void;
   /** swaps the sides: fire cluster left, joystick right */
   leftHanded?: boolean;
+  buttonScale?: number;
   /** false on mouse/keyboard layouts: keys still work, but joystick and thumb cluster are not drawn (the hotbar replaces them) */
   visual?: boolean;
 }
@@ -25,6 +27,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   onCycleTarget,
   onCycleAmmo,
   leftHanded,
+  buttonScale = 1,
   visual = true,
 }) => {
   // Joystick State
@@ -127,9 +130,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   const handlePointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     e.preventDefault();
+    if (activeTouchId.current !== null) return;
     soundEngine.init();
     activeTouchId.current = e.pointerId;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
     setStickActive(true);
     updateKnob(e.clientX, e.clientY);
   };
@@ -168,8 +172,8 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
 
     setKnobPos({ x: nx, y: ny });
 
-    const normalizedDist = clampedDist / maxRadius;
-    sendDrive(Math.cos(angle) * normalizedDist, Math.sin(angle) * normalizedDist);
+    const vector = applyJoystickCurve(dx, dy, maxRadius);
+    sendDrive(vector.x, vector.y);
   };
 
   // Reload progress computation for circular stroke
@@ -187,12 +191,13 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   const smokeCd = player?.abilityCooldowns.smoke || 0;
   const repairCd = player?.abilityCooldowns.repair_kit || 0;
   const overdriveCd = player?.abilityCooldowns.boost || 0;
+  const scaledButtonSize = Number.isFinite(buttonScale) ? Math.max(0.85, Math.min(1.2, buttonScale)) : 1;
 
   if (!visual) return null;
   return (
     <div className="absolute inset-0 pointer-events-none select-none overflow-hidden touch-none">
       {/* LEFT THUMB: Virtual Joystick */}
-      <div data-ui="joystick" className={`absolute bottom-[max(1rem,var(--safe-bottom))] ${leftHanded ? 'right-[max(1.25rem,var(--safe-right))]' : 'left-[max(1.25rem,var(--safe-left))]'} pointer-events-auto`}>
+      <div data-ui="joystick" style={{ transform: `scale(${scaledButtonSize})`, transformOrigin: leftHanded ? 'bottom right' : 'bottom left' }} className={`absolute bottom-[max(1rem,var(--safe-bottom))] ${leftHanded ? 'right-[max(1.25rem,var(--safe-right))]' : 'left-[max(1.25rem,var(--safe-left))]'} pointer-events-auto`}>
         <div
           ref={joystickBaseRef}
           onPointerDown={handlePointerDown}
@@ -219,7 +224,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
       </div>
 
       {/* RIGHT THUMB: Big Round Target/Fire Button + Satellite Ability Cluster (All buttons >= 44x44px) */}
-      <div data-ui="fire" className={`absolute bottom-[max(1rem,var(--safe-bottom))] ${leftHanded ? 'left-[max(1.25rem,var(--safe-left))]' : 'right-[max(1.25rem,var(--safe-right))]'} pointer-events-auto flex items-center justify-center`}>
+      <div data-ui="fire" style={{ transform: `scale(${scaledButtonSize})`, transformOrigin: leftHanded ? 'bottom left' : 'bottom right' }} className={`absolute bottom-[max(1rem,var(--safe-bottom))] ${leftHanded ? 'left-[max(1.25rem,var(--safe-left))]' : 'right-[max(1.25rem,var(--safe-right))]'} pointer-events-auto flex items-center justify-center`}>
         {/* Satellite Buttons Around Fire Button */}
         <div className="relative w-48 h-48 flex items-center justify-center">
           {/* Ability 1: Smoke (Top-Left) */}

@@ -118,6 +118,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
   const [notices, setNotices] = useState<string[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
   const lastEmoteTs = useRef(0);
+  const lastHapticAt = useRef(0);
   const arenaRef = useRef<{ phase: string; round: number; wins: number[]; endsAt: number } | null>(null);
   const gateRef = useRef<{ wave: number; total: number; endsAt: number } | null>(null);
   const moveTargetRef = useRef<{ x: number; y: number } | null>(null);
@@ -427,6 +428,13 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
           soundEngine.playImpact(event.armorDamage > 0, distanceVolume(distToPlayer(event.pos)));
           if (event.attackerId === clientRef.current?.playerId || event.targetId === clientRef.current?.playerId) lastCombatAt.current = performance.now();
           if (event.attackerId === clientRef.current?.playerId) camera.addShake(event.isCrit ? 4 : 2);
+          if (event.targetId === clientRef.current?.playerId && event.finalDamage > 0 && profileRef.current.settings.hapticsEnabled !== false && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+            const now = performance.now();
+            if (now - lastHapticAt.current >= 120) {
+              lastHapticAt.current = now;
+              navigator.vibrate(24);
+            }
+          }
           if (event.finalDamage > 0) mergerRef.current.add(event.targetId, event.pos, event.finalDamage, { crit: event.isCrit || event.isRearHit, armor: event.armorDamage > 0 }, performance.now());
           if (clientRef.current && event.targetId === clientRef.current.playerId) {
             camera.addShake(event.finalDamage > 400 ? 14 : 6);
@@ -1093,6 +1101,7 @@ export const GameShell: React.FC<{ online?: OnlineGameClient | null }> = ({ onli
             onCycleTarget={handleCycleTarget}
             onCycleAmmo={handleCycleAmmo}
             leftHanded={!!profile.settings.leftHanded}
+            buttonScale={profile.settings.touchButtonScale ?? 1}
             visual={touchLayout}
           />
           {!touchLayout && <div className="absolute left-1/2 -translate-x-1/2 z-20" style={{ bottom: 'max(0.75rem, var(--safe-bottom))' }}><Hotbar player={playerEntity} onCommand={handleCommand} onLockNearest={handleLockNearest} /></div>}

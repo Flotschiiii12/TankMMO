@@ -96,6 +96,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, o
           <Row title={tr('Left-handed controls')} hint={tr('Joystick on the right, fire buttons on the left')}>
             <Toggle setting="leftHanded" label={tr('Left-handed controls')} on={!!s.leftHanded} onChange={(v) => set({ leftHanded: v })} />
           </Row>
+          <Row title={tr('Touch control size')}>
+            <Slider setting="touchButtonScale" label={tr('Touch control size')} min={0.85} max={1.2} step={0.05} value={s.touchButtonScale ?? 1} onChange={(touchButtonScale) => set({ touchButtonScale })} format={pct} />
+          </Row>
+          <Row title={tr('Vibration on hits')} hint={tr('Uses device vibration when supported; can be turned off here.')}>
+            <Toggle setting="hapticsEnabled" label={tr('Vibration on hits')} on={s.hapticsEnabled !== false} onChange={(v) => set({ hapticsEnabled: v })} />
+          </Row>
           {onHowToPlay && <Row title={tr('How to play')}><Button onClick={() => { soundEngine.playUIClick(); onHowToPlay(); }}>{tr('Replay tutorial hints')}</Button></Row>}
           <KeysTab />
         </div>

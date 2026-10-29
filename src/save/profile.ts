@@ -41,6 +41,8 @@ export interface UserProfile {
     cameraShake?: boolean; // opt-in combat camera feedback
     cameraShakeStrength?: number; // 0-1
     cameraMotion?: number; // 0-1 look-ahead and combat zoom strength
+    hapticsEnabled?: boolean;
+    touchButtonScale?: number; // 0.85-1.2
     perfAutoDone?: boolean; // the automatic switch to performance mode has already happened once (never nag again)
   };
 }

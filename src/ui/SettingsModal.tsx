@@ -51,7 +51,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ profile, isOpen, o
             />
           </Row>
           <Row title={tr('Battlefield Camera Zoom')} hint={tr('0.5x is wide, 1.2x is close. Pinch or scroll in the game also works.')}>
-            <Slider setting="zoom" label={tr('Battlefield Camera Zoom')} min={0.5} max={1.2} step={0.05} value={s.zoom || 0.85} onChange={(zoom) => set({ zoom })} format={(v) => `${v.toFixed(2)}x`} />
+            <Slider setting="zoom" label={tr('Battlefield Camera Zoom')} min={0.5} max={1.6} step={0.05} value={s.zoom || 1.1} onChange={(zoom) => set({ zoom })} format={(v) => `${v.toFixed(2)}x`} />
           </Row>
           <Row title={tr('Camera effects')} hint={tr('Look-ahead while driving and gentle zoom in combat. Reduce this for a steadier view.')}>
             <Slider setting="cameraMotion" label={tr('Camera effects')} min={0} max={1} step={0.1} value={s.cameraMotion ?? 1} onChange={(cameraMotion) => set({ cameraMotion })} format={pct} />

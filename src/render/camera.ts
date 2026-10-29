@@ -6,8 +6,8 @@ export class Camera {
   public viewportWidth = 1200;
   public viewportHeight = 700;
   
-  public zoom = 0.85;
-  public targetZoom = 0.85;
+  public zoom = 1.1;
+  public targetZoom = 1.1;
   public userZoomOverride: number | null = null;
   private motionStrength = 1;
   private combatFocus = false;
@@ -29,12 +29,12 @@ export class Camera {
   }
 
   public setUserZoom(z: number | null) {
-    this.userZoomOverride = z !== null ? clamp(z, 0.5, 1.2) : null;
+    this.userZoomOverride = z !== null ? clamp(z, 0.5, 1.6) : null;
     this.refreshTargetZoom();
   }
 
   public adjustZoom(factor: number) {
-    this.userZoomOverride = clamp(this.baseZoom() * factor, 0.5, 1.2);
+    this.userZoomOverride = clamp(this.baseZoom() * factor, 0.5, 1.6);
     this.refreshTargetZoom();
   }
 
@@ -76,12 +76,12 @@ export class Camera {
 
   private baseZoom(): number {
     if (this.userZoomOverride !== null) return this.userZoomOverride;
-    return this.viewportWidth < 960 || this.viewportHeight < 500 ? 0.75 : 0.9;
+    return this.viewportWidth < 960 || this.viewportHeight < 500 ? 1.05 : 1.15;
   }
 
   private refreshTargetZoom(): void {
     const focusBoost = (this.combatFocus ? 0.035 : 0) + (this.targetFocus ? 0.045 : 0);
-    this.targetZoom = clamp(this.baseZoom() + focusBoost * this.motionStrength, 0.5, 1.2);
+    this.targetZoom = clamp(this.baseZoom() + focusBoost * this.motionStrength, 0.5, 1.6);
   }
 
   public update(dt: number, mapWidth = 4000, mapHeight = 4000) {

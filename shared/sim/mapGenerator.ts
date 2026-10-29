@@ -142,26 +142,10 @@ export function generateProceduralMap(mapInput: MapDef | number | string): Gener
       const y = riverY + Math.sin(x * 0.0025 + seed) * 120;
       // Leave bridge/crossing around center and around gates
       if (Math.abs(x - centerX) > 180 && !isClearArea(x, y, 60)) {
-        slowZones.push({
-          x,
-          y,
-          radius: 95,
-          type: 'water',
-          speedFactor: 0.60,
-        });
-
-        // Add shore harbor crates / docks along the river bank
+        // Rivers were removed (no water slow zone, no shore crates). The random draws stay so no other map layout shifts.
         if (rng.chance(0.20)) {
-          const hId = rng.rangeInt(1, 6);
-          const isBlocker = hId === 1 || hId === 2 || hId === 5;
-          obstacles.push({
-            x: x + rng.rangeFloat(-20, 20),
-            y: y + 90,
-            radius: isBlocker ? 24 : 14,
-            type: 'harbor',
-            propId: `harbor_0${hId}`,
-            blocks: isBlocker,
-          });
+          rng.rangeInt(1, 6);
+          rng.rangeFloat(-20, 20);
         }
       }
     }

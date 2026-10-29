@@ -352,7 +352,6 @@ export class WorldRenderer {
     this.renderTerrain(ctx, mapDef);
 
     // 2. Render River & Bridges (for Green Valley)
-    this.renderRiverAndBridges(ctx, mapDef, time);
 
     // 3. Render Slow Zones (Mud, Water, Snow)
     this.renderSlowZones(ctx, mapDef);
@@ -630,76 +629,6 @@ export class WorldRenderer {
     ctx.stroke();
   }
 
-  private renderRiverAndBridges(ctx: CanvasRenderingContext2D, mapDef: MapDef, time: number) {
-    if (mapDef.biome !== 'green_valley') return;
-
-    const zoom = this.camera.zoom;
-
-    // Continuous winding river across map near y = 1400
-    ctx.save();
-
-    // Check for shallow_water.png tile texture to animate by scrolling pattern
-    const waterImg = spriteRegistry.getImage(spriteRegistry.getGroundPath('shallow_water'));
-    if (waterImg) {
-      const pattern = ctx.createPattern(waterImg, 'repeat');
-      if (pattern && typeof DOMMatrix !== 'undefined') {
-        const originX = (this.camera.viewportWidth / 2 - this.camera.pos.x * zoom);
-        const originY = (this.camera.viewportHeight / 2 - this.camera.pos.y * zoom);
-        const m = new DOMMatrix();
-        // Slowly scrolling water ripple tile animation
-        m.translateSelf(originX + (time * 18) * zoom, originY + (time * 10) * zoom);
-        m.scaleSelf(zoom, zoom);
-        pattern.setTransform(m);
-        ctx.strokeStyle = pattern;
-      } else {
-        ctx.strokeStyle = '#38bdf8';
-      }
-    } else {
-      ctx.strokeStyle = '#38bdf8';
-    }
-
-    ctx.lineWidth = 90 * zoom;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    ctx.beginPath();
-    for (let x = 0; x <= mapDef.width; x += 150) {
-      const y = 1400 + Math.sin(x * 0.003) * 120;
-      const s = this.camera.worldToScreen({ x, y });
-      if (x === 0) ctx.moveTo(s.x, s.y);
-      else ctx.lineTo(s.x, s.y);
-    }
-    ctx.stroke();
-
-    // Animated water surface caustic ripples
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-    ctx.lineWidth = 2.5 * zoom;
-    ctx.setLineDash([14, 24]);
-    ctx.lineDashOffset = -time * 45;
-    ctx.stroke();
-
-    // Wooden Crossing Bridge at (2000, 1400)
-    const bridgeCenter = this.camera.worldToScreen({ x: 2000, y: 1400 });
-    const bw = 90 * zoom;
-    const bh = 130 * zoom;
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
-    ctx.beginPath();
-    ctx.ellipse(bridgeCenter.x + 5 * zoom, bridgeCenter.y + 7 * zoom, bw * 0.55, bh * 0.42, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Bridge planks
-    ctx.fillStyle = '#854d0e';
-    ctx.fillRect(bridgeCenter.x - bw / 2, bridgeCenter.y - bh / 2, bw, bh);
-
-    // Bridge side railings
-    ctx.fillStyle = '#451a03';
-    ctx.fillRect(bridgeCenter.x - bw / 2, bridgeCenter.y - bh / 2, 8 * zoom, bh);
-    ctx.fillRect(bridgeCenter.x + bw / 2 - 8 * zoom, bridgeCenter.y - bh / 2, 8 * zoom, bh);
-
-    ctx.restore();
-  }
-
   private renderSlowZones(ctx: CanvasRenderingContext2D, mapDef: MapDef) {
     const zoom = this.camera.zoom;
     for (const sz of mapDef.slowZones) {
@@ -715,10 +644,9 @@ export class WorldRenderer {
         continue;
       }
 
+      if (sz.type === 'water') continue; // rivers were removed: old data may still list water zones, draw nothing
       ctx.save();
-      if (sz.type === 'water') {
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.28)';
-      } else if (sz.type === 'snow') {
+      if (sz.type === 'snow') {
         ctx.fillStyle = 'rgba(240, 249, 255, 0.35)';
       } else {
         // Mud
